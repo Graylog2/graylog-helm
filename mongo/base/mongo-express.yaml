@@ -1,33 +1,34 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mongodb
+  name: mongo-express
   labels:
-    app: mongodb
+    app: mongo-express
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mongodb
+      app: mongo-express
   template:
     metadata:
       labels:
-        app: mongodb
+        app: mongo-express
     spec:
       containers:
-      - name: mongodb
-        image: arm64v8/mongo:7.0-rc
+      - name: mongo-express
+        image: mongo-express:latest
         env:
           - name: MONGO_INITDB_ROOT_USERNAME
-            value: "root"
+            value: "admin"
           - name: MONGO_INITDB_ROOT_PASSWORD
             value: "password"
           - name: ME_CONFIG_MONGODB_ADMINUSERNAME
-            value: "root"
+            value: "admin"
           - name: ME_CONFIG_MONGODB_ADMINPASSWORD
             value: "password"
+          - name: ME_CONFIG_MONGODB_URL
+            value: "mongodb://admin:password@mongodb.graylog-helm-dev.svc.cluster.local:27017"
         ports:
-         - containerPort: 27017
-           protocol: TCP
          - containerPort: 8081
            protocol: TCP
+
