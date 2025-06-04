@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "graylog-application"
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.ports.application }}
+      targetPort: application
+      protocol: TCP
+      name: application
+  selector:
+    {{- include "graylog.selectorLabels" . | nindent 4 }}

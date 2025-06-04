@@ -1,0 +1,48 @@
+{{ if .Values.graylog.enabled  }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: graylog
+  labels:
+    app: graylog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graylog
+  template:
+    metadata:
+      labels:
+        app: graylog
+    spec:
+      containers:
+      - name: graylog
+        image: "graylog/graylog-enterprise:6.2"
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: GRAYLOG_PASSWORD_SECRET
+            value: {{ .Values.global.graylogPasswordSecret }}
+          - name: GRAYLOG_ROOT_PASSWORD_SHA2
+            value: {{ .Values.global.graylogPasswordSha2 }}
+          - name: GRAYLOG_MONGODB_URI
+            value: {{ .Values.global.graylogMongodbURI }}
+          - name: GRAYLOG_SELFSIGNED_STARTUP
+            value: "true"
+          - name: GRAYLOG_SERVER_JAVA_OPTS
+            value: "-Xms1g -Xmx1g"
+        ports:
+          - name: application
+            containerPort: 9000
+            protocol: TCP
+        {{- with .Values.graylog.resources }}
+        resources:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        volumeMounts:
+        - name: graylog-journal
+          mountPath: /usr/share/graylog/data/journal
+        # command: ["tail", "-f", "/dev/null"]
+      volumes:
+      - name: graylog-journal
+        emptyDir: {}
+{{ end }}
