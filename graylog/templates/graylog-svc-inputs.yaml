@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "graylog-app-inputs"
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.graylog.service.type }}
+  ports:
+    - name: input-gelf-http 
+      port: {{ .Values.graylog.service.ports.inputGelfHttp }}
+      targetPort: input-gelf-http
+      protocol: TCP
+  selector:
+    app: graylog
