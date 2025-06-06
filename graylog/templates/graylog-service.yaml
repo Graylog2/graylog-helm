@@ -5,11 +5,11 @@ metadata:
   labels:
     {{- include "graylog.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.graylog.service.type }}
   ports:
-    - port: {{ .Values.service.ports.application }}
+    - port: 9000 # todo: variablize
       targetPort: application
       protocol: TCP
       name: application
   selector:
-    {{- include "graylog.selectorLabels" . | nindent 4 }}
+    app: graylog

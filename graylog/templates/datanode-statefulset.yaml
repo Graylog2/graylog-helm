@@ -52,7 +52,7 @@ spec:
             containerPort: 9300
             protocol: TCP
           - name: metrics
-            containerPort: {{ .Values.service.ports.metrics }}
+            containerPort: 9001
             protocol: TCP
         volumeMounts:
         - name: datanode
