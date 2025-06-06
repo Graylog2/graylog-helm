@@ -1,4 +1,5 @@
 {{ if .Values.graylog.enabled  }}
+## Graylog App Statefulset
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -6,7 +7,7 @@ metadata:
   labels:
     app: graylog
 spec:
-  replicas: 1
+  replicas: {{ .Values.graylog.replicas  }}
   selector:
     matchLabels:
       app: graylog
@@ -16,32 +17,40 @@ spec:
         app: graylog
     spec:
       containers:
-      - name: graylog
-        image: "graylog/graylog-enterprise:6.2"
-        imagePullPolicy: IfNotPresent
-        env:
-          - name: GRAYLOG_PASSWORD_SECRET
-            value: {{ .Values.global.graylogPasswordSecret }}
-          - name: GRAYLOG_ROOT_PASSWORD_SHA2
-            value: {{ .Values.global.graylogPasswordSha2 }}
-          - name: GRAYLOG_MONGODB_URI
-            value: {{ .Values.global.graylogMongodbURI }}
-          - name: GRAYLOG_SELFSIGNED_STARTUP
-            value: "true"
-          - name: GRAYLOG_SERVER_JAVA_OPTS
-            value: "-Xms1g -Xmx1g"
-        ports:
-          - name: application
-            containerPort: 9000
-            protocol: TCP
-        {{- with .Values.graylog.resources }}
-        resources:
-          {{- toYaml . | nindent 12 }}
-        {{- end }}
-        volumeMounts:
-        - name: graylog-journal
-          mountPath: /usr/share/graylog/data/journal
-        # command: ["tail", "-f", "/dev/null"]
+        - name: graylog
+          image: "{{ .Values.graylog.image.repository }}:{{ .Values.graylog.image.tag }}"
+          imagePullPolicy: {{ .Values.graylog.image.imagePullPolicy }}
+          env:
+            - name: GRAYLOG_PASSWORD_SECRET
+              value: {{ .Values.global.graylogPasswordSecret }}
+            - name: GRAYLOG_ROOT_PASSWORD_SHA2
+              value: {{ .Values.global.graylogPasswordSha2 }}
+            - name: GRAYLOG_MONGODB_URI
+              value: {{ .Values.global.graylogMongodbURI }}
+            - name: GRAYLOG_SELFSIGNED_STARTUP
+              value: "true"
+            - name: GRAYLOG_SERVER_JAVA_OPTS
+              value: "-Xms1g -Xmx1g"
+          ports:
+            - name: application
+              containerPort: {{ .Values.graylog.service.ports.application }}
+              protocol: TCP
+            - name: input-gelf-http
+              containerPort: {{ .Values.graylog.service.ports.inputGelfHttp }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.graylog.service.ports.application }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          {{- with .Values.graylog.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          - name: graylog-journal
+            mountPath: /usr/share/graylog/data/journal
+          # command: ["tail", "-f", "/dev/null"]
       volumes:
       - name: graylog-journal
         emptyDir: {}

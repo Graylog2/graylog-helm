@@ -10,12 +10,11 @@ spec:
   clusterIP: None
   ports:
     - name: api
-      port: 8999
+      port: {{ .Values.datanode.service.ports.api }}
     - name: data
-      port: 9200
-      name: data
-    - name: cluster
-      port: 9300
+      port: {{ .Values.datanode.service.ports.data }}
+    - name: config
+      port: {{ .Values.datanode.service.ports.config }}
   selector:
     app: graylog-datanode
 {{end}}

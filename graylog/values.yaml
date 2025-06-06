@@ -1,32 +1,40 @@
 # Default values for Graylog.
 
+# @todo: utilize these
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+
 global:
+  # @todo: Allow for use of a secret to set these values
   graylogMongodbURI: "NO DEFAULT"
   graylogElasticSearchHosts: "NO DEFAULT"
   graylogPasswordSecret: "NO DEFAULT"
   graylogPasswordSha2: "NO DEFAULT"
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-
 # Configuration for Graylog application
 graylog:
   enabled: true
+  replicas: 2
+  image:
+    repository: "graylog/graylog-enterprise"
+    tag: "6.2"
+    imagePullPolicy: Always
   service:
     type: ClusterIP
     ports:
       application: 9000
-      transmission: 13302
-      config: 13301
-      metrics: 9001
-    resources:
-      limits:
-        cpu: "2"
-        memory: "2Gi"
-      requests:
-        cpu: "1"
-        memory: "1Gi"
+      inputGelfHttp: 12201
+  resources:
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+  # @todo: Think about how customers use inputs
+  inputs: []
 
 # Configuration for Graylog Datanode
 datanode:
@@ -35,10 +43,15 @@ datanode:
   image:
     repository: "graylog/graylog-datanode"
     tag: "6.2"
+    imagePullPolicy: Always
   env:
     graylogDataNodeOpensearchHeap: "2g"
     graylogJavaOpts: "-Xms512m -Xmx512m"
-
+  service:
+    ports:
+      api: 8999
+      data: 9200
+      config: 9300
   resources:
     limits:
       cpu: "1"
@@ -46,6 +59,11 @@ datanode:
     requests:
       cpu: "500m"
       memory: "1Gi"
+  # volumes: []
+  # # - name: foo
+  # #   secret:
+  # #     secretName: mysecret
+  # #     optional: false
 
 ingress:
   enabled: false
@@ -64,45 +82,3 @@ serviceAccount:
   annotations: {}
   name: ""
 
-podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
-
-podSecurityContext: {}
-  # fsGroup: 2000
-
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
-
-# Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}

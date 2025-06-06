@@ -7,9 +7,9 @@ metadata:
 spec:
   type: {{ .Values.graylog.service.type }}
   ports:
-    - port: 9000 # todo: variablize
+    - name: application 
+      port: {{ .Values.graylog.service.ports.application }}
       targetPort: application
       protocol: TCP
-      name: application
   selector:
     app: graylog
