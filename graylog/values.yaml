@@ -1,0 +1,84 @@
+# Default values for Graylog.
+
+# @todo: utilize these
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+
+global:
+  # @todo: Allow for use of a secret to set these values
+  graylogMongodbURI: "NO DEFAULT"
+  graylogElasticSearchHosts: "NO DEFAULT"
+  graylogPasswordSecret: "NO DEFAULT"
+  graylogPasswordSha2: "NO DEFAULT"
+
+# Configuration for Graylog application
+graylog:
+  enabled: true
+  replicas: 2
+  image:
+    repository: "graylog/graylog-enterprise"
+    tag: "6.2"
+    imagePullPolicy: Always
+  service:
+    type: ClusterIP
+    ports:
+      application: 9000
+      inputGelfHttp: 12201
+  resources:
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+  # @todo: Think about how customers use inputs
+  inputs: []
+
+# Configuration for Graylog Datanode
+datanode:
+  enabled: True
+  replicas: 3
+  image:
+    repository: "graylog/graylog-datanode"
+    tag: "6.2"
+    imagePullPolicy: Always
+  env:
+    graylogDataNodeOpensearchHeap: "2g"
+    graylogJavaOpts: "-Xms512m -Xmx512m"
+  service:
+    ports:
+      api: 8999
+      data: 9200
+      config: 9300
+  resources:
+    limits:
+      cpu: "1"
+      memory: "4Gi"
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+  # volumes: []
+  # # - name: foo
+  # #   secret:
+  # #     secretName: mysecret
+  # #     optional: false
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+

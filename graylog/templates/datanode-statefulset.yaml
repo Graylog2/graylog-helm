@@ -1,0 +1,86 @@
+{{ if .Values.datanode.enabled  }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: graylog-datanode
+  labels:
+    app: graylog-datanode
+spec:
+  replicas: {{ .Values.datanode.replicas  }}
+  serviceName: graylog-datanode
+  selector:
+    matchLabels:
+      app: graylog-datanode
+  template:
+    metadata:
+      labels:
+        app: graylog-datanode
+    spec:
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: graylog-datanode
+          image: "{{ .Values.datanode.image.repository }}:{{ .Values.datanode.image.tag }}"
+          imagePullPolicy: {{ .Values.datanode.image.imagePullPolicy }}
+          env:
+            - name: GRAYLOG_DATANODE_NODE_ID_FILE
+              value: "/var/lib/graylog-datanode/node-id"
+            - name: GRAYLOG_DATANODE_PASSWORD_SECRET
+              value: {{ .Values.global.graylogPasswordSecret }}
+            - name: GRAYLOG_DATANODE_MONGODB_URI
+              value: {{ .Values.global.graylogMongodbURI }}
+            - name: GRAYLOG_DATANODE_OPENSEARCH_HEAP
+              value: {{ .Values.datanode.env.graylogDataNodeOpensearchHeap }}
+            - name: GRAYLOG_JAVA_OPTS
+              value: {{ .Values.datanode.env.graylogJavaOpts }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: GRAYLOG_DATANODE_NODE_NAME
+              value: $(POD_NAME).graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local
+            - name: GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS
+              # @todo: loop through replica count to generate this
+              value: "graylog-datanode-0.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local,graylog-datanode-1.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local,graylog-datanode-2.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local"
+          ports:
+            - name: api
+              containerPort: {{ .Values.datanode.service.ports.api }}
+              protocol: TCP
+            - name: data
+              containerPort: {{ .Values.datanode.service.ports.data }}
+              protocol: TCP
+            - name: config
+              containerPort: {{ .Values.datanode.service.ports.config }}
+              protocol: TCP
+          volumeMounts:
+            - name: datanode
+              mountPath: /var/lib/graylog-datanode
+            # @todo: volume mount this
+            - name: native-libs
+              mountPath: /native_libs
+            # @todo: volume mount this
+            - name: plugins
+              mountPath: /plugin
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.datanode.service.ports.api }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          {{- with .Values.datanode.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: native-libs
+          emptyDir: {}
+        - name: plugins
+          emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: datanode
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "gp3"
+      resources:
+        requests:
+          storage: 5Gi
+{{end}}
