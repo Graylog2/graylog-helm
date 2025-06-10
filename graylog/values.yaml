@@ -12,15 +12,22 @@ global:
   graylogElasticSearchHosts: "NO DEFAULT"
   graylogPasswordSecret: "NO DEFAULT"
   graylogPasswordSha2: "NO DEFAULT"
+  
 
 # Configuration for Graylog application
 graylog:
   enabled: true
   replicas: 2
+  # @todo: Think about how customers use inputs
+  inputs: []
+  nodeSelector: {}
   image:
     repository: "graylog/graylog-enterprise"
     tag: "6.2"
     imagePullPolicy: Always
+  env:
+    graylogSelfsignedStartup: "true"
+    graylogServerJavaOpts: "-Xms1g -Xmx1g"
   service:
     type: ClusterIP
     ports:
@@ -33,8 +40,39 @@ graylog:
     requests:
       cpu: "1"
       memory: "1Gi"
-  # @todo: Think about how customers use inputs
-  inputs: []
+  persistence:
+    enabled: True
+    storageClass: ""
+    volumeName: "graylog-journal"
+    existingClaim: ""
+    mountPath: /usr/share/graylog/data/journal
+    subPath: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 8Gi
+    annotations: {}
+    labels: {}
+    selector: {}
+    dataSource: {}
+  persistentVolumeClaimRetentionPolicy:
+    enabled: false
+    whenScaled: Retain
+    whenDeleted: Retain
+  livenessProbe:
+    enabled: false
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+
 
 # Configuration for Graylog Datanode
 datanode:
@@ -46,7 +84,6 @@ datanode:
     imagePullPolicy: Always
   env:
     graylogDataNodeOpensearchHeap: "2g"
-    graylogJavaOpts: "-Xms512m -Xmx512m"
   service:
     ports:
       api: 8999
@@ -59,12 +96,9 @@ datanode:
     requests:
       cpu: "500m"
       memory: "1Gi"
-  # volumes: []
-  # # - name: foo
-  # #   secret:
-  # #     secretName: mysecret
-  # #     optional: false
 
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: false
   className: ""
@@ -75,6 +109,10 @@ ingress:
         - path: /
           pathType: ImplementationSpecific
   tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
 
 serviceAccount:
   create: true

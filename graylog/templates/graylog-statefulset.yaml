@@ -69,14 +69,43 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.graylog.persistence.enabled }}
           volumeMounts:
-          - name: graylog-journal
-            mountPath: /usr/share/graylog/data/journal
+          {{- if and .Values.graylog.persistence.enabled .Values.graylog.persistence.existingClaim }}
+                - name: {{ .Values.graylog.persistence.volumeName }}
+                  persistentVolumeClaim:
+                    claimName: {{ tpl .Values.graylog.persistence.existingClaim $ }}
+          {{- else if not .Values.graylog.persistence.enabled }}
+                - name: {{ .Values.graylog.persistence.volumeName }}
+                  emptyDir: {}
           {{- end }}
       {{- if .Values.graylog.persistence.enabled }}
       volumes:
       - name: graylog-journal
         emptyDir: {}
       {{- end }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ .Values.graylog.persistence.volumeName }}
+        {{- if .Values.graylog.persistence.annotations }}
+        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.annotations "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.graylog.persistence.labels }}
+        labels: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.labels "context" $) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.graylog.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        {{- if .Values.graylog.persistence.dataSource }}
+        dataSource: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.dataSource "context" $) | nindent 10 }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.graylog.persistence.size | quote }}
+        {{- if .Values.graylog.persistence.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.selector "context" $) | nindent 10 }}
+        {{- end }}
 {{- end }}
