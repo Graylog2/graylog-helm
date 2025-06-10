@@ -6,6 +6,9 @@ metadata:
   name: graylog
   labels:
     app: graylog
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+    {{- include "graylog.annotations" . | nindent 4 }}
 spec:
   replicas: {{ .Values.graylog.replicas  }}
   selector:
@@ -16,6 +19,10 @@ spec:
       labels:
         app: graylog
     spec:
+      {{- if .Values.graylog.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.graylog.nodeSelector | nindent 8 }}
+      {{- end }}
       containers:
         - name: graylog
           image: "{{ .Values.graylog.image.repository }}:{{ .Values.graylog.image.tag }}"
@@ -28,9 +35,9 @@ spec:
             - name: GRAYLOG_MONGODB_URI
               value: {{ .Values.global.graylogMongodbURI }}
             - name: GRAYLOG_SELFSIGNED_STARTUP
-              value: "true"
+              value: "{{ .Values.graylog.env.graylogSelfsignedStartup }}"
             - name: GRAYLOG_SERVER_JAVA_OPTS
-              value: "-Xms1g -Xmx1g"
+              value: "{{ .Values.graylog.env.graylogServerJavaOpts }}"
           ports:
             - name: application
               containerPort: {{ .Values.graylog.service.ports.application }}
@@ -38,20 +45,38 @@ spec:
             - name: input-gelf-http
               containerPort: {{ .Values.graylog.service.ports.inputGelfHttp }}
               protocol: TCP
+          {{- if .Values.graylog.livenessProbe.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.graylog.service.ports.application }}
+            initialDelaySeconds: {{ .Values.graylog.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.graylog.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.graylog.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.graylog.livenessProbe.failureThreshold }} 
+            successThreshold: {{ .Values.graylog.livenessProbe.successThreshold }} 
+          {{- end }}
+          {{- if .Values.graylog.readinessProbe.enabled }}
           readinessProbe:
             tcpSocket:
               port: {{ .Values.graylog.service.ports.application }}
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            initialDelaySeconds: {{ .Values.graylog.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.graylog.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.graylog.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.graylog.readinessProbe.failureThreshold }} 
+            successThreshold: {{ .Values.graylog.readinessProbe.successThreshold }} 
+          {{- end }}
           {{- with .Values.graylog.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- if .Values.graylog.persistence.enabled }}
           volumeMounts:
           - name: graylog-journal
             mountPath: /usr/share/graylog/data/journal
-          # command: ["tail", "-f", "/dev/null"]
+          {{- end }}
+      {{- if .Values.graylog.persistence.enabled }}
       volumes:
       - name: graylog-journal
         emptyDir: {}
-{{ end }}
+      {{- end }}
+{{- end }}
