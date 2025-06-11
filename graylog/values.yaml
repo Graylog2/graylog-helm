@@ -7,12 +7,13 @@ fullnameOverride: ""
 
 
 global:
-  # @todo: Allow for use of a secret to set these values
-  graylogMongodbURI: "NO DEFAULT"
-  graylogElasticSearchHosts: "NO DEFAULT"
-  graylogPasswordSecret: "NO DEFAULT"
-  graylogPasswordSha2: "NO DEFAULT"
-  
+  graylogSecretName: "graylog-secrets"
+  # @todo: Allow for these to be defined here if the user wishes
+  # graylogMongodbURI: "NO DEFAULT"
+  # graylogElasticSearchHosts: "NO DEFAULT"
+  # graylogPasswordSecret: "NO DEFAULT"
+  # graylogPasswordSha2: "NO DEFAULT"
+
 
 # Configuration for Graylog application
 graylog:
@@ -28,10 +29,13 @@ graylog:
   env:
     graylogSelfsignedStartup: "true"
     graylogServerJavaOpts: "-Xms1g -Xmx1g"
+    graylogLeaderElectionMode: "automatic"
+    graylogMigrations: "true"
   service:
     type: ClusterIP
     ports:
-      application: 9000
+      app: 9000
+      metrics: 13301
       inputGelfHttp: 12201
   resources:
     limits:
@@ -54,10 +58,10 @@ graylog:
     labels: {}
     selector: {}
     dataSource: {}
-  persistentVolumeClaimRetentionPolicy:
-    enabled: false
-    whenScaled: Retain
-    whenDeleted: Retain
+    persistentVolumeClaimRetentionPolicy:
+      enabled: false
+      whenScaled: Retain
+      whenDeleted: Retain
   livenessProbe:
     enabled: false
     initialDelaySeconds: 30
@@ -83,7 +87,9 @@ datanode:
     tag: "6.2"
     imagePullPolicy: Always
   env:
-    graylogDataNodeOpensearchHeap: "2g"
+    graylogDatanodeIdFile: "/var/lib/graylog-datanode/node-id"
+    graylogDatanodeOpensearchHeap: "2g"
+    graylogDatanodeJavaOpts: "-Xms1g -Xmx1g"
   service:
     ports:
       api: 8999

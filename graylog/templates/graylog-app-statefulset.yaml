@@ -3,9 +3,9 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: graylog
+  name: graylog-app
   labels:
-    app: graylog
+    app: graylog-app
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
     {{- include "graylog.annotations" . | nindent 4 }}
@@ -13,34 +13,46 @@ spec:
   replicas: {{ .Values.graylog.replicas  }}
   selector:
     matchLabels:
-      app: graylog
+      app: graylog-app
   template:
     metadata:
       labels:
-        app: graylog
+        app: graylog-app
     spec:
       {{- if .Values.graylog.nodeSelector }}
       nodeSelector:
         {{- toYaml .Values.graylog.nodeSelector | nindent 8 }}
       {{- end }}
       containers:
-        - name: graylog
+        - name: graylog-app
           image: "{{ .Values.graylog.image.repository }}:{{ .Values.graylog.image.tag }}"
           imagePullPolicy: {{ .Values.graylog.image.imagePullPolicy }}
           env:
-            - name: GRAYLOG_PASSWORD_SECRET
-              value: {{ .Values.global.graylogPasswordSecret }}
-            - name: GRAYLOG_ROOT_PASSWORD_SHA2
-              value: {{ .Values.global.graylogPasswordSha2 }}
-            - name: GRAYLOG_MONGODB_URI
-              value: {{ .Values.global.graylogMongodbURI }}
             - name: GRAYLOG_SELFSIGNED_STARTUP
               value: "{{ .Values.graylog.env.graylogSelfsignedStartup }}"
             - name: GRAYLOG_SERVER_JAVA_OPTS
               value: "{{ .Values.graylog.env.graylogServerJavaOpts }}"
+            - name: GRAYLOG_PASSWORD_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.graylogSecretName }}
+                  key: graylog-password-secret
+            - name: GRAYLOG_ROOT_PASSWORD_SHA2
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.graylogSecretName }}
+                  key: graylog-password-sha2
+            - name: GRAYLOG_MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.graylogSecretName }}
+                  key: mongo-db-uri
           ports:
-            - name: application
-              containerPort: {{ .Values.graylog.service.ports.application }}
+            - name: app
+              containerPort: {{ .Values.graylog.service.ports.app }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.graylog.service.ports.metrics }}
               protocol: TCP
             - name: input-gelf-http
               containerPort: {{ .Values.graylog.service.ports.inputGelfHttp }}
@@ -48,7 +60,7 @@ spec:
           {{- if .Values.graylog.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
-              port: {{ .Values.graylog.service.ports.application }}
+              port: {{ .Values.graylog.service.ports.app }}
             initialDelaySeconds: {{ .Values.graylog.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.graylog.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.graylog.livenessProbe.timeoutSeconds }}
@@ -58,7 +70,7 @@ spec:
           {{- if .Values.graylog.readinessProbe.enabled }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.graylog.service.ports.application }}
+              port: {{ .Values.graylog.service.ports.app }}
             initialDelaySeconds: {{ .Values.graylog.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.graylog.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.graylog.readinessProbe.timeoutSeconds }}
