@@ -95,6 +95,7 @@ spec:
       - name: graylog-journal
         emptyDir: {}
       {{- end }}
+  {{- if .Values.graylog.persistence.enabled }}
   volumeClaimTemplates:
     - apiVersion: v1
       kind: PersistentVolumeClaim
@@ -120,4 +121,5 @@ spec:
         {{- if .Values.graylog.persistence.selector }}
         selector: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.selector "context" $) | nindent 10 }}
         {{- end }}
+  {{- end }}
 {{- end }}

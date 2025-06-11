@@ -46,6 +46,7 @@ graylog:
       memory: "1Gi"
   persistence:
     enabled: True
+
     storageClass: ""
     volumeName: "graylog-journal"
     existingClaim: ""
@@ -58,12 +59,12 @@ graylog:
     labels: {}
     selector: {}
     dataSource: {}
-    persistentVolumeClaimRetentionPolicy:
-      enabled: false
-      whenScaled: Retain
-      whenDeleted: Retain
-  livenessProbe:
+  persistentVolumeClaimRetentionPolicy:
     enabled: false
+    whenScaled: Retain
+    whenDeleted: Retain
+  livenessProbe:
+    enabled: true
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
@@ -80,7 +81,7 @@ graylog:
 
 # Configuration for Graylog Datanode
 datanode:
-  enabled: True
+  enabled: true
   replicas: 3
   image:
     repository: "graylog/graylog-datanode"
@@ -102,6 +103,35 @@ datanode:
     requests:
       cpu: "500m"
       memory: "1Gi"
+  persistence:
+    enabled: true
+    data:
+      enabled: true
+      storageClass: ""
+      existingClaim: ""
+      mountPath: /var/lib/graylog-datanode
+      accessModes:
+        - ReadWriteOnce
+      size: 8Gi
+      annotations: {}
+      labels: {}
+      selector: {}
+      dataSource: {}
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+
 
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
@@ -125,4 +155,3 @@ serviceAccount:
   automount: true
   annotations: {}
   name: ""
-
