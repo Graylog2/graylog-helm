@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "graylog-app"
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.graylog.service.type }}
+  ports:
+    - name: app
+      port: {{ .Values.graylog.service.ports.app }}
+      targetPort: app
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.graylog.service.ports.metrics }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app: graylog-app

@@ -1,6 +1,4 @@
 # This is a prototype of helm values that work to apply the Gaylog Helm chart
 
 global:
-  graylogMongodbURI: "mongodb://admin:password@some-mongo:27017/some-db?authSource=admin"
-  graylogPasswordSecret: "some-secret"
-  graylogPasswordSha2: "some-secret-hash"
+  graylogSecretName: graylog-secrets

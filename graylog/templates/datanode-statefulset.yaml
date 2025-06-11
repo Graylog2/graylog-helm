@@ -23,15 +23,11 @@ spec:
           imagePullPolicy: {{ .Values.datanode.image.imagePullPolicy }}
           env:
             - name: GRAYLOG_DATANODE_NODE_ID_FILE
-              value: "/var/lib/graylog-datanode/node-id"
-            - name: GRAYLOG_DATANODE_PASSWORD_SECRET
-              value: {{ .Values.global.graylogPasswordSecret }}
-            - name: GRAYLOG_DATANODE_MONGODB_URI
-              value: {{ .Values.global.graylogMongodbURI }}
+              value: {{ .Values.datanode.env.graylogDatanodeIdFile }}
             - name: GRAYLOG_DATANODE_OPENSEARCH_HEAP
-              value: {{ .Values.datanode.env.graylogDataNodeOpensearchHeap }}
+              value: {{ .Values.datanode.env.graylogDatanodeOpensearchHeap }}
             - name: GRAYLOG_JAVA_OPTS
-              value: {{ .Values.datanode.env.graylogJavaOpts }}
+              value: {{ .Values.datanode.env.graylogDatanodeJavaOpts }}
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -41,6 +37,16 @@ spec:
             - name: GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS
               # @todo: loop through replica count to generate this
               value: "graylog-datanode-0.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local,graylog-datanode-1.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local,graylog-datanode-2.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: GRAYLOG_DATANODE_PASSWORD_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.graylogSecretName }}
+                  key: graylog-password-secret
+            - name: GRAYLOG_DATANODE_MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.graylogSecretName }}
+                  key: mongo-db-uri
           ports:
             - name: api
               containerPort: {{ .Values.datanode.service.ports.api }}
