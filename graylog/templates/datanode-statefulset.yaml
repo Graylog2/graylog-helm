@@ -58,14 +58,33 @@ spec:
               containerPort: {{ .Values.datanode.service.ports.config }}
               protocol: TCP
           volumeMounts:
-            - name: datanode
-              mountPath: /var/lib/graylog-datanode
-            # @todo: volume mount this
+            - name: "data"
+              mountPath: {{ .Values.datanode.persistence.data.mountPath }}
             - name: native-libs
               mountPath: /native_libs
             # @todo: volume mount this
             - name: plugins
               mountPath: /plugin
+          {{- if .Values.datanode.livenessProbe.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.datanode.service.ports.api }}
+            initialDelaySeconds: {{ .Values.datanode.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.datanode.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.datanode.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.datanode.livenessProbe.failureThreshold }} 
+            successThreshold: {{ .Values.datanode.livenessProbe.successThreshold }} 
+          {{- end }}
+          {{- if .Values.datanode.readinessProbe.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.datanode.service.ports.api }}
+            initialDelaySeconds: {{ .Values.datanode.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.datanode.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.datanode.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.datanode.readinessProbe.failureThreshold }} 
+            successThreshold: {{ .Values.datanode.readinessProbe.successThreshold }} 
+          {{- end }}
           readinessProbe:
             tcpSocket:
               port: {{ .Values.datanode.service.ports.api }}
@@ -80,13 +99,22 @@ spec:
           emptyDir: {}
         - name: plugins
           emptyDir: {}
+      {{- if not .Values.datanode.persistence.data.enabled}}
+        - name: data
+          emptyDir: {}
+      {{- end }}
+
   volumeClaimTemplates:
+  {{- if .Values.datanode.persistence.data.enabled }}
   - metadata:
-      name: datanode
+      name: data
     spec:
       accessModes: [ "ReadWriteOnce" ]
-      storageClassName: "gp3"
+      {{- if .Values.datanode.persistence.data.storageClass }}
+      storageClassName: {{ .Values.datanode.persistence.data.storageClass }}
+      {{- end }}
       resources:
         requests:
-          storage: 5Gi
-{{end}}
+          storage: {{ .Values.datanode.persistence.data.size }}
+  {{- end }}
+{{- end }}
