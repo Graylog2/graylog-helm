@@ -29,7 +29,7 @@ graylog:
     graylogSelfsignedStartup: "true"
     graylogServerJavaOpts: "-Xms1g -Xmx1g"
     graylogLeaderElectionMode: "automatic"
-    graylogMigrations: "false"
+    graylogMigrations: "true"
     graylogIsCloud: "false"
   service:
     type: ClusterIP
@@ -64,7 +64,7 @@ graylog:
     whenDeleted: Retain
   livenessProbe:
     enabled: true
-    initialDelaySeconds: 30
+    initialDelaySeconds: 60
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 6

@@ -15,7 +15,7 @@ spec:
     metadata:
       labels:
         app: graylog-datanode
-      {{- with .Values.podAnnotations }}
+      {{- with .Values.datanode.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

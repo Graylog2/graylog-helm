@@ -1,0 +1,8 @@
+# piVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: graylog-datanode
+# data:
+#   data-node-id-1: "3"
+#   data-node-id-2: ""
+#   data-node-id-3: ""
