@@ -5,7 +5,6 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-
 global:
   graylogSecretName: "graylog-secrets"
   # @todo: Allow for these to be defined here if the user wishes
@@ -30,12 +29,13 @@ graylog:
     graylogSelfsignedStartup: "true"
     graylogServerJavaOpts: "-Xms1g -Xmx1g"
     graylogLeaderElectionMode: "automatic"
-    graylogMigrations: "true"
+    graylogMigrations: "false"
+    graylogIsCloud: "false"
   service:
     type: ClusterIP
     ports:
       app: 9000
-      metrics: 13301
+      metrics: 9001
       inputGelfHttp: 12201
   resources:
     limits:
@@ -46,7 +46,6 @@ graylog:
       memory: "1Gi"
   persistence:
     enabled: True
-
     storageClass: ""
     volumeName: "graylog-journal"
     existingClaim: ""
@@ -72,11 +71,12 @@ graylog:
     successThreshold: 1
   readinessProbe:
     enabled: true
-    initialDelaySeconds: 10
+    initialDelaySeconds: 60
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 6
     successThreshold: 1
+  podAnnotations: {}
 
 
 # Configuration for Graylog Datanode
@@ -102,7 +102,7 @@ datanode:
       memory: "4Gi"
     requests:
       cpu: "500m"
-      memory: "1Gi"
+      memory: "3Gi"
   persistence:
     enabled: true
     data:
@@ -131,7 +131,7 @@ datanode:
     timeoutSeconds: 5
     failureThreshold: 6
     successThreshold: 1
-
+  podAnnotations: {}
 
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
@@ -154,4 +154,4 @@ serviceAccount:
   create: true
   automount: true
   annotations: {}
-  name: ""
+  name: "graylog"

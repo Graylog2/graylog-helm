@@ -15,8 +15,18 @@ spec:
     metadata:
       labels:
         app: graylog-datanode
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       dnsPolicy: ClusterFirst
+      {{- if .Values.graylog.nodeSelector }}
+      nodeSelector: {{ .Values.graylog.nodeSelector }}
+      {{- end }}
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
       containers:
         - name: graylog-datanode
           image: "{{ .Values.datanode.image.repository }}:{{ .Values.datanode.image.tag }}"

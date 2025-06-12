@@ -18,10 +18,17 @@ spec:
     metadata:
       labels:
         app: graylog-app
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      dnsPolicy: ClusterFirst
       {{- if .Values.graylog.nodeSelector }}
-      nodeSelector:
-        {{- toYaml .Values.graylog.nodeSelector | nindent 8 }}
+      nodeSelector: {{ .Values.graylog.nodeSelector }}
+      {{- end }}
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- end }}
       containers:
         - name: graylog-app
@@ -32,6 +39,15 @@ spec:
               value: "{{ .Values.graylog.env.graylogSelfsignedStartup }}"
             - name: GRAYLOG_SERVER_JAVA_OPTS
               value: "{{ .Values.graylog.env.graylogServerJavaOpts }}"
+            - name: GRAYLOG_LEADER_ELECTION_MODE
+              value: "{{ .Values.graylog.env.graylogLeaderElectionMode }}"
+            - name: GRAYLOG_IS_CLOUD
+              value: "{{ .Values.graylog.env.graylogIsCloud }}"
+            - name: GRAYLOG_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.graylogSecretName }}
+                  key: graylog-root-username
             - name: GRAYLOG_PASSWORD_SECRET
               valueFrom:
                 secretKeyRef:
@@ -83,18 +99,18 @@ spec:
           {{- end }}
           volumeMounts:
           {{- if and .Values.graylog.persistence.enabled .Values.graylog.persistence.existingClaim }}
-                - name: {{ .Values.graylog.persistence.volumeName }}
-                  persistentVolumeClaim:
-                    claimName: {{ tpl .Values.graylog.persistence.existingClaim $ }}
+            - name: {{ .Values.graylog.persistence.volumeName }}
+              persistentVolumeClaim:
+                claimName: {{ tpl .Values.graylog.persistence.existingClaim $ }}
           {{- else if not .Values.graylog.persistence.enabled }}
-                - name: {{ .Values.graylog.persistence.volumeName }}
-                  emptyDir: {}
+            - name: {{ .Values.graylog.persistence.volumeName }}
+              mountPath: {{ .Values.graylog.persistence.mountPath }}
           {{- end }}
-      {{- if .Values.graylog.persistence.enabled }}
       volumes:
       - name: graylog-journal
+        {{- if not .Values.graylog.persistence.enabled }}
         emptyDir: {}
-      {{- end }}
+        {{- end }}
   {{- if .Values.graylog.persistence.enabled }}
   volumeClaimTemplates:
     - apiVersion: v1
