@@ -6,10 +6,6 @@ spec:
   selector:
     app: mongodb
   ports:
-    - name: idk
-      protocol: TCP
-      port: 8081
-      targetPort: 8081
     - name: mongo
       protocol: TCP
       port: 27017

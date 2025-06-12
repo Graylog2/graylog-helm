@@ -29,6 +29,7 @@ spec:
           - name: ME_CONFIG_MONGODB_URL
             value: "mongodb://admin:password@mongodb.graylog-helm-dev.svc.cluster.local:27017"
         ports:
-         - containerPort: 8081
-           protocol: TCP
-
+          - containerPort: 8081
+            protocol: TCP
+          - containerPort: 27017
+            protocol: TCP
