@@ -240,3 +240,10 @@ serviceAccount:
   automount: true
   annotations: {}
   name: "graylog"
+
+mongo:
+  subchart:
+    enabled: true
+  arbiter:
+    enabled: false
+  replicaCount: 3
