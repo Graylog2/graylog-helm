@@ -241,9 +241,11 @@ serviceAccount:
   annotations: {}
   name: "graylog"
 
-mongo:
+mongodb:
   subchart:
     enabled: true
   arbiter:
-    enabled: false
-  replicaCount: 3
+    enabled: true
+  replicaCount: 2
+  persistence:
+    storageClass:
