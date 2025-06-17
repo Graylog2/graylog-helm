@@ -6,7 +6,7 @@ metadata:
   labels:
     app: graylog-datanode
 spec:
-  replicas: {{ .Values.datanode.replicas  }}
+  replicas: {{ .Values.datanode.replicas }}
   serviceName: graylog-datanode
   selector:
     matchLabels:

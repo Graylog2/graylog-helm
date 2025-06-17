@@ -16,7 +16,7 @@ dependencies:
   - name: mongodb
     version: "16.5.21"
     repository: https://charts.bitnami.com/bitnami
-    condition: mongo.subchart.enabled
+    condition: mongodb.subchart.enabled
 
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
