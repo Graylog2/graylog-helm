@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graylog-datanode
+data:
+  GRAYLOG_DATANODE_NODE_ID_FILE: "{{ .Values.datanode.env.graylogDatanodeIdFile }}"
+  GRAYLOG_DATANODE_OPENSEARCH_HEAP: "{{ .Values.datanode.env.graylogDatanodeOpensearchHeap }}"
+  GRAYLOG_JAVA_OPTS: "{{ .Values.datanode.env.graylogDatanodeJavaOpts }}"
+  GRAYLOG_SKIP_PREFLIGHT_CHECKS: "{{ .Values.datanode.env.graylogSkipPreflightChecks }}"
+  GRAYLOG_NODE_SEARCH_CACHE_SIZE: "{{ .Values.datanode.env.graylogNodeSearchCacheSize }}"

@@ -33,11 +33,30 @@ spec:
           imagePullPolicy: {{ .Values.datanode.image.imagePullPolicy }}
           env:
             - name: GRAYLOG_DATANODE_NODE_ID_FILE
-              value: {{ .Values.datanode.env.graylogDatanodeIdFile }}
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-datanode
+                  key: GRAYLOG_DATANODE_NODE_ID_FILE
             - name: GRAYLOG_DATANODE_OPENSEARCH_HEAP
-              value: {{ .Values.datanode.env.graylogDatanodeOpensearchHeap }}
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-datanode
+                  key: GRAYLOG_DATANODE_OPENSEARCH_HEAP
             - name: GRAYLOG_JAVA_OPTS
-              value: {{ .Values.datanode.env.graylogDatanodeJavaOpts }}
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-datanode
+                  key: GRAYLOG_JAVA_OPTS
+            - name: GRAYLOG_SKIP_PREFLIGHT_CHECKS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-datanode
+                  key: GRAYLOG_SKIP_PREFLIGHT_CHECKS
+            - name: GRAYLOG_NODE_SEARCH_CACHE_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-datanode
+                  key: GRAYLOG_NODE_SEARCH_CACHE_SIZE
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -72,9 +91,6 @@ spec:
               mountPath: {{ .Values.datanode.persistence.data.mountPath }}
             - name: native-libs
               mountPath: /native_libs
-            # @todo: volume mount this
-            - name: plugins
-              mountPath: /plugin
           {{- if .Values.datanode.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
@@ -107,13 +123,10 @@ spec:
       volumes:
         - name: native-libs
           emptyDir: {}
-        - name: plugins
-          emptyDir: {}
       {{- if not .Values.datanode.persistence.data.enabled}}
         - name: data
           emptyDir: {}
       {{- end }}
-
   volumeClaimTemplates:
   {{- if .Values.datanode.persistence.data.enabled }}
   - metadata:

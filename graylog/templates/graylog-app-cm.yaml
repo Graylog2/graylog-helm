@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graylog-app
+data:
+  GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: "{{- if .Values.graylog.metrics.enabled }}true{{- else }}false{{- end }}"
+  GRAYLOG_SELFSIGNED_STARTUP: "{{ .Values.graylog.env.graylogSelfsignedStartup }}"
+  GRAYLOG_IS_CLOUD: "{{.Values.graylog.env.graylogIsCloud }}"
+  GRAYLOG_SERVER_JAVA_OPTS: "{{.Values.graylog.env.graylogServerJavaOpts }}"
+  GRAYLOG_LEADER_ELECTION_MODE: "{{ .Values.graylog.env.graylogLeaderElectionMode }}"
