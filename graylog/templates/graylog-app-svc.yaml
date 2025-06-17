@@ -11,9 +11,11 @@ spec:
       port: {{ .Values.graylog.service.ports.app }}
       targetPort: app
       protocol: TCP
+    {{- if .Values.graylog.metrics.enabled }}
     - name: metrics
       port: {{ .Values.graylog.service.ports.metrics }}
       targetPort: metrics
       protocol: TCP
+    {{- end }}
   selector:
     app: graylog-app

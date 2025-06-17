@@ -18,13 +18,20 @@ global:
 graylog:
   enabled: true
   replicas: 2
+  metrics:
+    enabled: true
   # @todo: Think about how customers use inputs
-  inputs: []
+  # inputs:
+  #   - name: input-gelf
+  #     port: 6000
+  #     targetPort: 5600
+  #     protocol: tcp
+  #     ingress: true
   nodeSelector: {}
   image:
     repository: "graylog/graylog-enterprise"
     tag: "6.2"
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
   env:
     graylogSelfsignedStartup: "true"
     graylogServerJavaOpts: "-Xms1g -Xmx1g"
@@ -45,19 +52,20 @@ graylog:
       cpu: "1"
       memory: "1Gi"
   persistence:
-    enabled: True
-    storageClass: ""
-    volumeName: "graylog-journal"
-    existingClaim: ""
-    mountPath: /usr/share/graylog/data/journal
-    subPath: ""
-    accessModes:
-      - ReadWriteOnce
-    size: 8Gi
-    annotations: {}
-    labels: {}
-    selector: {}
-    dataSource: {}
+    enabled: false
+    journal:
+      enabled: false
+      storageClass: ""
+      volumeName: "graylog-journal"
+      existingClaim: ""
+      mountPath: /usr/share/graylog/data/journal
+      subPath: ""
+      accessModes:
+        - ReadWriteOnce
+      size: 5Gi
+      annotations: {}
+      labels: {}
+      selector: {}
   persistentVolumeClaimRetentionPolicy:
     enabled: false
     whenScaled: Retain
@@ -86,11 +94,14 @@ datanode:
   image:
     repository: "graylog/graylog-datanode"
     tag: "6.2"
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
   env:
     graylogDatanodeIdFile: "/var/lib/graylog-datanode/node-id"
     graylogDatanodeOpensearchHeap: "2g"
     graylogDatanodeJavaOpts: "-Xms1g -Xmx1g"
+    graylogSkipPreflightChecks: "false"
+    graylogNodeSearchCacheSize: "10gb"
+    # graylogEnabledTlsProtocols: ""
   service:
     ports:
       api: 8999
@@ -117,6 +128,17 @@ datanode:
       labels: {}
       selector: {}
       dataSource: {}
+    nativeLibs:
+      enabled: false
+      storageClass: ""
+      existingClaim: ""
+      mountPath: /native_libs
+      accessModes:
+        - ReadWriteOnce
+      size: 2Gi
+      annotations: {}
+      labels: {}
+      selector: {}
   livenessProbe:
     enabled: true
     initialDelaySeconds: 30

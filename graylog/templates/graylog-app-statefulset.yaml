@@ -36,13 +36,30 @@ spec:
           imagePullPolicy: {{ .Values.graylog.image.imagePullPolicy }}
           env:
             - name: GRAYLOG_SELFSIGNED_STARTUP
-              value: "{{ .Values.graylog.env.graylogSelfsignedStartup }}"
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_SELFSIGNED_STARTUP
             - name: GRAYLOG_SERVER_JAVA_OPTS
-              value: "{{ .Values.graylog.env.graylogServerJavaOpts }}"
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_SERVER_JAVA_OPTS
             - name: GRAYLOG_LEADER_ELECTION_MODE
-              value: "{{ .Values.graylog.env.graylogLeaderElectionMode }}"
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_LEADER_ELECTION_MODE
             - name: GRAYLOG_IS_CLOUD
-              value: "{{ .Values.graylog.env.graylogIsCloud }}"
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_IS_CLOUD
+            - name: GRAYLOG_PROMETHEUS_EXPORTER_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_PROMETHEUS_EXPORTER_ENABLED
             - name: GRAYLOG_ROOT_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -98,13 +115,13 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-          {{- if and .Values.graylog.persistence.enabled .Values.graylog.persistence.existingClaim }}
-            - name: {{ .Values.graylog.persistence.volumeName }}
+          {{- if and .Values.graylog.persistence.journal.enabled .Values.graylog.persistence.journal.existingClaim }}
+            - name: {{ .Values.graylog.persistence.journal.volumeName }}
               persistentVolumeClaim:
-                claimName: {{ tpl .Values.graylog.persistence.existingClaim $ }}
-          {{- else if not .Values.graylog.persistence.enabled }}
-            - name: {{ .Values.graylog.persistence.volumeName }}
-              mountPath: {{ .Values.graylog.persistence.mountPath }}
+                claimName: {{ tpl .Values.graylog.persistence.journal.existingClaim $ }}
+          {{- else if not .Values.graylog.persistence.journal.enabled }}
+            - name: {{ .Values.graylog.persistence.journal.volumeName }}
+              mountPath: {{ .Values.graylog.persistence.journal.mountPath }}
           {{- end }}
       volumes:
       - name: graylog-journal
@@ -116,26 +133,22 @@ spec:
     - apiVersion: v1
       kind: PersistentVolumeClaim
       metadata:
-        name: {{ .Values.graylog.persistence.volumeName }}
-        {{- if .Values.graylog.persistence.annotations }}
-        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.annotations "context" $) | nindent 10 }}
-        {{- end }}
-        {{- if .Values.graylog.persistence.labels }}
-        labels: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.labels "context" $) | nindent 10 }}
-        {{- end }}
+        name: {{ .Values.graylog.persistence.journal.volumeName }}
+      {{- with .Values.graylog.persistence.journal.annotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.graylog.persistence.journal.labels }}
+      labels:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       spec:
         accessModes:
-        {{- range .Values.graylog.persistence.accessModes }}
+        {{- range .Values.graylog.persistence.journal.accessModes }}
           - {{ . | quote }}
-        {{- end }}
-        {{- if .Values.graylog.persistence.dataSource }}
-        dataSource: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.dataSource "context" $) | nindent 10 }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.graylog.persistence.size | quote }}
-        {{- if .Values.graylog.persistence.selector }}
-        selector: {{- include "common.tplvalues.render" (dict "value" .Values.graylog.persistence.selector "context" $) | nindent 10 }}
-        {{- end }}
+            storage: {{ .Values.graylog.persistence.journal.size | quote }}
   {{- end }}
 {{- end }}
