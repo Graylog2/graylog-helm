@@ -35,6 +35,11 @@ spec:
           image: "{{ .Values.graylog.image.repository }}:{{ .Values.graylog.image.tag }}"
           imagePullPolicy: {{ .Values.graylog.image.imagePullPolicy }}
           env:
+            - name: GRAYLOG_ROOT_TIMEZONE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_ROOT_TIMEZONE
             - name: GRAYLOG_SELFSIGNED_STARTUP
               valueFrom:
                 configMapKeyRef:
@@ -50,6 +55,11 @@ spec:
                 configMapKeyRef:
                   name: graylog-app
                   key: GRAYLOG_LEADER_ELECTION_MODE
+            - name: GRAYLOG_ROOT_TIMEZONE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_ROOT_TIMEZONE
             - name: GRAYLOG_IS_CLOUD
               valueFrom:
                 configMapKeyRef:
@@ -60,6 +70,218 @@ spec:
                 configMapKeyRef:
                   name: graylog-app
                   key: GRAYLOG_PROMETHEUS_EXPORTER_ENABLED
+            - name: GRAYLOG_MONGODB_MAX_CONNECTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_MONGODB_MAX_CONNECTIONS
+            - name: GRAYLOG_MONGODB_VERSION_PROBE_ATTEMPTS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_MONGODB_VERSION_PROBE_ATTEMPTS
+            - name: GRAYLOG_CONTENT_PACKS_AUTO_INSTALL
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_CONTENT_PACKS_AUTO_INSTALL
+            - name: GRAYLOG_MESSAGE_JOURNAL_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_MESSAGE_JOURNAL_ENABLED
+            - name: GRAYLOG_MESSAGE_JOURNAL_FLUSH_AGE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_MESSAGE_JOURNAL_FLUSH_AGE
+            - name: GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL
+            - name: GRAYLOG_MESSAGE_JOURNAL_MAX_AGE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_MESSAGE_JOURNAL_MAX_AGE
+            - name: GRAYLOG_MESSAGE_JOURNAL_SEGMENT_AGE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_MESSAGE_JOURNAL_SEGMENT_AGE
+            - name: GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE
+            # Network Settings
+            - name: GRAYLOG_HTTP_CONNECT_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_HTTP_CONNECT_TIMEOUT
+            - name: GRAYLOG_HTTP_ENABLE_CORS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_HTTP_ENABLE_CORS
+            - name: GRAYLOG_HTTP_ENABLE_GZIP
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_HTTP_ENABLE_GZIP
+            - name: GRAYLOG_HTTP_MAX_HEADER_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_HTTP_MAX_HEADER_SIZE
+            - name: GRAYLOG_HTTP_READ_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_HTTP_READ_TIMEOUT
+            - name: GRAYLOG_HTTP_THREAD_POOL_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_HTTP_THREAD_POOL_SIZE
+            # Email Settings
+            - name: GRAYLOG_TRANSPORT_EMAIL_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_ENABLED
+            - name: GRAYLOG_TRANSPORT_EMAIL_FROM_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_FROM_EMAIL
+            - name: GRAYLOG_TRANSPORT_EMAIL_HOSTNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_HOSTNAME
+            - name: GRAYLOG_TRANSPORT_EMAIL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_PORT
+            - name: GRAYLOG_TRANSPORT_EMAIL_SOCKET_CONNECTION_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_SOCKET_CONNECTION_TIMEOUT
+            - name: GRAYLOG_TRANSPORT_EMAIL_SOCKET_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_SOCKET_TIMEOUT
+            - name: GRAYLOG_TRANSPORT_EMAIL_USE_AUTH
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_USE_AUTH
+            - name: GRAYLOG_TRANSPORT_EMAIL_USE_SSL
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_USE_SSL
+            - name: GRAYLOG_TRANSPORT_EMAIL_USE_TLS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_USE_TLS
+            - name: GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL
+
+            # Performance Tuning
+            - name: GRAYLOG_ASYNC_EVENTBUS_PROCESSORS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_ASYNC_EVENTBUS_PROCESSORS
+            - name: GRAYLOG_AUTO_RESTART_INPUTS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_AUTO_RESTART_INPUTS
+            - name: GRAYLOG_INPUTBUFFER_PROCESSORS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_INPUTBUFFER_PROCESSORS
+            - name: GRAYLOG_INPUTBUFFER_RING_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_INPUTBUFFER_RING_SIZE
+            - name: GRAYLOG_INPUTBUFFER_WAIT_STRATEGY
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_INPUTBUFFER_WAIT_STRATEGY
+            - name: GRAYLOG_JOB_SCHEDULER_CONCURRENCY_LIMITS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_JOB_SCHEDULER_CONCURRENCY_LIMITS
+            - name: GRAYLOG_OUTPUT_BATCH_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_OUTPUT_BATCH_SIZE
+            - name: GRAYLOG_OUTPUT_FAULT_COUNT_THRESHOLD
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_OUTPUT_FAULT_COUNT_THRESHOLD
+            - name: GRAYLOG_OUTPUT_FAULT_PENALTY_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_OUTPUT_FAULT_PENALTY_SECONDS
+            - name: GRAYLOG_OUTPUT_FLUSH_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_OUTPUT_FLUSH_INTERVAL
+            - name: GRAYLOG_OUTPUTBUFFER_PROCESSOR_THREADS_CORE_POOL_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_OUTPUTBUFFER_PROCESSOR_THREADS_CORE_POOL_SIZE
+            # @todo: Empty strings are problematic for these vars
+            # - name: GRAYLOG_OUTPUTBUFFER_PROCESSORS
+            #   valueFrom:
+            #     configMapKeyRef:
+            #       name: graylog-app
+            #       key: GRAYLOG_OUTPUTBUFFER_PROCESSORS
+            # - name: GRAYLOG_PROCESSBUFFER_PROCESSORS
+            #   valueFrom:
+            #     configMapKeyRef:
+            #       name: graylog-app
+            #       key: GRAYLOG_PROCESSBUFFER_PROCESSORS
+            - name: GRAYLOG_PROCESSOR_WAIT_STRATEGY
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_PROCESSOR_WAIT_STRATEGY
+            - name: GRAYLOG_RING_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_RING_SIZE
+            - name: GRAYLOG_UDP_RECVBUFFER_SIZES
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_UDP_RECVBUFFER_SIZES
+
+            # User Settings
             - name: GRAYLOG_ROOT_USERNAME
               valueFrom:
                 secretKeyRef:
