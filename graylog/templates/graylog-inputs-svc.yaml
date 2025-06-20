@@ -11,5 +11,9 @@ spec:
       port: {{ .Values.graylog.service.ports.inputGelfHttp }}
       targetPort: input-gelf-http
       protocol: TCP
+    - name: input-forwarder
+      port: 13301
+      targetPort: input-forwarder
+      protocol: TCP
   selector:
     app: graylog-app
