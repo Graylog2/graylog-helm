@@ -21,12 +21,18 @@ graylog:
   metrics:
     enabled: true
   # @todo: Think about how customers use inputs
-  # inputs:
-  #   - name: input-gelf
-  #     port: 6000
-  #     targetPort: 5600
-  #     protocol: tcp
-  #     ingress: true
+  inputs:
+    - name: input-gelf
+      port: 12201
+      targetPort: 12201
+      protocol: TCP
+      ingress: true
+    - name: input-forwarder
+      port: 13301
+      targetPort: 13301
+      protocol: TCP
+      ingress: true
+
   nodeSelector: {}
   image:
     repository: "graylog/graylog-enterprise"
@@ -39,7 +45,7 @@ graylog:
     graylogLeaderElectionMode: "automatic"
     graylogMigrations: "true"
     graylogContentPacksAutoInstall: ""
-    #Mongo config
+    # Mongo config
     graylogMongodbMaxConnections: 1000
     graylogMongodbVersionProbeAttempts: 0
     # Journal config
@@ -88,7 +94,7 @@ graylog:
     type: ClusterIP
     ports:
       app: 9000
-      metrics: 9001
+      metrics: 9833
       inputGelfHttp: 12201
   resources:
     limits:
@@ -119,14 +125,14 @@ graylog:
   #   whenDeleted: Retain
   livenessProbe:
     enabled: true
-    initialDelaySeconds: 60
+    initialDelaySeconds: 140
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 6
     successThreshold: 1
   readinessProbe:
     enabled: true
-    initialDelaySeconds: 60
+    initialDelaySeconds: 140
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 6
