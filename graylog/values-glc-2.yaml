@@ -1,12 +1,7 @@
-# This is an example on AWS, using an ACM certificate with ALB ingress controller with external-dns 
-# and gp3 storage.
-#
-# ALB Ingress Controller: https://kubernetes-sigs.github.io/aws-load-balancer-controller/v1.1/
-# External DNS: https://kubernetes-sigs.github.io/external-dns/latest/docs/tutorials/aws/
-# GP3 Storage: 
-#
-
+# GLC Values
+# -- NOT PUBLIC -- 
 graylog:
+  replicas: 2
   image:
     tag: "6.2"
     imagePullPolicy: Always
@@ -23,6 +18,7 @@ graylog:
       targetPort: 12201
       protocol: TCP
 
+
 datanode:
   replicas: 3
   image:
@@ -36,44 +32,6 @@ datanode:
       size: 5Gi
   podAnnotations:
     karpenter.sh/do-not-disrupt: "true"
-
-ingress:
-  enabled: true
-  className: "alb"
-  annotations:
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000
-    alb.ingress.kubernetes.io/group.name: some-graylog
-    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "5"
-    alb.ingress.kubernetes.io/healthcheck-path: /
-    alb.ingress.kubernetes.io/healthcheck-port: "9000"
-    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
-    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "2"
-    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
-    alb.ingress.kubernetes.io/load-balancer-attributes: "deletion_protection.enabled=false"
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/security-groups: sg-00000000000000000,sg-00000000000000001,sg-00000000000000002,sg-000000000000000003
-    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
-    alb.ingress.kubernetes.io/ssl-redirect: "443"
-    alb.ingress.kubernetes.io/success-codes: "200"
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
-    external-dns.alpha.kubernetes.io/hostname: some-graylog.example.com
-  hosts:
-    - host: some-graylog.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: graylog-app
-              port:
-                name: app
-
-
-
-# GLC Values
-# -- NOT PUBLIC -- 
 
 
 ingress:
@@ -97,7 +55,7 @@ ingress:
     alb.ingress.kubernetes.io/success-codes: "200"
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
-    external-dns.alpha.kubernetes.io/hostname: helm-graylog-2.dev.graylog.cloud
+    external-dns.alpha.kubernetes.io/hostname: helm-2.dev.graylog.cloud
   hosts:
     - host: helm-2.dev.graylog.cloud
       paths:

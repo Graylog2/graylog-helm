@@ -32,9 +32,9 @@ helm template graylog graylog -f graylog/values-glc.yaml | yq
 #### Logging
 ```
 # Graylog app logs
-stern statefulset/graylog-app
+stern statefulset/graylog-app -n graylog-helm-dev-1
 # Datanode logs
-stern statefulset/graylog-datanode
+stern statefulset/graylog-datanode -n graylog-helm-dev-1
 ```
 
 #### Remove Everything
