@@ -1,34 +1,43 @@
 # Graylog Helm
-A helm chart for Graylog
+A helm chart for Graylog.
+
+## Not For External Use
+This chart is still in development. We should not distribute this chart or any part of this repository externally until we've cleaned up the git history and recieved approval for external distribution.
+This chart is still under development and does not have locked in api contracts yet.
+
 
 ## TLDR
-Install
+**Installation Process**
  - Create the namespace you'll be installing Graylog into.
  - Create a secret like [examples/graylog-secret.yaml](examples/graylog-secret.yaml) in that namespace.
  - Run `helm upgrade --install my-graylog graylog -f graylog/values-my-graylog.yaml`
 
 Uninstall
 ```bash
-helm uninstall graylog
+helm uninstall my-graylog
 ```
+
+## Requirements
+ - Kubernetes v1.32
 
 ## Development
 ### Mongo
-All files in mongo are currently for development purposes only. Use with caution!
+All files in `/mongo` are currently for development purposes only. Use with caution!
 
-## Debugging
+### Debugging
 Get a yaml output of the values being submitted.
 ```bash
 helm template graylog graylog -f graylog/values-glc.yaml | yq
 ```
-
-### Logging
+#### Logging
 ```
+# Graylog app logs
+stern statefulset/graylog-app
+# Datanode logs
 stern statefulset/graylog-datanode
-stern statefulset/graylog
 ```
 
-### Remove Everything
+#### Remove Everything
 ```bash
 kubectl delete pvc datanode-graylog-datanode-0
 kubectl delete pvc datanode-graylog-datanode-1
