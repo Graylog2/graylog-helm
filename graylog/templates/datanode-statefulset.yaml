@@ -66,6 +66,13 @@ spec:
             - name: GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS
               # @todo: loop through replica count to generate this
               value: "graylog-datanode-0.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local,graylog-datanode-1.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local,graylog-datanode-2.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: LOOPED_ENV_VARIABLE
+              value: |
+                {{- $value := "" -}}
+                {{- range $i, $e := until .Values.datanode.replicas  }}
+                {{- $value = printf "%s%d," $value $i -}}
+                {{- end -}}
+                {{- trimSuffix "," $value -}}
             - name: GRAYLOG_DATANODE_PASSWORD_SECRET
               valueFrom:
                 secretKeyRef:

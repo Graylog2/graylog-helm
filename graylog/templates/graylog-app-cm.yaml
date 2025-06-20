@@ -8,3 +8,62 @@ data:
   GRAYLOG_IS_CLOUD: "{{.Values.graylog.env.graylogIsCloud }}"
   GRAYLOG_SERVER_JAVA_OPTS: "{{.Values.graylog.env.graylogServerJavaOpts }}"
   GRAYLOG_LEADER_ELECTION_MODE: "{{ .Values.graylog.env.graylogLeaderElectionMode }}"
+  GRAYLOG_MONGODB_MAX_CONNECTIONS: "{{ .Values.graylog.env.graylogMongodbMaxConnections }}"
+  GRAYLOG_MONGODB_VERSION_PROBE_ATTEMPTS: "{{ .Values.graylog.env.graylogMongodbVersionProbeAttempts }}"
+
+  # Userland
+  GRAYLOG_ROOT_TIMEZONE: "{{ .Values.graylog.env.graylogRootTimezone }}"
+
+  # Email
+  GRAYLOG_TRANSPORT_EMAIL_ENABLED: "{{ .Values.graylog.env.graylogTransportEmailEnabled }}"
+  GRAYLOG_TRANSPORT_EMAIL_FROM_EMAIL: "{{ .Values.graylog.env.graylogTransportEmailFromEmail }}"
+  GRAYLOG_TRANSPORT_EMAIL_HOSTNAME: "{{ .Values.graylog.env.graylogTransportEmailHostname }}"
+  GRAYLOG_TRANSPORT_EMAIL_PORT: "{{ .Values.graylog.env.graylogTransportEmailPort }}"
+  GRAYLOG_TRANSPORT_EMAIL_SOCKET_CONNECTION_TIMEOUT: "{{ .Values.graylog.env.graylogTransportEmailSocketConnectionTimeout }}"
+  GRAYLOG_TRANSPORT_EMAIL_SOCKET_TIMEOUT: "{{ .Values.graylog.env.graylogTransportEmailSocketTimeout }}"
+  GRAYLOG_TRANSPORT_EMAIL_USE_AUTH: "{{ .Values.graylog.env.graylogTransportEmailUseAuth }}"
+  GRAYLOG_TRANSPORT_EMAIL_USE_SSL: "{{ .Values.graylog.env.graylogTransportEmailUseSsl }}"
+  GRAYLOG_TRANSPORT_EMAIL_USE_TLS: "{{ .Values.graylog.env.graylogTransportEmailUseTls }}"
+  GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL: "{{ .Values.graylog.env.graylogTransportEmailWebInterfaceUrl }}"
+  # GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD: ""
+
+  # Journal 
+  GRAYLOG_CONTENT_PACKS_AUTO_INSTALL: "{{ .Values.graylog.env.graylogContentPacksAutoInstall }}"
+  GRAYLOG_MESSAGE_JOURNAL_ENABLED: "{{ .Values.graylog.env.graylogMessageJournalEnabled }}"
+  GRAYLOG_MESSAGE_JOURNAL_FLUSH_AGE: "{{ .Values.graylog.env.graylogMessageJournalFlushAge }}" 
+  GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL: "{{ .Values.graylog.env.graylogMessageJournalFlushInterval }}"  
+  GRAYLOG_MESSAGE_JOURNAL_MAX_AGE: "{{ .Values.graylog.env.graylogMessageJournalMaxAge }}"
+  GRAYLOG_MESSAGE_JOURNAL_SEGMENT_AGE: "{{ .Values.graylog.env.graylogMessageJournalSegmentAge }}"
+  GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE: "{{ .Values.graylog.env.graylogMessageJournalSegmentSize }}"
+
+  # Network
+  GRAYLOG_HTTP_CONNECT_TIMEOUT: "{{ .Values.graylog.env.graylogHttpConnectTimeout }}"
+  GRAYLOG_HTTP_ENABLE_CORS: "{{ .Values.graylog.env.graylogHttpEnableCors }}"
+  GRAYLOG_HTTP_ENABLE_GZIP: "{{ .Values.graylog.env.graylogHttpEnableGzip }}"
+  GRAYLOG_HTTP_MAX_HEADER_SIZE:  "{{ .Values.graylog.env.graylogHttpMaxHeaderSize }}"
+  GRAYLOG_HTTP_READ_TIMEOUT: "{{ .Values.graylog.env.graylogHttpReadTimeout }}"
+  GRAYLOG_HTTP_THREAD_POOL_SIZE: "{{ .Values.graylog.env.graylogHttpThreadPoolSize }}"
+  # @todo: Investigate how to support BYO Graylog App certs
+  # GRAYLOG_ENABLE_TLS: "true"
+  # GRAYLOG_HTTP_EXTERNAL_URI:
+  # GRAYLOG_HTTP_PUBLISH_URI: ""
+
+  # Performace Tuning
+  GRAYLOG_ASYNC_EVENTBUS_PROCESSORS: "{{ .Values.graylog.env.graylogAsyncEventbusProcessors }}"
+  GRAYLOG_AUTO_RESTART_INPUTS: "{{ .Values.graylog.env.graylogAutoRestartInputs }}"
+  GRAYLOG_INPUTBUFFER_PROCESSORS: "{{ .Values.graylog.env.graylogInputbufferProcessors }}"
+  GRAYLOG_INPUTBUFFER_RING_SIZE: "{{ .Values.graylog.env.graylogInputbufferRingSize }}"
+  GRAYLOG_INPUTBUFFER_WAIT_STRATEGY: "{{ .Values.graylog.env.graylogInputbufferWaitStrategy }}"
+  GRAYLOG_JOB_SCHEDULER_CONCURRENCY_LIMITS: "{{ .Values.graylog.env.graylogJobSchedulerConcurrencyLimits }}"
+  GRAYLOG_OUTPUT_BATCH_SIZE: "{{ .Values.graylog.env.graylogOutputBatchSize }}"
+  GRAYLOG_OUTPUT_FAULT_COUNT_THRESHOLD: "{{ .Values.graylog.env.graylogOutputFaultCountThreshold }}"
+  GRAYLOG_OUTPUT_FAULT_PENALTY_SECONDS: "{{ .Values.graylog.env.graylogOutputFaultPenaltySeconds }}"
+  GRAYLOG_OUTPUT_FLUSH_INTERVAL: "{{ .Values.graylog.env.graylogOutputFlushInterval }}"
+  GRAYLOG_OUTPUTBUFFER_PROCESSOR_THREADS_CORE_POOL_SIZE: "{{ .Values.graylog.env.graylogOutputbufferProcessorThreadsCorePoolSize }}"
+  GRAYLOG_PROCESSOR_WAIT_STRATEGY: "sleeping"
+  GRAYLOG_RING_SIZE: "65536"
+  GRAYLOG_UDP_RECVBUFFER_SIZES: "1048576"
+  # @todo: Empty strings are problematic for these vars
+  GRAYLOG_OUTPUTBUFFER_PROCESSORS: "{{ .Values.graylog.env.graylogOutputbufferProcessors }}"
+  GRAYLOG_PROCESSBUFFER_PROCESSORS: "{{ .Values.graylog.env.graylogProcessbufferProcessors }}"
+  # End todo
