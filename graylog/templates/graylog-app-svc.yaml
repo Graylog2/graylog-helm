@@ -1,19 +1,19 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: "graylog-app"
+  name: {{ .Values.graylog.custom.service.nameOverride | default (printf "%s-svc" (include "graylog.fullname" .)) }}
   labels:
     {{- include "graylog.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.graylog.service.type }}
+  type: {{ .Values.graylog.custom.service.type | default "ClusterIP" }}
   ports:
     - name: app
-      port: {{ .Values.graylog.service.ports.app }}
+      port: {{ .Values.graylog.custom.service.ports.app | default 9000 | int }}
       targetPort: app
       protocol: TCP
-    {{- if .Values.graylog.metrics.enabled }}
+    {{- if .Values.graylog.custom.metrics.enabled }}
     - name: metrics
-      port: {{ .Values.graylog.service.ports.metrics }}
+      port: {{ .Values.graylog.custom.service.ports.metrics | default 9833 | int }}
       targetPort: metrics
       protocol: TCP
     {{- end }}

@@ -2,11 +2,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: "graylog-inputs"
+  name: {{ printf "%s-inputs" (include "graylog.fullname" .) }}
   labels:
     {{- include "graylog.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.graylog.service.type }}
+  type: {{ .Values.graylog.custom.service.type | default "ClusterIP" }}
   ports:
     - name: health-check
       port: 9000
@@ -14,8 +14,8 @@ spec:
       protocol: TCP
     {{- range .Values.graylog.inputs }}
     - name: {{ .name }}
-      port: {{ .port }}
-      targetPort: {{ .targetPort }}
+      port: {{ .port | int }}
+      targetPort: {{ .targetPort | int }}
       protocol: {{ .protocol }}
     {{- end }}
   selector:
