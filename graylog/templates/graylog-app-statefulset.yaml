@@ -18,9 +18,11 @@ spec:
     metadata:
       labels:
         app: graylog-app
+      {{if .Values.graylog.podAnnotations }}
       {{- with .Values.graylog.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- end }}
     spec:
       dnsPolicy: ClusterFirst
@@ -284,7 +286,6 @@ spec:
                 configMapKeyRef:
                   name: graylog-app
                   key: GRAYLOG_UDP_RECVBUFFER_SIZES
-
             # User Settings
             - name: GRAYLOG_ROOT_USERNAME
               valueFrom:
@@ -352,6 +353,14 @@ spec:
             - name: {{ .Values.graylog.persistence.journal.volumeName }}
               mountPath: {{ .Values.graylog.persistence.journal.mountPath }}
           {{- end }}
+      tolerations:
+      {{- with .Values.graylog.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+      {{- with .Values.graylog.affinity }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
       - name: graylog-journal
         {{- if not .Values.graylog.persistence.enabled }}

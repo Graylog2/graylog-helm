@@ -124,6 +124,14 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      tolerations:
+      {{- with .Values.datanode.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+      {{- with .Values.datanode.affinity }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
         - name: native-libs
           emptyDir: {}

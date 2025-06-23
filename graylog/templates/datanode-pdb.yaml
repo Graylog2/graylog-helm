@@ -1,0 +1,17 @@
+{{- if .Values.datanode.podDisruptionBudget.enabled }}
+{{- if gt (int .Values.datenode.replicas) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: graylog-datanode
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: graylog-datanode
+    {{- include "graylog.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.datanode.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: graylog-datanode
+{{- end }}
+{{- end }}

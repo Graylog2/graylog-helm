@@ -13,8 +13,11 @@ graylog:
       size: 5Gi
   podAnnotations:
     karpenter.sh/do-not-disrupt: "true"
+  podDisruptionBudget:
+    enabled: true
   inputs:
-    - port: 12201
+    - name: "gelf-tcp"
+      port: 12201
       targetPort: 12201
       protocol: TCP
 

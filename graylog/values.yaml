@@ -32,7 +32,6 @@ graylog:
       targetPort: 13301
       protocol: TCP
       ingress: true
-
   nodeSelector: {}
   image:
     repository: "graylog/graylog-enterprise"
@@ -103,6 +102,9 @@ graylog:
     requests:
       cpu: "1"
       memory: "1Gi"
+  tolerations: []
+  affinity: {}
+  podLabels: {}
   persistence:
     enabled: false
     journal:
@@ -138,6 +140,9 @@ graylog:
     failureThreshold: 6
     successThreshold: 1
   podAnnotations: {}
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
 
 
 # Configuration for Graylog Datanode
@@ -167,6 +172,9 @@ datanode:
     requests:
       cpu: "500m"
       memory: "3.5Gi"
+  tolerations: []
+  affinity: {}
+  podLabels: {}
   persistence:
     enabled: true
     data:
@@ -207,7 +215,9 @@ datanode:
     failureThreshold: 6
     successThreshold: 1
   podAnnotations: {}
-
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 2
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
