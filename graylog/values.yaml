@@ -1,12 +1,13 @@
 # Default values for Graylog.
 
 # @todo: utilize these
-imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
 global:
   graylogSecretName: "graylog-secrets"
+  imagePullSecrets: []
+  storageClassName: ""
   # @todo: Allow for these to be defined here if the user wishes
   # graylogMongodbURI: "NO DEFAULT"
   # graylogElasticSearchHosts: "NO DEFAULT"
@@ -18,8 +19,7 @@ global:
 graylog:
   enabled: true
   replicas: 2
-  metrics:
-    enabled: true
+  enterprise: true
   # @todo: Think about how customers use inputs
   inputs:
     - name: input-gelf
@@ -32,118 +32,116 @@ graylog:
       targetPort: 13301
       protocol: TCP
       ingress: true
-  nodeSelector: {}
-  image:
-    repository: "graylog/graylog-enterprise"
-    tag: "latest"
-    imagePullPolicy: IfNotPresent
-  env:
-    graylogRootTimezone: "UTC"
-    graylogSelfsignedStartup: "true"
-    graylogServerJavaOpts: "-Xms1g -Xmx1g"
-    graylogLeaderElectionMode: "automatic"
-    graylogMigrations: "true"
-    graylogContentPacksAutoInstall: ""
-    # Mongo config
-    graylogMongodbMaxConnections: 1000
-    graylogMongodbVersionProbeAttempts: 0
-    # Journal config
-    graylogMessageJournalEnabled: "true"
-    graylogMessageJournalFlushAge: "1m"
-    graylogMessageJournalFlushInterval: "1000000"
-    graylogMessageJournalMaxAge: "12h"
-    graylogMessageJournalSegmentAge: "1h"
-    graylogMessageJournalSegmentSize: "100mb"
-    # Performance tuning
-    graylogAsyncEventbusProcessors: "2"
-    graylogAutoRestartInputs: "false"
-    graylogInputbufferProcessors: "2"
-    graylogInputbufferRingSize: "65536"
-    graylogInputbufferWaitStrategy: "blocking"
-    graylogJobSchedulerConcurrencyLimits: ""
-    graylogOutputBatchSize: "500"
-    graylogOutputFaultCountThreshold: "5"
-    graylogOutputFaultPenaltySeconds: "30"
-    graylogOutputFlushInterval: "1"
-    graylogOutputbufferProcessorThreadsCorePoolSize: "3"
-    # @todo: Empty strings are problematic for these vars
-    # graylogOutputbufferProcessors: ""
-    # graylogProcessbufferProcessors: ""
-    # Network config
-    graylogHttpConnectTimeout: "5s"
-    graylogHttpEnableCors: "false"
-    graylogHttpEnableGzip: "true"
-    graylogHttpMaxHeaderSize: "8192"
-    graylogHttpReadTimeout: "10s"
-    graylogHttpThreadPoolSize: "64"
-    # Graylog App - Email config
-    graylogTransportEmailEnabled: "false"
-    graylogTransportEmailFromEmail:  "graylog@example.com"
-    graylogTransportEmailHostname: "mail.example.com"
-    graylogTransportEmailPort: "587"
-    graylogTransportEmailSocketConnectionTimeout: "10s"
-    graylogTransportEmailSocketTimeout: "10s"
-    graylogTransportEmailUseAuth: "true"
-    graylogTransportEmailUseSsl: "false"
-    graylogTransportEmailUseTls: "true"
-    graylogTransportEmailWebInterfaceUrl: "https://graylog.example.com"
-    # Graylog App - Misc
-    graylogIsCloud: "false"
-  service:
-    type: ClusterIP
-    ports:
-      app: 9000
-      metrics: 9833
-      inputGelfHttp: 12201
-  resources:
-    limits:
-      cpu: "2"
-      memory: "2Gi"
-    requests:
-      cpu: "1"
-      memory: "1Gi"
-  tolerations: []
-  affinity: {}
-  podLabels: {}
-  persistence:
-    enabled: false
-    journal:
-      enabled: false
-      storageClass: ""
-      volumeName: "graylog-journal"
-      existingClaim: ""
-      mountPath: /usr/share/graylog/data/journal
-      subPath: ""
-      accessModes:
-        - ReadWriteOnce
-      size: 5Gi
-      annotations: {}
-      labels: {}
-      selector: {}
-  # @todo: Export these values to the PVCs
-  # persistentVolumeClaimRetentionPolicy:
-  #   enabled: false
-  #   whenScaled: Retain
-  #   whenDeleted: Retain
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 140
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
-    successThreshold: 1
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 140
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
-    successThreshold: 1
-  podAnnotations: {}
-  podDisruptionBudget:
-    enabled: false
-    minAvailable: 1
-
+  config:
+    timezone: "UTC"
+    selfsignedStartup: "true"
+    serverJavaOpts: "-Xms1g -Xmx1g"
+    leaderElectionMode: "automatic"
+#    graylogMigrations: "true"
+    contentPacksAutoInstall: ""
+    isCloud: "false"
+    mongodb:
+      maxConnections: 1000
+      versionProbeAttempts: 0
+    messageJournal:
+      enabled: "true"
+      flushAge: "1m"
+      flushInterval: "1000000"
+      maxAge: "12h"
+      segmentAge: "1h"
+      segmentSize: "100mb"
+    network:
+      connectTimeout: "5s"
+      enableCors: "false"
+      enableGzip: "true"
+      maxHeaderSize: "8192"
+      readTimeout: "10s"
+      threadPoolSize: "64"
+    performance:
+      asyncEventbusProcessors: "2"
+      autoRestartInputs: "false"
+      inputBufferProcessors: "2"
+      inputBufferRingSize: "65536"
+      inputBufferWaitStrategy: "blocking"
+      jobSchedulerConcurrencyLimits: ""
+      outputBatchSize: "500"
+      outputFaultCountThreshold: "5"
+      outputFaultPenaltySeconds: "30"
+      outputFlushInterval: "1"
+      outputBufferProcessorThreadsCorePoolSize: "3"
+      outputBufferProcessors: ""
+      processBufferProcessors: ""
+    email:
+      enabled: "false"
+      senderAddress: "graylog@example.com"
+      hostname: "mail.example.com"
+      port: "587"
+      socketConnectionTimeout: "10s"
+      socketTimeout: "10s"
+      useAuth: "true"
+      useSsl: "false"
+      useTls: "true"
+      webInterfaceUrl: "https://graylog.example.com"
+  custom:
+    podAnnotations: {}
+    nodeSelector: {}
+    metrics:
+      enabled: true
+    image:
+      repository: ""
+      tag: ""
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+    service:
+      nameOverride: ""
+      type: ClusterIP
+      ports:
+        app: 9000
+        metrics: 9833
+        inputGelfHttp: 12201
+    resources:
+      limits:
+        cpu: "2"
+        memory: "2Gi"
+      requests:
+        cpu: "1"
+        memory: "1Gi"
+    persistence:
+      enabled: true
+      # @todo: Export these values to the PVCs
+      # persistentVolumeClaimRetentionPolicy:
+      #   enabled: false
+      #   whenScaled: Retain
+      #   whenDeleted: Retain
+      journal:
+        enabled: true
+        storageClass: ""
+        volumeNameOverride: "graylog-journal"
+        existingClaim: ""
+        mountPath: /usr/share/graylog/data/journal
+        subPath: ""
+        accessModes:
+          - ReadWriteOnce
+        size: 5Gi
+        annotations: { }
+        labels: { }
+        selector: { }
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 140
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 140
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    mongodbUri: ""
+    esHosts: ""
 
 # Configuration for Graylog Datanode
 datanode:
@@ -234,16 +232,16 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
-
 serviceAccount:
   create: true
   automount: true
   annotations: {}
-  name: "graylog"
+  nameOverride: ""
 
 mongodb:
   subchart:
     enabled: true
+  architecture: replicaset
   arbiter:
     enabled: true
   replicaCount: 2

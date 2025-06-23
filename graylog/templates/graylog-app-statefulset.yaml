@@ -1,45 +1,46 @@
 {{ if .Values.graylog.enabled  }}
-## Graylog App Statefulset
+## Graylog App StatefulSet
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: graylog-app
+  name: {{ include "graylog.fullname" . }}
   labels:
     app: graylog-app
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
     {{- include "graylog.annotations" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.graylog.replicas  }}
+  replicas: {{ .Values.graylog.replicas | int | default 1 }}
+  serviceName: {{ .Values.graylog.custom.service.nameOverride | default (include "graylog.fullname" . | printf "%s-svc") }}
   selector:
     matchLabels:
       app: graylog-app
+      {{- include "graylog.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
         app: graylog-app
-      {{if .Values.graylog.podAnnotations }}
-      {{- with .Values.graylog.podAnnotations }}
+        {{- include "graylog.selectorLabels" . | nindent 8 }}
+      {{- with .Values.graylog.custom.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- end }}
     spec:
       dnsPolicy: ClusterFirst
-      {{- with .Values.imagePullSecrets }}
+      {{- with .Values.graylog.custom.image.pullSecrets | default .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.graylog.nodeSelector }}
-      nodeSelector: {{ .Values.graylog.nodeSelector }}
+      {{- if .Values.graylog.custom.nodeSelector }}
+      nodeSelector: {{ .Values.graylog.custom.nodeSelector }}
       {{- end }}
       {{- if .Values.serviceAccount.create }}
-      serviceAccountName: {{ .Values.serviceAccount.name }}
+      serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
       containers:
         - name: graylog-app
-          image: "{{ .Values.graylog.image.repository }}:{{ .Values.graylog.image.tag }}"
-          imagePullPolicy: {{ .Values.graylog.image.imagePullPolicy }}
+          image: "{{ .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}:{{ .Values.graylog.custom.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.graylog.custom.image.pullPolicy }}
           env:
             - name: GRAYLOG_ROOT_TIMEZONE
               valueFrom:
@@ -61,11 +62,6 @@ spec:
                 configMapKeyRef:
                   name: graylog-app
                   key: GRAYLOG_LEADER_ELECTION_MODE
-            - name: GRAYLOG_ROOT_TIMEZONE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-app
-                  key: GRAYLOG_ROOT_TIMEZONE
             - name: GRAYLOG_IS_CLOUD
               valueFrom:
                 configMapKeyRef:
@@ -260,17 +256,20 @@ spec:
                 configMapKeyRef:
                   name: graylog-app
                   key: GRAYLOG_OUTPUTBUFFER_PROCESSOR_THREADS_CORE_POOL_SIZE
-            # @todo: Empty strings are problematic for these vars
-            # - name: GRAYLOG_OUTPUTBUFFER_PROCESSORS
-            #   valueFrom:
-            #     configMapKeyRef:
-            #       name: graylog-app
-            #       key: GRAYLOG_OUTPUTBUFFER_PROCESSORS
-            # - name: GRAYLOG_PROCESSBUFFER_PROCESSORS
-            #   valueFrom:
-            #     configMapKeyRef:
-            #       name: graylog-app
-            #       key: GRAYLOG_PROCESSBUFFER_PROCESSORS
+            {{- if .Values.graylog.config.performance.outputBufferProcessors }}
+            - name: GRAYLOG_OUTPUTBUFFER_PROCESSORS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_OUTPUTBUFFER_PROCESSORS
+            {{- end }}
+            {{- if .Values.graylog.config.performance.processBufferProcessors }}
+            - name: GRAYLOG_PROCESSBUFFER_PROCESSORS
+              valueFrom:
+                configMapKeyRef:
+                  name: graylog-app
+                  key: GRAYLOG_PROCESSBUFFER_PROCESSORS
+            {{- end }}
             - name: GRAYLOG_PROCESSOR_WAIT_STRATEGY
               valueFrom:
                 configMapKeyRef:
@@ -309,49 +308,50 @@ spec:
                   key: mongo-db-uri
           ports:
             - name: app
-              containerPort: {{ .Values.graylog.service.ports.app }}
+              containerPort: {{ .Values.graylog.custom.service.ports.app | int }}
               protocol: TCP
             - name: metrics
-              containerPort: {{ .Values.graylog.service.ports.metrics }}
+              containerPort: {{ .Values.graylog.custom.service.ports.metrics | int }}
               protocol: TCP
             - name: input-gelf-http
-              containerPort: {{ .Values.graylog.service.ports.inputGelfHttp }}
+              containerPort: {{ .Values.graylog.custom.service.ports.inputGelfHttp | int }}
               protocol: TCP
             - name: input-forwarder
               containerPort: 13301
               protocol: TCP
-          {{- if .Values.graylog.livenessProbe.enabled }}
+          {{- if .Values.graylog.custom.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
-              port: {{ .Values.graylog.service.ports.app }}
-            initialDelaySeconds: {{ .Values.graylog.livenessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.graylog.livenessProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.graylog.livenessProbe.timeoutSeconds }}
-            failureThreshold: {{ .Values.graylog.livenessProbe.failureThreshold }} 
-            successThreshold: {{ .Values.graylog.livenessProbe.successThreshold }} 
+              port: {{ .Values.graylog.custom.service.ports.app | int }}
+            initialDelaySeconds: {{ .Values.graylog.custom.livenessProbe.initialDelaySeconds |int }}
+            periodSeconds: {{ .Values.graylog.custom.livenessProbe.periodSeconds | int }}
+            timeoutSeconds: {{ .Values.graylog.custom.livenessProbe.timeoutSeconds | int }}
+            failureThreshold: {{ .Values.graylog.custom.livenessProbe.failureThreshold | int }}
+            successThreshold: {{ .Values.graylog.custom.livenessProbe.successThreshold |int }}
           {{- end }}
-          {{- if .Values.graylog.readinessProbe.enabled }}
+          {{- if .Values.graylog.custom.readinessProbe.enabled }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.graylog.service.ports.app }}
-            initialDelaySeconds: {{ .Values.graylog.readinessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.graylog.readinessProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.graylog.readinessProbe.timeoutSeconds }}
-            failureThreshold: {{ .Values.graylog.readinessProbe.failureThreshold }} 
-            successThreshold: {{ .Values.graylog.readinessProbe.successThreshold }} 
+              port: {{ .Values.graylog.custom.service.ports.app | int }}
+            initialDelaySeconds: {{ .Values.graylog.custom.readinessProbe.initialDelaySeconds | int }}
+            periodSeconds: {{ .Values.graylog.custom.readinessProbe.periodSeconds | int }}
+            timeoutSeconds: {{ .Values.graylog.custom.readinessProbe.timeoutSeconds | int }}
+            failureThreshold: {{ .Values.graylog.custom.readinessProbe.failureThreshold | int }}
+            successThreshold: {{ .Values.graylog.custom.readinessProbe.successThreshold | int }}
           {{- end }}
-          {{- with .Values.graylog.resources }}
+          {{- with .Values.graylog.custom.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-          {{- if and .Values.graylog.persistence.journal.enabled .Values.graylog.persistence.journal.existingClaim }}
-            - name: {{ .Values.graylog.persistence.journal.volumeName }}
+          {{- $defaultJournalName := include "graylog.fullname" . | printf "%s-journal-pvc" }}
+          {{- if and .Values.graylog.custom.persistence.journal.enabled .Values.graylog.custom.persistence.journal.existingClaim }}
+            - name: {{ .Values.graylog.custom.persistence.journal.volumeNameOverride | default $defaultJournalName }}
               persistentVolumeClaim:
-                claimName: {{ tpl .Values.graylog.persistence.journal.existingClaim $ }}
-          {{- else if not .Values.graylog.persistence.journal.enabled }}
-            - name: {{ .Values.graylog.persistence.journal.volumeName }}
-              mountPath: {{ .Values.graylog.persistence.journal.mountPath }}
+                claimName: {{ tpl .Values.graylog.custom.persistence.journal.existingClaim $ }}
+          {{- else }}
+            - name: {{ .Values.graylog.custom.persistence.journal.volumeNameOverride | default $defaultJournalName }}
+              mountPath: {{ .Values.graylog.custom.persistence.journal.mountPath }}
           {{- end }}
       tolerations:
       {{- with .Values.graylog.tolerations }}
@@ -363,30 +363,33 @@ spec:
       {{- end }}
       volumes:
       - name: graylog-journal
-        {{- if not .Values.graylog.persistence.enabled }}
+        {{- if not .Values.graylog.custom.persistence.enabled }}
         emptyDir: {}
         {{- end }}
-  {{- if .Values.graylog.persistence.enabled }}
+  {{- if .Values.graylog.custom.persistence.enabled }}
   volumeClaimTemplates:
     - apiVersion: v1
       kind: PersistentVolumeClaim
       metadata:
-        name: {{ .Values.graylog.persistence.journal.volumeName }}
-      {{- with .Values.graylog.persistence.journal.annotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.graylog.persistence.journal.labels }}
-      labels:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        name: {{ .Values.graylog.custom.persistence.journal.volumeNameOverride | default $defaultJournalName }}
+        {{- with .Values.graylog.custom.persistence.journal.annotations }}
+        annotations:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.graylog.custom.persistence.journal.labels }}
+        labels:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
       spec:
+        {{- if .Values.graylog.custom.persistence.journal.storageClass }}
+        storageClassName: {{ .Values.graylog.custom.persistence.journal.storageClass }}
+        {{- end }}
         accessModes:
-        {{- range .Values.graylog.persistence.journal.accessModes }}
+        {{- range .Values.graylog.custom.persistence.journal.accessModes }}
           - {{ . | quote }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.graylog.persistence.journal.size | quote }}
+            storage: {{ .Values.graylog.custom.persistence.journal.size | default "5Gi" | quote }}
   {{- end }}
 {{- end }}

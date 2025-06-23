@@ -57,9 +57,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Create the name of the service account to use
 */}}
 {{- define "graylog.serviceAccountName" -}}
+{{ $defaultName := "default"}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "graylog.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
+{{- $defaultName := printf "%s-sa" (include "graylog.fullname" .) }}
 {{- end }}
+{{- .Values.serviceAccount.nameOverride | default $defaultName }}
 {{- end }}
