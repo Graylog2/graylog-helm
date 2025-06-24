@@ -6,29 +6,39 @@ This chart is still in development. We should not distribute this chart or any p
 This chart is still under development and does not have locked in api contracts yet.
 
 
-## TLDR
-**Installation Process**
- - Create the namespace you'll be installing Graylog into.
- - Create a secret like [examples/graylog-secret.yaml](examples/graylog-secret.yaml) in that namespace.
- - Run `helm upgrade --install my-graylog graylog -f graylog/values-my-graylog.yaml`
+## TL;DR
+```sh
+# Clone this repo
+git clone git@github.com:Graylog2/graylog-helm.git
+# Install the chart
+helm install graylog ./graylog -n graylog --create-namespace
+```
 
-Uninstall
-```bash
-helm uninstall my-graylog
+## Install from repository
+```sh
+helm install graylog graylog/graylog -n graylog --create-namespace
+```
+
+## Upgrades
+```sh
+helm repo update
+helm upgrade graylog graylog/graylog -n graylog --reuse-values
+```
+
+### Uninstall
+```sh
+helm uninstall graylog -n graylog
 ```
 
 ## Requirements
  - Kubernetes v1.32
-
-## Development
-### Mongo
-All files in `/mongo` are currently for development purposes only. Use with caution!
 
 ### Debugging
 Get a yaml output of the values being submitted.
 ```bash
 helm template graylog graylog -f graylog/values-glc.yaml | yq
 ```
+
 #### Logging
 ```
 # Graylog app logs
@@ -38,10 +48,7 @@ stern statefulset/graylog-datanode -n graylog-helm-dev-1
 ```
 
 #### Remove Everything
-```bash
-kubectl delete pvc datanode-graylog-datanode-0
-kubectl delete pvc datanode-graylog-datanode-1
-kubectl delete pvc datanode-graylog-datanode-2
-kubectl delete pvc graylog-app-journal-graylog-0
-kubectl delete pvc graylog-app-journal-graylog-1
+```sh
+# CAUTION: this will delete ALL your data!
+kubectl delete $(kubectl get pvc -o name -n graylog) -n graylog
 ```
