@@ -2,125 +2,129 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: graylog-datanode
+  name: {{ include "graylog.datanode.name" . }}
   labels:
     app: graylog-datanode
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+    {{- include "graylog.annotations" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.datanode.replicas }}
-  serviceName: graylog-datanode
+  replicas: {{ .Values.datanode.replicas | int | default 1 }}
+  serviceName: {{ include "graylog.datanode.serviceName" . }}
   selector:
     matchLabels:
       app: graylog-datanode
+      {{- include "graylog.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
         app: graylog-datanode
-      {{- with .Values.datanode.podAnnotations }}
+        {{- include "graylog.selectorLabels" . | nindent 8 }}
+      {{- with .Values.datanode.custom.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
       dnsPolicy: ClusterFirst
-      {{- with .Values.imagePullSecrets }}
+      {{- with .Values.datanode.custom.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.graylog.nodeSelector }}
-      nodeSelector: {{ .Values.graylog.nodeSelector }}
+      {{- if .Values.datanode.custom.nodeSelector }}
+      nodeSelector: {{ .Values.datanode.custom.nodeSelector }}
       {{- end }}
       {{- if .Values.serviceAccount.create }}
-      serviceAccountName: {{ .Values.serviceAccount.name }}
+      serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
       containers:
         - name: graylog-datanode
-          image: "{{ .Values.datanode.image.repository }}:{{ .Values.datanode.image.tag }}"
-          imagePullPolicy: {{ .Values.datanode.image.imagePullPolicy }}
+          image: "{{ .Values.datanode.custom.image.repository | default "graylog/graylog-datanode"  }}:{{ .Values.datanode.custom.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.datanode.custom.image.imagePullPolicy }}
           env:
             - name: GRAYLOG_DATANODE_NODE_ID_FILE
               valueFrom:
                 configMapKeyRef:
-                  name: graylog-datanode
+                  name: graylog-datanode-config
                   key: GRAYLOG_DATANODE_NODE_ID_FILE
             - name: GRAYLOG_DATANODE_OPENSEARCH_HEAP
               valueFrom:
                 configMapKeyRef:
-                  name: graylog-datanode
+                  name: graylog-datanode-config
                   key: GRAYLOG_DATANODE_OPENSEARCH_HEAP
             - name: GRAYLOG_JAVA_OPTS
               valueFrom:
                 configMapKeyRef:
-                  name: graylog-datanode
+                  name: graylog-datanode-config
                   key: GRAYLOG_JAVA_OPTS
             - name: GRAYLOG_SKIP_PREFLIGHT_CHECKS
               valueFrom:
                 configMapKeyRef:
-                  name: graylog-datanode
+                  name: graylog-datanode-config
                   key: GRAYLOG_SKIP_PREFLIGHT_CHECKS
             - name: GRAYLOG_NODE_SEARCH_CACHE_SIZE
               valueFrom:
                 configMapKeyRef:
-                  name: graylog-datanode
+                  name: graylog-datanode-config
                   key: GRAYLOG_NODE_SEARCH_CACHE_SIZE
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
             - name: GRAYLOG_DATANODE_NODE_NAME
-              value: $(POD_NAME).graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local
+              value: $(POD_NAME).{{ include "graylog.datanode.serviceName" . }}.{{ .Release.Namespace }}.svc.cluster.local
             - name: GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS
-              # @todo: loop through replica count to generate this
-              value: "graylog-datanode-0.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local,graylog-datanode-1.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local,graylog-datanode-2.graylog-datanode.{{ .Release.Namespace }}.svc.cluster.local"
+              value: {{ include "graylog.datanode.hosts" . }}
             - name: GRAYLOG_DATANODE_PASSWORD_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.global.graylogSecretName }}
+                  name: {{ include "graylog.secretsName" . }}
                   key: graylog-password-secret
             - name: GRAYLOG_DATANODE_MONGODB_URI
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.global.graylogSecretName }}
+                  name: {{ include "graylog.secretsName" . }}
                   key: mongo-db-uri
           ports:
             - name: api
-              containerPort: {{ .Values.datanode.service.ports.api }}
+              containerPort: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}
               protocol: TCP
             - name: data
-              containerPort: {{ .Values.datanode.service.ports.data }}
+              containerPort: {{ .Values.datanode.custom.service.ports.data | default 9200 | int }}
               protocol: TCP
             - name: config
-              containerPort: {{ .Values.datanode.service.ports.config }}
+              containerPort: {{ .Values.datanode.custom.service.ports.config | default 9300 | int }}
               protocol: TCP
           volumeMounts:
             - name: "data"
-              mountPath: {{ .Values.datanode.persistence.data.mountPath }}
+              mountPath: {{ .Values.datanode.custom.persistence.data.mountPath | default "/var/lib/graylog-datanode" }}
             - name: native-libs
               mountPath: /native_libs
-          {{- if .Values.datanode.livenessProbe.enabled }}
+          {{- if .Values.datanode.custom.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
-              port: {{ .Values.datanode.service.ports.api }}
-            initialDelaySeconds: {{ .Values.datanode.livenessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.datanode.livenessProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.datanode.livenessProbe.timeoutSeconds }}
-            failureThreshold: {{ .Values.datanode.livenessProbe.failureThreshold }} 
-            successThreshold: {{ .Values.datanode.livenessProbe.successThreshold }} 
+              port: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}
+            initialDelaySeconds: {{ .Values.datanode.custom.livenessProbe.initialDelaySeconds | int }}
+            periodSeconds: {{ .Values.datanode.custom.livenessProbe.periodSeconds | int }}
+            timeoutSeconds: {{ .Values.datanode.custom.livenessProbe.timeoutSeconds | int }}
+            failureThreshold: {{ .Values.datanode.custom.livenessProbe.failureThreshold | int }}
+            successThreshold: {{ .Values.datanode.custom.livenessProbe.successThreshold | int }}
           {{- end }}
-          {{- if .Values.datanode.readinessProbe.enabled }}
+          {{- if .Values.datanode.custom.readinessProbe.enabled }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.datanode.service.ports.api }}
-            initialDelaySeconds: {{ .Values.datanode.readinessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.datanode.readinessProbe.periodSeconds }}
-            timeoutSeconds: {{ .Values.datanode.readinessProbe.timeoutSeconds }}
-            failureThreshold: {{ .Values.datanode.readinessProbe.failureThreshold }} 
-            successThreshold: {{ .Values.datanode.readinessProbe.successThreshold }} 
+              port: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}
+            initialDelaySeconds: {{ .Values.datanode.custom.readinessProbe.initialDelaySeconds | int }}
+            periodSeconds: {{ .Values.datanode.custom.readinessProbe.periodSeconds | int }}
+            timeoutSeconds: {{ .Values.datanode.custom.readinessProbe.timeoutSeconds | int }}
+            failureThreshold: {{ .Values.datanode.custom.readinessProbe.failureThreshold | int }}
+            successThreshold: {{ .Values.datanode.custom.readinessProbe.successThreshold | int }}
           {{- end }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.datanode.service.ports.api }}
+              port: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}
             initialDelaySeconds: 15
             periodSeconds: 10
-          {{- with .Values.datanode.resources }}
+          {{- with .Values.datanode.custom.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -135,21 +139,21 @@ spec:
       volumes:
         - name: native-libs
           emptyDir: {}
-      {{- if not .Values.datanode.persistence.data.enabled}}
+      {{- if not .Values.datanode.custom.persistence.data.enabled }}
         - name: data
           emptyDir: {}
       {{- end }}
   volumeClaimTemplates:
-  {{- if .Values.datanode.persistence.data.enabled }}
+  {{- if .Values.datanode.custom.persistence.data.enabled }}
   - metadata:
       name: data
     spec:
       accessModes: [ "ReadWriteOnce" ]
-      {{- if .Values.datanode.persistence.data.storageClass }}
-      storageClassName: {{ .Values.datanode.persistence.data.storageClass }}
+      {{- if or .Values.datanode.custom.persistence.data.storageClass .Values.global.defaultStorageClass }}
+      storageClassName: {{ .Values.datanode.custom.persistence.data.storageClass | default .Values.global.defaultStorageClass }}
       {{- end }}
       resources:
         requests:
-          storage: {{ .Values.datanode.persistence.data.size }}
+          storage: {{ .Values.datanode.custom.persistence.data.size }}
   {{- end }}
 {{- end }}
