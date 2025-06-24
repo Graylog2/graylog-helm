@@ -50,7 +50,7 @@ Welcome to Graylog!
 
 · WARNING: You are still using the default password {{ include "graylog.rootPassword" . | quote }}. This MUST be changed IMMEDIATELY using the following command:
 
-    helm upgrade {{ .Release.Name }} graylog/graylog --namespace {{ .Release.Namespace }} --reuse-values
+    helm upgrade {{ .Release.Name }} graylog/graylog --namespace {{ .Release.Namespace }} --reuse-values --set graylog.config.rootPassword="your-new-password-here"
 {{- end }}
 
 · Use the following command to print this status page again:
