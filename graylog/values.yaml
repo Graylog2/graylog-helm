@@ -5,9 +5,9 @@ nameOverride: ""
 fullnameOverride: ""
 
 global:
-  graylogSecretName: "graylog-secrets"
+  existingSecret:
   imagePullSecrets: []
-  storageClassName: ""
+  defaultStorageClass: ""
   # @todo: Allow for these to be defined here if the user wishes
   # graylogMongodbURI: "NO DEFAULT"
   # graylogElasticSearchHosts: "NO DEFAULT"
@@ -33,6 +33,8 @@ graylog:
       protocol: TCP
       ingress: true
   config:
+    rootUsername: "admin"
+    rootPassword: ""
     timezone: "UTC"
     selfsignedStartup: "true"
     serverJavaOpts: "-Xms1g -Xmx1g"
@@ -90,8 +92,8 @@ graylog:
     image:
       repository: ""
       tag: ""
-      pullPolicy: IfNotPresent
-      pullSecrets: []
+      imagePullPolicy: IfNotPresent
+      imagePullSecrets: []
     service:
       nameOverride: ""
       type: ClusterIP
@@ -122,7 +124,7 @@ graylog:
         subPath: ""
         accessModes:
           - ReadWriteOnce
-        size: 5Gi
+        size: "8Gi"
         annotations: { }
         labels: { }
         selector: { }
@@ -140,82 +142,77 @@ graylog:
       timeoutSeconds: 5
       failureThreshold: 6
       successThreshold: 1
-    mongodbUri: ""
-    esHosts: ""
 
 # Configuration for Graylog Datanode
 datanode:
   enabled: true
   replicas: 3
-  image:
-    repository: "graylog/graylog-datanode"
-    tag: "latest"
-    imagePullPolicy: IfNotPresent
-  env:
-    graylogDatanodeIdFile: "/var/lib/graylog-datanode/node-id"
-    graylogDatanodeOpensearchHeap: "2g"
-    graylogDatanodeJavaOpts: "-Xms1g -Xmx1g"
-    graylogSkipPreflightChecks: "false"
-    graylogNodeSearchCacheSize: "10gb"
+  config:
+    nodeIdFile: "/var/lib/graylog-datanode/node-id"
+    opensearchHeap: "2g"
+    javaOpts: "-Xms1g -Xmx1g"
+    skipPreflightChecks: "false"
+    nodeSearchCacheSize: "10gb"
     # graylogEnabledTlsProtocols: ""
-  service:
-    ports:
-      api: 8999
-      data: 9200
-      config: 9300
-  resources:
-    limits:
-      cpu: "1"
-      memory: "5Gi"
-    requests:
-      cpu: "500m"
-      memory: "3.5Gi"
-  tolerations: []
-  affinity: {}
-  podLabels: {}
-  persistence:
-    enabled: true
-    data:
+  custom:
+    podAnnotations: {}
+    nodeSelector: {}
+    image:
+      repository: ""
+      tag: ""
+      imagePullPolicy: IfNotPresent
+      imagePullSecrets: []
+    service:
+      ports:
+        api: 8999
+        data: 9200
+        config: 9300
+    resources:
+      limits:
+        cpu: "1"
+        memory: "5Gi"
+      requests:
+        cpu: "500m"
+        memory: "3.5Gi"
+    persistence:
       enabled: true
-      storageClass: ""
-      existingClaim: ""
-      mountPath: /var/lib/graylog-datanode
-      accessModes:
-        - ReadWriteOnce
-      size: 8Gi
-      annotations: {}
-      labels: {}
-      selector: {}
-      dataSource: {}
-    nativeLibs:
-      enabled: false
-      storageClass: ""
-      existingClaim: ""
-      mountPath: /native_libs
-      accessModes:
-        - ReadWriteOnce
-      size: 2Gi
-      annotations: {}
-      labels: {}
-      selector: {}
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
-    successThreshold: 1
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 10
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
-    successThreshold: 1
-  podAnnotations: {}
-  podDisruptionBudget:
-    enabled: false
-    minAvailable: 2
+      data:
+        enabled: true
+        storageClass: ""
+        existingClaim: ""
+        mountPath: /var/lib/graylog-datanode
+        accessModes:
+          - ReadWriteOnce
+        size: 8Gi
+        annotations: {}
+        labels: {}
+        selector: {}
+        dataSource: {}
+      nativeLibs:
+        enabled: false
+        storageClass: ""
+        existingClaim: ""
+        mountPath: /native_libs
+        accessModes:
+          - ReadWriteOnce
+        size: 2Gi
+        annotations: {}
+        labels: {}
+        selector: {}
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -247,3 +244,6 @@ mongodb:
   replicaCount: 2
   persistence:
     storageClass:
+  auth:
+    usernames: [ "graylog" ]
+    databases: [ "graylog" ]

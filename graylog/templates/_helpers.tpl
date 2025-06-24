@@ -54,12 +54,83 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Create the name of the service account to use
+Service account name
 */}}
 {{- define "graylog.serviceAccountName" -}}
-{{ $defaultName := "default"}}
+{{ $defaultName := "default" }}
 {{- if .Values.serviceAccount.create }}
-{{- $defaultName := printf "%s-sa" (include "graylog.fullname" .) }}
+{{- $defaultName = include "graylog.fullname" . | printf "%s-sa" }}
 {{- end }}
 {{- .Values.serviceAccount.nameOverride | default $defaultName }}
+{{- end }}
+
+{{/*
+Graylog root password
+*/}}
+{{- define "graylog.rootPassword" }}
+{{- .Values.graylog.config.rootPassword | default "yabbadabbadoo" }}
+{{- end }}
+
+{{/*
+Graylog secret pepper
+*/}}
+{{- define "graylog.secretPepper" }}
+{{- $pepper := .Values.graylog.config.secretPepper | default (randAlphaNum 96) }}
+{{- if len $pepper | ge 64 }}
+{{- fail "Use at least 64 characters when setting a secret to pepper the stored user data." }}
+{{- else }}
+{{- print $pepper }}
+{{- end }}
+{{- end }}
+
+{{/*
+Graylog secrets name
+*/}}
+{{- define "graylog.secretsName" -}}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-secrets" }}
+{{- if .Values.global.existingSecret }}
+{{- $defaultName = .Values.global.existingSecret }}
+{{- end }}
+{{- $defaultName }}
+{{- end }}
+
+{{/*
+Graylog service name
+*/}}
+{{- define "graylog.serviceName" -}}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-svc" }}
+{{- .Values.graylog.custom.service.nameOverride | default $defaultName }}
+{{- end }}
+
+{{/*
+Graylog journal name
+*/}}
+{{- define "graylog.journalName" -}}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-journal-pvc" }}
+{{- .Values.graylog.custom.persistence.journal.volumeNameOverride | default $defaultName }}
+{{- end }}
+
+{{/*
+Graylog Datanode pod prefix
+*/}}
+{{- define "graylog.datanode.name" -}}
+{{- include "graylog.fullname" . | printf "%s-datanode" }}
+{{- end }}
+
+{{/*
+Graylog Datanode service name
+*/}}
+{{- define "graylog.datanode.serviceName" -}}
+{{- include "graylog.fullname" . | printf "%s-datanode-svc" }}
+{{- end }}
+
+{{/*
+Graylog Datanode hosts
+*/}}
+{{- define "graylog.datanode.hosts" -}}
+{{- $builder := list }}
+{{- range $i := .Values.datanode.replicas | int | until }}
+{{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" (include "graylog.datanode.name" $) $i (include "graylog.datanode.serviceName" $) ($.Release.Namespace) | append $builder }}
+{{- end }}
+{{- join "," $builder | quote }}
 {{- end }}
