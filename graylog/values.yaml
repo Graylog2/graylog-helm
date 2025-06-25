@@ -40,7 +40,7 @@ graylog:
     selfsignedStartup: "true"
     serverJavaOpts: "-Xms1g -Xmx1g"
     leaderElectionMode: "automatic"
-#    graylogMigrations: "true"
+    # graylogMigrations: "true"
     contentPacksAutoInstall: ""
     isCloud: "false"
     mongodb:
