@@ -3,6 +3,7 @@
 # @todo: utilize these
 nameOverride: ""
 fullnameOverride: ""
+quicksetup:
 
 global:
   existingSecret:
@@ -130,14 +131,14 @@ graylog:
         selector: { }
     livenessProbe:
       enabled: true
-      initialDelaySeconds: 140
+      initialDelaySeconds: 60
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 6
       successThreshold: 1
     readinessProbe:
       enabled: true
-      initialDelaySeconds: 140
+      initialDelaySeconds: 30
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 6

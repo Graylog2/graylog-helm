@@ -1,5 +1,5 @@
 {{- if .Values.graylog.custom.podDisruptionBudget.enabled }}
-{{- if gt (int .Values.graylog.replicas) 2 }}
+{{- if include "graylog.replicas" . | int | lt 2 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

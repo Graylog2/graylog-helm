@@ -65,6 +65,37 @@ Service account name
 {{- end }}
 
 {{/*
+Quick setup values
+*/}}
+{{- define "graylog.quicksetup" }}
+{{- $keys := index . 0 | splitList "." -}}
+{{- $ctx := index . 1 -}}
+{{- $small := dict "replicas" 1 | dict "graylog" }}
+{{- $small = dict "replicas" 1 | set $small "datanode" }}
+{{- if and (eq $ctx.Values.quicksetup "small") (len $keys | lt 0) }}
+{{- $nested := index $keys 0 | get $small }}
+{{- range $_, $k := rest $keys }}
+{{- $nested = get $nested $k }}
+{{- end }}
+{{- print $nested }}
+{{- end }}
+{{- end }}
+
+{{/*
+Graylog replicas
+*/}}
+{{- define "graylog.replicas" }}
+{{- list "graylog.replicas" . | include "graylog.quicksetup" | int | default .Values.graylog.replicas }}
+{{- end }}
+
+{{/*
+Datanode replicas
+*/}}
+{{- define "datanode.replicas" }}
+{{- list "datanode.replicas" . | include "graylog.quicksetup" | int | default .Values.datanode.replicas }}
+{{- end }}
+
+{{/*
 Graylog root password
 */}}
 {{- define "graylog.rootPassword" }}
@@ -129,7 +160,7 @@ Graylog Datanode hosts
 */}}
 {{- define "graylog.datanode.hosts" -}}
 {{- $builder := list }}
-{{- range $i := .Values.datanode.replicas | int | until }}
+{{- range $i := include "datanode.replicas" . | int | until }}
 {{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" (include "graylog.datanode.name" $) $i (include "graylog.datanode.serviceName" $) ($.Release.Namespace) | append $builder }}
 {{- end }}
 {{- join "," $builder | quote }}

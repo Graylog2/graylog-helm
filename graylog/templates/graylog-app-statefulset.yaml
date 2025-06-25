@@ -8,9 +8,10 @@ metadata:
     app: graylog-app
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
+{{/*    checksum/config: {{ (include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace).data | sha256sum }}*/}}
     {{- include "graylog.annotations" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.graylog.replicas | int | default 1 }}
+  replicas: {{ include "graylog.replicas" . | default 2 | int }}
   serviceName: {{ include "graylog.serviceName" . }}
   selector:
     matchLabels:

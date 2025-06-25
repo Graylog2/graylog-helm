@@ -15,9 +15,9 @@ Welcome to Graylog!
 
 · The following workloads have been deployed to the cluster:
 
-  - {{ .Values.graylog.replicas | int | default 1 }} replicas of the Graylog application.
-  - {{ .Values.datanode.replicas | int | default 1 }} replicas of the Graylog Datanode.
-  - {{ .Values.mongodb.replicaCount }} replicas (+ 1 arbiter) for MongoDB, running as a replicaset in Primary-Secondary-Arbiter mode.
+  - {{ include "graylog.replicas" . | default 2 | int }} replicas of the Graylog application.
+  - {{ include "datanode.replicas" . | default 3 | int }} replicas of the Graylog Datanode.
+  - {{ .Values.mongodb.replicaCount }} replicas{{ if .Values.mongodb.arbiter.enabled }} (+ 1 arbiter){{ end }} for MongoDB, running{{if eq .Values.mongodb.architecture "replicaset" }} as a replicaset in Primary-Secondary{{if .Values.mongodb.arbiter.enabled }}-Arbiter{{ end }} mode.{{ else }} in standalone mode. WARNING: running mongoDB in standalone mode is NOT SUPPORTED.{{end}}
 
   Use the following command to list all the resources deployed with this release:
 
@@ -50,7 +50,7 @@ Welcome to Graylog!
 
 · WARNING: You are still using the default password {{ include "graylog.rootPassword" . | quote }}. This MUST be changed IMMEDIATELY using the following command:
 
-    helm upgrade {{ .Release.Name }} graylog/graylog --namespace {{ .Release.Namespace }} --reuse-values --set graylog.config.rootPassword="your-new-password-here"
+    read -sp "Enter your new password and press return: " i && helm upgrade {{ .Release.Name }} graylog/graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$i"
 {{- end }}
 
 · Use the following command to print this status page again:
