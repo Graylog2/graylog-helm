@@ -57,4 +57,4 @@ Welcome to Graylog!
 
     helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
 
-This chart is a private beta release. We appreciate your feedback. Please write to support@graylog.com if you notice any unexpected behavior.
+This chart is a private beta release. Please write to support@graylog.com if you notice any unexpected behavior. We appreciate your feedback.

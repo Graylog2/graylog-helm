@@ -42,275 +42,30 @@ spec:
         runAsUser: 1100
         runAsGroup: 1100
         fsGroup: 1100
+      initContainers:
+        - name: copy-data
+          image: "{{ .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}:{{ .Values.graylog.custom.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - "cp -r /usr/share/graylog/data/* /mnt/data/ || true"
+          envFrom:
+            - configMapRef:
+                name: {{ include "graylog.configmapName" . }}
+            - secretRef:
+                name: {{ include "graylog.secretsName" . }}
+          volumeMounts:
+            - name: {{ include "graylog.volumeName" . }}
+              mountPath: /mnt/data
       containers:
         - name: graylog-app
           image: "{{ .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}:{{ .Values.graylog.custom.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
-          env:
-            - name: GRAYLOG_ROOT_TIMEZONE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_ROOT_TIMEZONE
-            - name: GRAYLOG_SELFSIGNED_STARTUP
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_SELFSIGNED_STARTUP
-            - name: GRAYLOG_SERVER_JAVA_OPTS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_SERVER_JAVA_OPTS
-            - name: GRAYLOG_LEADER_ELECTION_MODE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_LEADER_ELECTION_MODE
-            - name: GRAYLOG_IS_CLOUD
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_IS_CLOUD
-            - name: GRAYLOG_PROMETHEUS_EXPORTER_ENABLED
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_PROMETHEUS_EXPORTER_ENABLED
-            - name: GRAYLOG_MONGODB_MAX_CONNECTIONS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_MONGODB_MAX_CONNECTIONS
-            - name: GRAYLOG_MONGODB_VERSION_PROBE_ATTEMPTS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_MONGODB_VERSION_PROBE_ATTEMPTS
-            - name: GRAYLOG_CONTENT_PACKS_AUTO_INSTALL
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_CONTENT_PACKS_AUTO_INSTALL
-            - name: GRAYLOG_MESSAGE_JOURNAL_ENABLED
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_MESSAGE_JOURNAL_ENABLED
-            - name: GRAYLOG_MESSAGE_JOURNAL_FLUSH_AGE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_MESSAGE_JOURNAL_FLUSH_AGE
-            - name: GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL
-            - name: GRAYLOG_MESSAGE_JOURNAL_MAX_AGE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_MESSAGE_JOURNAL_MAX_AGE
-            - name: GRAYLOG_MESSAGE_JOURNAL_SEGMENT_AGE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_MESSAGE_JOURNAL_SEGMENT_AGE
-            - name: GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE
-            # Network Settings
-            - name: GRAYLOG_HTTP_CONNECT_TIMEOUT
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_HTTP_CONNECT_TIMEOUT
-            - name: GRAYLOG_HTTP_ENABLE_CORS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_HTTP_ENABLE_CORS
-            - name: GRAYLOG_HTTP_ENABLE_GZIP
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_HTTP_ENABLE_GZIP
-            - name: GRAYLOG_HTTP_MAX_HEADER_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_HTTP_MAX_HEADER_SIZE
-            - name: GRAYLOG_HTTP_READ_TIMEOUT
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_HTTP_READ_TIMEOUT
-            - name: GRAYLOG_HTTP_THREAD_POOL_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_HTTP_THREAD_POOL_SIZE
-            # Email Settings
-            - name: GRAYLOG_TRANSPORT_EMAIL_ENABLED
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_ENABLED
-            - name: GRAYLOG_TRANSPORT_EMAIL_FROM_EMAIL
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_FROM_EMAIL
-            - name: GRAYLOG_TRANSPORT_EMAIL_HOSTNAME
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_HOSTNAME
-            - name: GRAYLOG_TRANSPORT_EMAIL_PORT
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_PORT
-            - name: GRAYLOG_TRANSPORT_EMAIL_SOCKET_CONNECTION_TIMEOUT
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_SOCKET_CONNECTION_TIMEOUT
-            - name: GRAYLOG_TRANSPORT_EMAIL_SOCKET_TIMEOUT
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_SOCKET_TIMEOUT
-            - name: GRAYLOG_TRANSPORT_EMAIL_USE_AUTH
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_USE_AUTH
-            - name: GRAYLOG_TRANSPORT_EMAIL_USE_SSL
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_USE_SSL
-            - name: GRAYLOG_TRANSPORT_EMAIL_USE_TLS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_USE_TLS
-            - name: GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL
-
-            # Performance Tuning
-            - name: GRAYLOG_ASYNC_EVENTBUS_PROCESSORS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_ASYNC_EVENTBUS_PROCESSORS
-            - name: GRAYLOG_AUTO_RESTART_INPUTS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_AUTO_RESTART_INPUTS
-            - name: GRAYLOG_INPUTBUFFER_PROCESSORS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_INPUTBUFFER_PROCESSORS
-            - name: GRAYLOG_INPUTBUFFER_RING_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_INPUTBUFFER_RING_SIZE
-            - name: GRAYLOG_INPUTBUFFER_WAIT_STRATEGY
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_INPUTBUFFER_WAIT_STRATEGY
-            - name: GRAYLOG_JOB_SCHEDULER_CONCURRENCY_LIMITS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_JOB_SCHEDULER_CONCURRENCY_LIMITS
-            - name: GRAYLOG_OUTPUT_BATCH_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_OUTPUT_BATCH_SIZE
-            - name: GRAYLOG_OUTPUT_FAULT_COUNT_THRESHOLD
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_OUTPUT_FAULT_COUNT_THRESHOLD
-            - name: GRAYLOG_OUTPUT_FAULT_PENALTY_SECONDS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_OUTPUT_FAULT_PENALTY_SECONDS
-            - name: GRAYLOG_OUTPUT_FLUSH_INTERVAL
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_OUTPUT_FLUSH_INTERVAL
-            - name: GRAYLOG_OUTPUTBUFFER_PROCESSOR_THREADS_CORE_POOL_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_OUTPUTBUFFER_PROCESSOR_THREADS_CORE_POOL_SIZE
-            {{- if .Values.graylog.config.performance.outputBufferProcessors }}
-            - name: GRAYLOG_OUTPUTBUFFER_PROCESSORS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_OUTPUTBUFFER_PROCESSORS
-            {{- end }}
-            {{- if .Values.graylog.config.performance.processBufferProcessors }}
-            - name: GRAYLOG_PROCESSBUFFER_PROCESSORS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_PROCESSBUFFER_PROCESSORS
-            {{- end }}
-            - name: GRAYLOG_PROCESSOR_WAIT_STRATEGY
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_PROCESSOR_WAIT_STRATEGY
-            - name: GRAYLOG_RING_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_RING_SIZE
-            - name: GRAYLOG_UDP_RECVBUFFER_SIZES
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-config
-                  key: GRAYLOG_UDP_RECVBUFFER_SIZES
-            # User Settings
-            - name: GRAYLOG_ROOT_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "graylog.secretsName" . }}
-                  key: graylog-root-username
-            - name: GRAYLOG_PASSWORD_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "graylog.secretsName" . }}
-                  key: graylog-password-secret
-            - name: GRAYLOG_ROOT_PASSWORD_SHA2
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "graylog.secretsName" . }}
-                  key: graylog-password-sha2
-            - name: GRAYLOG_MONGODB_URI
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "graylog.secretsName" . }}
-                  key: mongo-db-uri
+          envFrom:
+            - configMapRef:
+                name: {{ include "graylog.configmapName" . }}
+            - secretRef:
+                name: {{ include "graylog.secretsName" . }}
           ports:
             - name: app
               containerPort: {{ .Values.graylog.custom.service.ports.app | int }}
@@ -349,14 +104,8 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-          {{- if and .Values.graylog.custom.persistence.journal.enabled .Values.graylog.custom.persistence.journal.existingClaim }}
-            - name: {{ include "graylog.journalName" . }}
-              persistentVolumeClaim:
-                claimName: {{ tpl .Values.graylog.custom.persistence.journal.existingClaim $ }}
-          {{- else }}
-            - name: {{ include "graylog.journalName" . }}
-              mountPath: {{ .Values.graylog.custom.persistence.journal.mountPath | default "/usr/share/graylog/data/journal" }}
-          {{- end }}
+            - name: {{ include "graylog.volumeName" . }}
+              mountPath: /usr/share/graylog/data
       tolerations:
       {{- with .Values.graylog.tolerations }}
         {{- toYaml . | nindent 8 }}
@@ -365,35 +114,40 @@ spec:
       {{- with .Values.graylog.affinity }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if not .Values.graylog.custom.persistence.enabled | or .Values.graylog.custom.persistence.existingClaim }}
       volumes:
-      - name: graylog-journal
-        {{- if not .Values.graylog.custom.persistence.enabled }}
+      - name: {{ include "graylog.volumeName" . }}
+        {{- if .Values.graylog.custom.persistence.existingClaim }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.graylog.custom.persistence.existingClaim }}
+        {{- else }}
         emptyDir: {}
         {{- end }}
-  {{- if .Values.graylog.custom.persistence.enabled }}
+      {{- end }}
+  {{- if not .Values.graylog.custom.persistence.existingClaim | and .Values.graylog.custom.persistence.enabled }}
   volumeClaimTemplates:
     - apiVersion: v1
       kind: PersistentVolumeClaim
       metadata:
-        name: {{ include "graylog.journalName" . }}
-        {{- with .Values.graylog.custom.persistence.journal.annotations }}
+        name: {{ include "graylog.volumeName" . }}
+        {{- with .Values.graylog.custom.persistence.annotations }}
         annotations:
           {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.graylog.custom.persistence.journal.labels }}
+        {{- with .Values.graylog.custom.persistence.labels }}
         labels:
           {{- toYaml . | nindent 8 }}
         {{- end }}
       spec:
-        {{- if or .Values.graylog.custom.persistence.journal.storageClass .Values.global.defaultStorageClass }}
-        storageClassName: {{ .Values.graylog.custom.persistence.journal.storageClass | default .Values.global.defaultStorageClass }}
+        {{- if or .Values.graylog.custom.persistence.storageClass .Values.global.defaultStorageClass }}
+        storageClassName: {{ .Values.graylog.custom.persistence.storageClass | default .Values.global.defaultStorageClass }}
         {{- end }}
         accessModes:
-        {{- range .Values.graylog.custom.persistence.journal.accessModes }}
+        {{- range .Values.graylog.custom.persistence.accessModes }}
           - {{ . | quote }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.graylog.custom.persistence.journal.size | default "8Gi" | quote }}
+            storage: {{ .Values.graylog.custom.persistence.size | default "8Gi" | quote }}
   {{- end }}
 {{- end }}

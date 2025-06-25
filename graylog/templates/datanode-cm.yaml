@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: graylog-datanode-config
+  name: {{ include "graylog.datanode.configmapName" . }}
 data:
   GRAYLOG_DATANODE_NODE_ID_FILE: {{ .Values.datanode.config.nodeIdFile | quote}}
   GRAYLOG_DATANODE_OPENSEARCH_HEAP: {{ .Values.datanode.config.opensearchHeap | quote }}

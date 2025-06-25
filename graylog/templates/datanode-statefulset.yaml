@@ -40,32 +40,10 @@ spec:
         - name: graylog-datanode
           image: "{{ .Values.datanode.custom.image.repository | default "graylog/graylog-datanode"  }}:{{ .Values.datanode.custom.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.datanode.custom.image.imagePullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "graylog.datanode.configmapName" . }}
           env:
-            - name: GRAYLOG_DATANODE_NODE_ID_FILE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-datanode-config
-                  key: GRAYLOG_DATANODE_NODE_ID_FILE
-            - name: GRAYLOG_DATANODE_OPENSEARCH_HEAP
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-datanode-config
-                  key: GRAYLOG_DATANODE_OPENSEARCH_HEAP
-            - name: GRAYLOG_JAVA_OPTS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-datanode-config
-                  key: GRAYLOG_JAVA_OPTS
-            - name: GRAYLOG_SKIP_PREFLIGHT_CHECKS
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-datanode-config
-                  key: GRAYLOG_SKIP_PREFLIGHT_CHECKS
-            - name: GRAYLOG_NODE_SEARCH_CACHE_SIZE
-              valueFrom:
-                configMapKeyRef:
-                  name: graylog-datanode-config
-                  key: GRAYLOG_NODE_SEARCH_CACHE_SIZE
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -78,12 +56,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "graylog.secretsName" . }}
-                  key: graylog-password-secret
+                  key: GRAYLOG_PASSWORD_SECRET
             - name: GRAYLOG_DATANODE_MONGODB_URI
               valueFrom:
                 secretKeyRef:
                   name: {{ include "graylog.secretsName" . }}
-                  key: mongo-db-uri
+                  key: GRAYLOG_MONGODB_URI
           ports:
             - name: api
               containerPort: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}

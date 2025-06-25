@@ -134,11 +134,18 @@ Graylog service name
 {{- end }}
 
 {{/*
-Graylog journal name
+Graylog configmap name
 */}}
-{{- define "graylog.journalName" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-journal-pvc" }}
-{{- .Values.graylog.custom.persistence.journal.volumeNameOverride | default $defaultName }}
+{{- define "graylog.configmapName" -}}
+{{- include "graylog.fullname" . | printf "%s-config" }}
+{{- end }}
+
+{{/*
+Graylog data PVC/volume name
+*/}}
+{{- define "graylog.volumeName" -}}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-data" }}
+{{- .Values.graylog.custom.persistence.volumeNameOverride | default $defaultName }}
 {{- end }}
 
 {{/*
@@ -164,4 +171,11 @@ Graylog Datanode hosts
 {{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" (include "graylog.datanode.name" $) $i (include "graylog.datanode.serviceName" $) ($.Release.Namespace) | append $builder }}
 {{- end }}
 {{- join "," $builder | quote }}
+{{- end }}
+
+{{/*
+Datanode configmap name
+*/}}
+{{- define "graylog.datanode.configmapName" -}}
+{{- include "graylog.fullname" . | printf "%s-datanode-config" }}
 {{- end }}
