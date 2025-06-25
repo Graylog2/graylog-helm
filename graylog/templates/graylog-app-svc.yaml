@@ -17,5 +17,11 @@ spec:
       targetPort: metrics
       protocol: TCP
     {{- end }}
+    {{- range .Values.graylog.inputs }}
+    - name: {{ .name }}
+      port: {{ .port | int }}
+      targetPort: {{ .targetPort | int }}
+      protocol: {{ .protocol }}
+    {{- end }}
   selector:
     app: graylog-app
