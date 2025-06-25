@@ -1,5 +1,5 @@
-{{- if .Values.datanode.podDisruptionBudget.enabled }}
-{{- if gt (int .Values.datenode.replicas) 1 }}
+{{- if .Values.datanode.custom.podDisruptionBudget.enabled }}
+{{- if gt (int .Values.datanode.replicas) 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -9,7 +9,7 @@ metadata:
     app: graylog-datanode
     {{- include "graylog.labels" . | nindent 4 }}
 spec:
-  minAvailable: {{ .Values.datanode.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.datanode.custom.podDisruptionBudget.minAvailable | default 3 | int }}
   selector:
     matchLabels:
       app: graylog-datanode

@@ -22,4 +22,3 @@
 *.tmproj
 .vscode/
 # In development
-*-pdb.yaml
