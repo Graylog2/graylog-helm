@@ -1,5 +1,5 @@
 {{- if .Values.datanode.custom.podDisruptionBudget.enabled }}
-{{- if gt (int .Values.datanode.replicas) 1 }}
+{{- if include "datanode.replicas" . | int | lt 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

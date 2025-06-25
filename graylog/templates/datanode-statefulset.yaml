@@ -9,7 +9,7 @@ metadata:
   annotations:
     {{- include "graylog.annotations" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.datanode.replicas | int | default 1 }}
+  replicas: {{ include "datanode.replicas" . | default 1 | int }}
   serviceName: {{ include "graylog.datanode.serviceName" . }}
   selector:
     matchLabels:
