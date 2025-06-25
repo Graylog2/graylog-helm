@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: graylog-config
+  name: {{ include "graylog.configmapName" . }}
 data:
   GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.custom.metrics.enabled | ternary true false | quote }}
   GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfsignedStartup | default true | quote }}

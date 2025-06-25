@@ -116,19 +116,16 @@ graylog:
       #   enabled: false
       #   whenScaled: Retain
       #   whenDeleted: Retain
-      journal:
-        enabled: true
-        storageClass: ""
-        volumeNameOverride: "graylog-journal"
-        existingClaim: ""
-        mountPath: /usr/share/graylog/data/journal
-        subPath: ""
-        accessModes:
-          - ReadWriteOnce
-        size: "8Gi"
-        annotations: { }
-        labels: { }
-        selector: { }
+      storageClass:
+      volumeNameOverride:
+      existingClaim:
+      mountPath:
+      accessModes:
+        - ReadWriteOnce
+      size:
+      annotations: { }
+      labels: { }
+      selector: { }
     livenessProbe:
       enabled: true
       initialDelaySeconds: 60
