@@ -12,6 +12,10 @@ data:
     else
       cp -r /usr/share/graylog/data/* /mnt/data/
     fi
+    # get plugins
+    for url in $(echo "${GRAYLOG_PLUGIN_URLS}" | tr ";" "\n"); do
+      wget "$url" -P /mnt/plugins
+    done
     # check mongo credentials
     if env | grep GRAYLOG_MONGODB_URI | grep -q "@"; then
       echo "MongoDB credentials set. We're good to go!"

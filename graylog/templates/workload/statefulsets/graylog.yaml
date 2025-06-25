@@ -61,6 +61,11 @@ spec:
           image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
           command: [ "/bin/sh", "/scripts/init-script.sh" ]
+          {{- if len .Values.graylog.plugins | lt 0 }}
+          env:
+            - name: GRAYLOG_PLUGIN_URLS
+              value: {{ include "graylog.pluginURLs" . }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "graylog.configmapName" . }}
@@ -71,6 +76,10 @@ spec:
               mountPath: /mnt/data
             - name: init-script
               mountPath: /scripts
+            {{- if len .Values.graylog.plugins | lt 0 }}
+            - name: init-plugins
+              mountPath: /mnt/plugins
+            {{- end }}
       containers:
         - name: graylog-app
           image: {{ include "graylog.image" . }}
@@ -126,6 +135,10 @@ spec:
             - name: tls-creds
               mountPath: /usr/share/graylog/tls
             {{- end }}
+            {{- if len .Values.graylog.plugins | lt 0 }}
+            - name: init-plugins
+              mountPath: /ust/share/graylog/plugins
+            {{- end }}
       tolerations:
       {{- with .Values.graylog.custom.tolerations }}
         {{- toYaml . | nindent 8 }}
@@ -138,11 +151,15 @@ spec:
       - name: init-script
         configMap:
           name: init-script-cm
-          defaultMode: 0755  # Make script executable
+          defaultMode: 0755
       {{- if .Values.graylog.config.tls.byoc.enabled }}
       - name: tls-creds
         secret:
           secretName: {{ .Values.graylog.config.tls.byoc.secretName | quote }}
+      {{- end }}
+      {{- if len .Values.graylog.plugins | lt 0 }}
+      - name: init-plugins
+        emptyDir: {}
       {{- end }}
       {{- if not .Values.graylog.custom.persistence.enabled | or .Values.graylog.custom.persistence.existingClaim }}
       - name: {{ include "graylog.volumeName" . }}
