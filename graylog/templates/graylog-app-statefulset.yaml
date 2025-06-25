@@ -46,9 +46,7 @@ spec:
         - name: copy-data
           image: "{{ .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}:{{ .Values.graylog.custom.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
-          command: [ "/bin/sh", "-c" ]
-          args:
-            - "cp -r /usr/share/graylog/data/* /mnt/data/ || true"
+          command: [ "/bin/sh", "/scripts/init-script.sh" ]
           envFrom:
             - configMapRef:
                 name: {{ include "graylog.configmapName" . }}
@@ -57,6 +55,8 @@ spec:
           volumeMounts:
             - name: {{ include "graylog.volumeName" . }}
               mountPath: /mnt/data
+            - name: init-script
+              mountPath: /scripts
       containers:
         - name: graylog-app
           image: "{{ .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}:{{ .Values.graylog.custom.image.tag | default .Chart.AppVersion }}"
@@ -114,8 +114,12 @@ spec:
       {{- with .Values.graylog.affinity }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if not .Values.graylog.custom.persistence.enabled | or .Values.graylog.custom.persistence.existingClaim }}
       volumes:
+      - name: init-script
+        configMap:
+          name: init-script-cm
+          defaultMode: 0755  # Make script executable
+      {{- if not .Values.graylog.custom.persistence.enabled | or .Values.graylog.custom.persistence.existingClaim }}
       - name: {{ include "graylog.volumeName" . }}
         {{- if .Values.graylog.custom.persistence.existingClaim }}
         persistentVolumeClaim:
