@@ -1,0 +1,70 @@
+
+global:
+  existingSecret: "graylog-secret-alix"
+
+graylog:
+  # @note: On the GLC cloud, Graylog is not properly ready in the current default timewindo
+  livenessProbe:
+    initialDelaySeconds: 240
+  custom:
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+#   inputs:
+#     - name: input-gelf
+#       port: 12201
+#       targetPort: 12201
+#       protocol: TCP
+#       ingress: true
+#     - name: input-forwarder
+#       port: 13301
+#       targetPort: 13301
+#       protocol: TCP
+#       ingress: true
+
+datanode:
+  enabled: true
+  custom:
+    image:
+      imagePullPolicy: Always
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:446604966667:certificate/1f6c138c-9715-4d3a-920d-a3778610a845
+    alb.ingress.kubernetes.io/group.name: helm-graylog-1
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "5"
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/healthcheck-port: "9000"
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "2"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/load-balancer-attributes: "deletion_protection.enabled=false"
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/security-groups: sg-05b42e0c22b938a38,sg-0d54f3c5e52d08a73,sg-0600c2f5354ca87dc,sg-044bf3d08385a571a
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+    external-dns.alpha.kubernetes.io/hostname: helm.dev.graylog.cloud
+  hosts:
+    - host: helm.dev.graylog.cloud
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: graylog-app
+              port:
+                name: app
+
+mongodb:
+  subchart:
+    enabled: false
+  service:
+    ports:
+      mongodb: 27017
