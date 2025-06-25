@@ -37,6 +37,9 @@ graylog:
       port: 13301
       targetPort: 13301
       protocol: TCP
+  plugins:
+    - url:
+      isRelative:
   # Graylog server configuration (server.conf)
   config:
     rootUsername: "admin"
@@ -95,6 +98,8 @@ graylog:
       useTls: "true"
       webInterfaceUrl: "https://graylog.example.com"
   # Custom Kubernetes-specific parameters
+    plugins:
+      baseUrl:
   custom:
     podAnnotations: {}
     nodeSelector: {}

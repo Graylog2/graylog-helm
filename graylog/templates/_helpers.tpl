@@ -258,3 +258,19 @@ Datanode configmap name
 {{- define "graylog.datanode.configmapName" -}}
 {{- include "graylog.fullname" . | printf "%s-datanode-config" }}
 {{- end }}
+
+{{/*
+Graylog plugins
+*/}}
+{{- define "graylog.pluginURLs" }}
+{{- $urls := list }}
+{{- $baseUrl := .Values.graylog.config.plugins.baseUrl }}
+{{- range $plugin := .Values.graylog.plugins }}
+{{- $url := $plugin.url }}
+{{- if $plugin.relative }}
+{{- $url = printf "%s%s" $baseUrl $url }}
+{{- end }}
+{{- $urls = append $urls $url }}
+{{- end }}
+{{- $urls | uniq | join "," | quote }}
+{{- end }}
