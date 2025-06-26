@@ -30,11 +30,15 @@ helm upgrade graylog graylog/graylog -n graylog --reuse-values
 
 ### Uninstall
 ```sh
+# optional: scale Graylog down to zero
+kubectl scale sts graylog -n graylog --replicas 0  && kubectl wait --for=delete pod graylog-0 -n graylog
+l
+# remove chart
 helm uninstall graylog -n graylog
 ```
 
 #### Debugging
-Get a yaml output of the values being submitted.
+Get a YAML output of the values being submitted.
 ```bash
 helm template graylog graylog -f graylog/values-glc.yaml | yq
 ```
