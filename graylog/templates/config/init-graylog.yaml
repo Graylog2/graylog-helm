@@ -11,6 +11,7 @@ data:
       echo "Data already initialized, skipping copy."
     else
       cp -r /usr/share/graylog/data/* /mnt/data/
+      mkdir -p /mnt/data/geolocation
     fi
     {{- if .Values.graylog.config.plugins.enabled }}
     # copy plugins
@@ -39,6 +40,14 @@ data:
     done
     {{- end }}
     {{- end }}
+    # get geolocation city database
+    if [ -n "$GRAYLOG_GEO_CITY_DB_URL" ]; then
+      wget "$GRAYLOG_GEO_CITY_DB_URL" -O "/mnt/data/geolocation/city.mmdb" || echo "Failed to fetch geolocation database at $GRAYLOG_GEO_CITY_DB_URL"
+    fi
+    # get geolocation ASN database
+    if [ -n "$GRAYLOG_GEO_ASN_DB_URL" ]; then
+      wget "$GRAYLOG_GEO_ASN_DB_URL" -O "/mnt/data/geolocation/asn.mmdb" || echo "Failed to fetch geolocation database at $GRAYLOG_GEO_ASN_DB_URL"
+    fi
     # check mongo credentials
     if env | grep GRAYLOG_MONGODB_URI | grep -q "@"; then
       echo "MongoDB credentials set. We're good to go!"
@@ -46,4 +55,4 @@ data:
       echo "Error: MongoDB credentials not set in MongoDB URI. Make sure secrets are up to date."
       exit 1
     fi
-    {{- end }}
+{{- end }}

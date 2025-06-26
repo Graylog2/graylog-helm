@@ -84,6 +84,15 @@ graylog:
       outputBufferProcessorThreadsCorePoolSize: "3"
       outputBufferProcessors: ""
       processBufferProcessors: ""
+    geolocation:
+      enabled:
+      directDownload:
+        cityUrl:
+        asnUrl:
+      maxmindGeoIp:
+        enabled:
+        accountId:
+        licenseKey:
     email:
       enabled: "false"
       senderAddress: "graylog@example.com"
