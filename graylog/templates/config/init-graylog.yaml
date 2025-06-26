@@ -13,8 +13,24 @@ data:
       cp -r /usr/share/graylog/data/* /mnt/data/
     fi
     # get plugins
-    for url in $(echo "${GRAYLOG_PLUGIN_URLS}" | tr ";" "\n"); do
-      wget "$url" -P /mnt/plugins
+    for urlchecksum in $(echo "${GRAYLOG_PLUGIN_URLS}" | tr "^" "\n"); do
+      name=$(echo "$urlchecksum" | cut -d'|' -f1)
+      url=$(echo "$urlchecksum" | cut -d'|' -f2)
+      checksum=$(echo "$urlchecksum" | cut -d'|' -f3)
+      wget "$url" -O "$name.jar" || { echo "Failed to fetch plugin $name.jar at $url"; continue; }
+      if [ -n "$checksum" ]; then
+        actual=$(sha256sum "$name.jar" | awk '{print $1}')
+        if [ "$checksum" = "$actual" ]; then
+          echo "Plugin checksum matches for $name.jar"
+          cp "$name.jar" "/mnt/plugins/" && rm "$name.jar"
+        else
+          echo "Plugin checksum does NOT match for $name. Skipping plugin."
+          rm "$name.jar"
+        fi
+      else
+        echo "Warning: no checksum validation has been performed for plugin $name.jar"
+        cp "$name.jar" "/mnt/plugins/" && rm "$name.jar"
+      fi
     done
     # check mongo credentials
     if env | grep GRAYLOG_MONGODB_URI | grep -q "@"; then

@@ -265,12 +265,26 @@ Graylog plugins
 {{- define "graylog.pluginURLs" }}
 {{- $urls := list }}
 {{- $baseUrl := .Values.graylog.config.plugins.baseUrl }}
-{{- range $plugin := .Values.graylog.plugins }}
+{{- $skipChecksum := .Values.graylog.config.plugins.skipChecksum }}
+{{- $allowHttp := .Values.graylog.config.plugins.allowHttp }}
+{{- if not $allowHttp | and (hasPrefix "http://" $baseUrl) }}
+{{- printf "Validation error: plugin baseUrl is '%s'. Only HTTPS is allowed for plugin URLs." $baseUrl | fail }}
+{{- end }}
+{{- range $name, $plugin := .Values.graylog.plugins }}
 {{- $url := $plugin.url }}
-{{- if $plugin.relative }}
-{{- $url = printf "%s%s" $baseUrl $url }}
+{{- if and (not $skipChecksum) (empty $plugin.checksum) }}
+{{- printf "Validation error: checksum verification is enabled but no checksum hash has been provided for plugin '%s'." $name | fail }}
 {{- end }}
-{{- $urls = append $urls $url }}
+{{- if and (hasPrefix "http://" $url | not) (hasPrefix "https://" $url | not) }}
+{{- $url = printf "%s/%s" (trimSuffix "/" $baseUrl) (trimPrefix "/" $url) }}
 {{- end }}
-{{- $urls | uniq | join "," | quote }}
+{{- if not $allowHttp | and (hasPrefix "http://" $url) }}
+{{- printf "Validation error: plugin '%s' is using URL '%s'. Only HTTPS is allowed for plugin URLs." $name $url | fail }}
+{{- end }}
+{{- if not $skipChecksum }}
+{{- $url = printf "%s|%s" $url $plugin.checksum }}
+{{- end }}
+{{- $urls = printf "%s|%s" $name $url | append $urls }}
+{{- end }}
+{{- $urls | join "^" | quote }}
 {{- end }}
