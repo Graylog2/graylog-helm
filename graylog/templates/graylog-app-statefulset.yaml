@@ -73,12 +73,12 @@ spec:
             - name: metrics
               containerPort: {{ .Values.graylog.custom.service.ports.metrics | int }}
               protocol: TCP
-            - name: input-gelf-http
-              containerPort: {{ .Values.graylog.custom.service.ports.inputGelfHttp | int }}
-              protocol: TCP
-            - name: input-forwarder
-              containerPort: 13301
-              protocol: TCP
+            {{- range .Values.graylog.inputs }}
+            - name: {{ .name }}
+              port: {{ .port | int }}
+              targetPort: {{ .targetPort | int }}
+              protocol: {{ .protocol }}
+            {{- end }}
           {{- if .Values.graylog.custom.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:

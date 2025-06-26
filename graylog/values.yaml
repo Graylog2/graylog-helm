@@ -21,7 +21,6 @@ graylog:
   enabled: true
   replicas: 2
   enterprise: true
-  # @todo: Think about how customers use inputs
   inputs:
     - name: input-gelf
       port: 12201
@@ -101,7 +100,6 @@ graylog:
       ports:
         app: 9000
         metrics: 9833
-        inputGelfHttp: 12201
     resources:
       limits:
         cpu: "2"
@@ -143,6 +141,8 @@ graylog:
     podDisruptionBudget:
       enabled: false
       minAvailable: 1
+  tolerations: {}
+  affinity: {}
 
 # Configuration for Graylog Datanode
 datanode:
@@ -217,6 +217,8 @@ datanode:
     podDisruptionBudget:
       enabled: false
       minAvailable: 2
+    tolerations: {}
+    affinity: {}
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
