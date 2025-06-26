@@ -54,5 +54,5 @@ stern statefulset/graylog-datanode -n graylog-helm-dev-1
 #### Remove Everything
 ```sh
 # CAUTION: this will delete ALL your data!
-kubectl delete $(kubectl get pvc -o name -n graylog) -n graylog
+kubectl delete $(kubectl get pvc -o name -n graylog; kubectl get secret -o name -n graylog) -n graylog
 ```
