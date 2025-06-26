@@ -61,10 +61,19 @@ spec:
           image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
           command: [ "/bin/sh", "/scripts/init-script.sh" ]
-          {{- if and .Values.graylog.config.plugins.enabled .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled .Values.graylog.plugins }}
+          {{- $geoDirectDownload :=  and .Values.graylog.config.geolocation.enabled .Values.graylog.config.geolocation.directDownload.cityUrl .Values.graylog.config.geolocation.directDownload.asnUrl }}
+          {{- if $geoDirectDownload | or .Values.graylog.config.plugins.enabled }}
           env:
+          {{- if .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled .Values.graylog.plugins }}
             - name: GRAYLOG_PLUGIN_URLS
               value: {{ include "graylog.pluginURLs" . }}
+          {{- end }}
+          {{- if $geoDirectDownload }}
+            - name: GRAYLOG_GEO_CITY_DB_URL
+              value: {{ .Values.graylog.config.geolocation.directDownload.cityUrl }}
+            - name: GRAYLOG_GEO_ASN_DB_URL
+              value: {{ .Values.graylog.config.geolocation.directDownload.asnUrl }}
+          {{- end }}
           {{- end }}
           envFrom:
             - configMapRef:

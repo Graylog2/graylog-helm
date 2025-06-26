@@ -1,0 +1,46 @@
+{{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.geolocation.maxmindGeoIp.enabled }}
+{{- $geoSecretName := include "graylog.fullname" . | printf "%s-geoip-secret" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $geoSecretName }}
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+    {{- include "graylog.annotations" . | nindent 4 }}
+data:
+  GEOIPUPDATE_ACCOUNT_ID: {{ .Values.graylog.config.geolocation.maxmindGeoIp.accountId | quote | trimAll "\"" | b64enc }}
+  GEOIPUPDATE_LICENSE_KEY: {{ .Values.graylog.config.geolocation.maxmindGeoIp.licenseKey | quote | trimAll "\"" | b64enc }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "graylog.fullname" . | printf "%s-geoip-update" }}
+spec:
+  schedule: "0 0 * * *"  # daily
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: geoipupdate
+              image: maxmindinc/geoipupdate:latest
+              envFrom:
+                - secretRef:
+                    name: {{ $geoSecretName }}
+              env:
+                - name: GEOIPUPDATE_EDITION_IDS
+                  value: "GeoLite2-City GeoLite2-ASN"
+                - name: GEOIPUPDATE_FREQUENCY
+                  value: "0"
+                - name: GEOIPUPDATE_DB_DIR
+                  value: "/usr/share/GeoIP/geolocation"
+              volumeMounts:
+                - name: geoip-db
+                  mountPath: /usr/share/GeoIP
+          restartPolicy: OnFailure
+          volumes:
+            - name: geoip-db
+              persistentVolumeClaim:
+                claimName: {{ printf "%s-%s-0" (include "graylog.volumeName" .) (include "graylog.fullname" .) }}
+{{- end }}
