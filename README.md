@@ -4,7 +4,8 @@ A helm chart for Graylog
 ## TLDR
 Install
 ```bash
-helm upgrade --install my-gralog graylog -f graylog/values-my-graylog.yaml
+helm upgrade --install my-graylog graylog -f graylog/values-my-graylog.yaml
+```
 Uninstall
 ```bash
 helm uninstall graylog
