@@ -269,6 +269,3 @@ mongodb:
     enabled: true
     previousPasswords:
       existingSecret: "graylog-backup-secret"
-  metrics:
-    enabled: false
-    username: "graylog"
