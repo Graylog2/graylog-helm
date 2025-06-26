@@ -253,12 +253,20 @@ serviceAccount:
 mongodb:
   subchart:
     enabled: true
-  architecture: replicaset
+  architecture: "replicaset"
   arbiter:
     enabled: true
   replicaCount: 2
   persistence:
     storageClass:
   auth:
-    usernames: [ "graylog" ]
-    databases: [ "graylog" ]
+    username: "graylog"
+    database: "graylog"
+    existingSecret: "graylog-mongodb-secret"
+  passwordUpdateJob:
+    enabled: true
+    previousPasswords:
+      existingSecret: "graylog-backup-secret"
+  metrics:
+    enabled: false
+    username: "graylog"
