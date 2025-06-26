@@ -38,8 +38,9 @@ graylog:
       targetPort: 13301
       protocol: TCP
   plugins:
-    - url:
-      isRelative:
+    myPluginA:
+      url: "https://someurl/myplugin.jar"
+      checksum:
   # Graylog server configuration (server.conf)
   config:
     rootUsername: "admin"
@@ -100,6 +101,8 @@ graylog:
   # Custom Kubernetes-specific parameters
     plugins:
       baseUrl:
+      skipChecksum:
+      allowHttp:
   custom:
     podAnnotations: {}
     nodeSelector: {}
