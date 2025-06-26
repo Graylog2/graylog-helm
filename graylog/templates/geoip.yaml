@@ -9,13 +9,16 @@ metadata:
   annotations:
     {{- include "graylog.annotations" . | nindent 4 }}
 data:
-  GEOIPUPDATE_ACCOUNT_ID: {{ .Values.graylog.config.geolocation.maxmindGeoIp.accountId | quote | trimAll "\"" | b64enc }}
+  GEOIPUPDATE_ACCOUNT_ID: {{ .Values.graylog.config.geolocation.maxmindGeoIp.accountId | int | quote | trimAll "\"" | b64enc }}
   GEOIPUPDATE_LICENSE_KEY: {{ .Values.graylog.config.geolocation.maxmindGeoIp.licenseKey | quote | trimAll "\"" | b64enc }}
+{{- $cronJobName := include "graylog.fullname" . | printf "%s-geoip-update" }}
+{{- $claimName := printf "%s-%s" (include "graylog.volumeName" .) (include "graylog.fullname" .) }}
+{{- range $i := include "graylog.replicas" . | default 2 | int | until }}
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "graylog.fullname" . | printf "%s-geoip-update" }}
+  name: {{ printf "%s-%d" $cronJobName $i }}
 spec:
   schedule: "0 0 * * *"  # daily
   jobTemplate:
@@ -42,5 +45,6 @@ spec:
           volumes:
             - name: geoip-db
               persistentVolumeClaim:
-                claimName: {{ printf "%s-%s-0" (include "graylog.volumeName" .) (include "graylog.fullname" .) }}
+                claimName: {{ printf "%s-%d" $claimName $i }}
+{{- end }}
 {{- end }}
