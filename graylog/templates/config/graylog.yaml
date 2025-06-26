@@ -43,8 +43,9 @@ data:
   GRAYLOG_HTTP_MAX_HEADER_SIZE: {{ .Values.graylog.config.network.maxHeaderSize | int | quote }}
   GRAYLOG_HTTP_READ_TIMEOUT: {{ .Values.graylog.config.network.readTimeout | quote }}
   GRAYLOG_HTTP_THREAD_POOL_SIZE: {{ .Values.graylog.config.network.threadPoolSize | int | quote }}
-  # @todo: Investigate how to support BYO Graylog App certs
-  # GRAYLOG_ENABLE_TLS: "true"
+  GRAYLOG_ENABLE_TLS: {{ .Values.graylog.config.tls.byoc.enabled | quote }}
+  GRAYLOG_HTTP_TLS_CERT_FILE: "/usr/share/graylog/tls/tls.crt"
+  GRAYLOG_HTTP_TLS_KEY_FILE: "/usr/share/graylog/tls/tls.key"
   # GRAYLOG_HTTP_EXTERNAL_URI:
   # GRAYLOG_HTTP_PUBLISH_URI: ""
 
