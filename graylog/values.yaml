@@ -253,6 +253,8 @@ serviceAccount:
 mongodb:
   subchart:
     enabled: true
+  image:
+    tag: "7.0"
   architecture: "replicaset"
   arbiter:
     enabled: true
