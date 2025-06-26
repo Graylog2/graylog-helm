@@ -115,7 +115,7 @@ Graylog secret pepper
 {{- end }}
 
 {{/*
-Graylog secrets name
+Graylog secret name
 */}}
 {{- define "graylog.secretsName" -}}
 {{- $defaultName := include "graylog.fullname" . | printf "%s-secrets" }}
@@ -123,6 +123,22 @@ Graylog secrets name
 {{- $defaultName = .Values.global.existingSecret }}
 {{- end }}
 {{- $defaultName }}
+{{- end }}
+
+{{/*
+Graylog backup-secret name
+*/}}
+{{- define "graylog.backupSecretName" -}}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-backup-secret" }}
+{{- .Values.mongodb.passwordUpdateJob.previousPasswords.existingSecret | default $defaultName }}
+{{- end }}
+
+{{/*
+MongoDB secret name
+*/}}
+{{- define "graylog.mongodb.secretName" -}}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-mongo-secret" }}
+{{- .Values.mongodb.auth.existingSecret | default $defaultName }}
 {{- end }}
 
 {{/*
