@@ -75,8 +75,7 @@ spec:
               protocol: TCP
             {{- range .Values.graylog.inputs }}
             - name: {{ .name }}
-              port: {{ .port | int }}
-              targetPort: {{ .targetPort | int }}
+              containerPort: {{ .targetPort | int }}
               protocol: {{ .protocol }}
             {{- end }}
           {{- if .Values.graylog.custom.livenessProbe.enabled }}
