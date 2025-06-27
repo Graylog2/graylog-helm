@@ -92,6 +92,9 @@ spec:
               containerPort: {{ .targetPort | int }}
               protocol: {{ .protocol }}
             {{- end }}
+            - name: input-forwarder-config
+              containerPort: 13302
+              protocol: TCP
           {{- if .Values.graylog.custom.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
