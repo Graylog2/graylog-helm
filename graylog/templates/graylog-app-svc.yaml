@@ -24,7 +24,7 @@ spec:
       targetPort: {{ .targetPort | int }}
       protocol: {{ .protocol }}
     {{- end }}
-    - name: input-fwd-config
+    - name: input-fwd-conf
       port: 13302
       targetPort: 13302
       protocol: TCP
