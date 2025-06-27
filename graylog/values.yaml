@@ -91,6 +91,11 @@ graylog:
       tag: ""
       imagePullPolicy: IfNotPresent
       imagePullSecrets: []
+    updateStrategy:
+      type:
+      rollingUpdate:
+        maxUnavailable:
+        partition:
     service:
       nameOverride: ""
       type: ClusterIP
@@ -155,6 +160,11 @@ datanode:
       tag: ""
       imagePullPolicy: IfNotPresent
       imagePullSecrets: []
+    updateStrategy:
+      type:
+      rollingUpdate:
+        maxUnavailable:
+        partition:
     service:
       ports:
         api: 8999

@@ -8,7 +8,6 @@ metadata:
     app: graylog-app
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
-{{/*    checksum/config: {{ (include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace).data | sha256sum }}*/}}
     {{- include "graylog.annotations" . | nindent 4 }}
 spec:
   replicas: {{ include "graylog.replicas" . | default 2 | int }}
@@ -17,13 +16,28 @@ spec:
     matchLabels:
       app: graylog-app
       {{- include "graylog.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: {{ .Values.graylog.custom.updateStrategy.type | default "RollingUpdate" | quote }}
+    {{- if .Values.graylog.custom.updateStrategy.type | default "RollingUpdate" | eq "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.graylog.custom.updateStrategy.rollingUpdate.maxUnavailable | default "1" | quote }}
+      {{- with .Values.graylog.custom.updateStrategy.rollingUpdate.partition }}
+      partition: {{ int . }}
+      {{- end }}
+    {{- end }}
   template:
     metadata:
       labels:
         app: graylog-app
         {{- include "graylog.selectorLabels" . | nindent 8 }}
-      {{- with .Values.graylog.custom.podAnnotations }}
       annotations:
+        {{- $dd := randAlphaNum 5 | dict "data" }}
+        {{- $config := include "graylog.configmapName" . | lookup "v1" "ConfigMap" .Release.Namespace | default $dd  }}
+        {{- $_ := randAlphaNum 5 | set $dd "data" }}
+        {{- $secret := include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace | default $dd  }}
+        checksum/config: {{ $config.data | quote | sha256sum }}
+        checksum/secret: {{ $secret.data | quote | sha256sum }}
+      {{- with .Values.graylog.custom.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
