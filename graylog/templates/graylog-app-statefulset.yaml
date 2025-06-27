@@ -92,7 +92,7 @@ spec:
               containerPort: {{ .targetPort | int }}
               protocol: {{ .protocol }}
             {{- end }}
-            - name: input-forwarder-config
+            - name: input-fwd-conf
               containerPort: 13302
               protocol: TCP
           {{- if .Values.graylog.custom.livenessProbe.enabled }}
