@@ -1,6 +1,5 @@
 # Default values for Graylog.
 
-# @todo: utilize these
 nameOverride: ""
 fullnameOverride: ""
 quicksetup:
@@ -26,12 +25,10 @@ graylog:
       port: 12201
       targetPort: 12201
       protocol: TCP
-      ingress: true
     - name: input-forwarder
       port: 13301
       targetPort: 13301
       protocol: TCP
-      ingress: true
   config:
     rootUsername: "admin"
     rootPassword: ""
@@ -223,17 +220,29 @@ datanode:
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+  web:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: chart-example.local
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+  forwarder:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: chart-example.local
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls: []
 
 serviceAccount:
   create: true
