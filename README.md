@@ -26,8 +26,10 @@ helm upgrade graylog graylog/graylog -n graylog --reuse-values
 ```sh
 # clone repo
 git clone git@github.com:Graylog2/graylog-helm.git
-# cd into new directory
+
+# cd into the newly created graylog-helm directory
 cd graylog-helm
+
 # checkout this branch
 git checkout feat/mongodb
 ```
