@@ -44,7 +44,7 @@ spec:
         fsGroup: 1100
       initContainers:
         - name: copy-data
-          image: "{{ .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}:{{ .Values.graylog.custom.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
           command: [ "/bin/sh", "/scripts/init-script.sh" ]
           envFrom:
@@ -59,7 +59,7 @@ spec:
               mountPath: /scripts
       containers:
         - name: graylog-app
-          image: "{{ .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}:{{ .Values.graylog.custom.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
           envFrom:
             - configMapRef:
@@ -82,7 +82,7 @@ spec:
           livenessProbe:
             tcpSocket:
               port: {{ .Values.graylog.custom.service.ports.app | int }}
-            initialDelaySeconds: {{ .Values.graylog.custom.livenessProbe.initialDelaySeconds |int }}
+            initialDelaySeconds: {{ .Values.graylog.custom.livenessProbe.initialDelaySeconds | int }}
             periodSeconds: {{ .Values.graylog.custom.livenessProbe.periodSeconds | int }}
             timeoutSeconds: {{ .Values.graylog.custom.livenessProbe.timeoutSeconds | int }}
             failureThreshold: {{ .Values.graylog.custom.livenessProbe.failureThreshold | int }}
@@ -146,8 +146,12 @@ spec:
         storageClassName: {{ .Values.graylog.custom.persistence.storageClass | default .Values.global.defaultStorageClass }}
         {{- end }}
         accessModes:
+        {{- if .Values.graylog.custom.persistence.accessModes }}
         {{- range .Values.graylog.custom.persistence.accessModes }}
           - {{ . | quote }}
+        {{- end }}
+        {{- else }}
+          - "ReadWriteOnce"
         {{- end }}
         resources:
           requests:

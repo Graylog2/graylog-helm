@@ -1,4 +1,4 @@
-{{- if .Values.graylog.custom.podDisruptionBudget.enabled }}
+{{- if and .Values.graylog.enabled .Values.graylog.custom.podDisruptionBudget.enabled }}
 {{- if include "graylog.replicas" . | int | lt 2 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget

@@ -4,7 +4,7 @@ metadata:
   name: {{ include "graylog.configmapName" . }}
 data:
   GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.custom.metrics.enabled | ternary true false | quote }}
-  GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfsignedStartup | default true | quote }}
+  GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfSignedStartup | default true | quote }}
   GRAYLOG_IS_CLOUD: {{ .Values.graylog.config.isCloud | default false | quote }}
   GRAYLOG_SERVER_JAVA_OPTS: {{.Values.graylog.config.serverJavaOpts | quote }}
   GRAYLOG_LEADER_ELECTION_MODE: {{ .Values.graylog.config.leaderElectionMode | quote }}
@@ -31,7 +31,7 @@ data:
   GRAYLOG_CONTENT_PACKS_AUTO_INSTALL: {{ .Values.graylog.config.contentPacksAutoInstall | default true | quote }}
   GRAYLOG_MESSAGE_JOURNAL_ENABLED: {{ .Values.graylog.config.messageJournal.enabled | default true | quote }}
   GRAYLOG_MESSAGE_JOURNAL_FLUSH_AGE: {{ .Values.graylog.config.messageJournal.flushAge | quote }} 
-  GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL: {{ .Values.graylog.config.messageJournal.flushInterval | quote }}  
+  GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL: {{ .Values.graylog.config.messageJournal.flushInterval | int | quote }}
   GRAYLOG_MESSAGE_JOURNAL_MAX_AGE: {{ .Values.graylog.config.messageJournal.maxAge | quote }}
   GRAYLOG_MESSAGE_JOURNAL_SEGMENT_AGE: {{ .Values.graylog.config.messageJournal.segmentAge | quote }}
   GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE: {{ .Values.graylog.config.messageJournal.segmentSize | quote }}
@@ -40,26 +40,26 @@ data:
   GRAYLOG_HTTP_CONNECT_TIMEOUT: {{ .Values.graylog.config.network.connectTimeout | quote }}
   GRAYLOG_HTTP_ENABLE_CORS: {{ .Values.graylog.config.network.enableCors | quote }}
   GRAYLOG_HTTP_ENABLE_GZIP: {{ .Values.graylog.config.network.enableGzip | quote }}
-  GRAYLOG_HTTP_MAX_HEADER_SIZE: {{ .Values.graylog.config.network.maxHeaderSize | quote }}
+  GRAYLOG_HTTP_MAX_HEADER_SIZE: {{ .Values.graylog.config.network.maxHeaderSize | int | quote }}
   GRAYLOG_HTTP_READ_TIMEOUT: {{ .Values.graylog.config.network.readTimeout | quote }}
-  GRAYLOG_HTTP_THREAD_POOL_SIZE: {{ .Values.graylog.config.network.threadPoolSize | quote }}
+  GRAYLOG_HTTP_THREAD_POOL_SIZE: {{ .Values.graylog.config.network.threadPoolSize | int | quote }}
   # @todo: Investigate how to support BYO Graylog App certs
   # GRAYLOG_ENABLE_TLS: "true"
   # GRAYLOG_HTTP_EXTERNAL_URI:
   # GRAYLOG_HTTP_PUBLISH_URI: ""
 
   # Performance Tuning
-  GRAYLOG_ASYNC_EVENTBUS_PROCESSORS: {{ .Values.graylog.config.performance.asyncEventbusProcessors | quote }}
+  GRAYLOG_ASYNC_EVENTBUS_PROCESSORS: {{ .Values.graylog.config.performance.asyncEventbusProcessors | int | quote }}
   GRAYLOG_AUTO_RESTART_INPUTS: {{ .Values.graylog.config.performance.autoRestartInputs | quote }}
-  GRAYLOG_INPUTBUFFER_PROCESSORS: {{ .Values.graylog.config.performance.inputBufferProcessors | quote }}
-  GRAYLOG_INPUTBUFFER_RING_SIZE: {{ .Values.graylog.config.performance.inputBufferRingSize | quote }}
+  GRAYLOG_INPUTBUFFER_PROCESSORS: {{ .Values.graylog.config.performance.inputBufferProcessors | int | quote }}
+  GRAYLOG_INPUTBUFFER_RING_SIZE: {{ .Values.graylog.config.performance.inputBufferRingSize | int | quote }}
   GRAYLOG_INPUTBUFFER_WAIT_STRATEGY: {{ .Values.graylog.config.performance.inputBufferWaitStrategy | quote }}
   GRAYLOG_JOB_SCHEDULER_CONCURRENCY_LIMITS: {{ .Values.graylog.config.performance.jobSchedulerConcurrencyLimits | quote }}
-  GRAYLOG_OUTPUT_BATCH_SIZE: {{ .Values.graylog.config.performance.outputBatchSize | quote }}
-  GRAYLOG_OUTPUT_FAULT_COUNT_THRESHOLD: {{ .Values.graylog.config.performance.outputFaultCountThreshold | quote }}
-  GRAYLOG_OUTPUT_FAULT_PENALTY_SECONDS: {{ .Values.graylog.config.performance.outputFaultPenaltySeconds | quote }}
-  GRAYLOG_OUTPUT_FLUSH_INTERVAL: {{ .Values.graylog.config.performance.outputFlushInterval | quote }}
-  GRAYLOG_OUTPUTBUFFER_PROCESSOR_THREADS_CORE_POOL_SIZE: {{ .Values.graylog.config.performance.outputBufferProcessorThreadsCorePoolSize | quote }}
+  GRAYLOG_OUTPUT_BATCH_SIZE: {{ .Values.graylog.config.performance.outputBatchSize | int | quote }}
+  GRAYLOG_OUTPUT_FAULT_COUNT_THRESHOLD: {{ .Values.graylog.config.performance.outputFaultCountThreshold | int | quote }}
+  GRAYLOG_OUTPUT_FAULT_PENALTY_SECONDS: {{ .Values.graylog.config.performance.outputFaultPenaltySeconds | int | quote }}
+  GRAYLOG_OUTPUT_FLUSH_INTERVAL: {{ .Values.graylog.config.performance.outputFlushInterval | int | quote }}
+  GRAYLOG_OUTPUTBUFFER_PROCESSOR_THREADS_CORE_POOL_SIZE: {{ .Values.graylog.config.performance.outputBufferProcessorThreadsCorePoolSize | int | quote }}
   GRAYLOG_PROCESSOR_WAIT_STRATEGY: "sleeping"
   GRAYLOG_RING_SIZE: "65536"
   GRAYLOG_UDP_RECVBUFFER_SIZES: "1048576"

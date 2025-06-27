@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: "{{ include "graylog.fullname" . }}-forwarder"
+  name: graylog-forwarder
   labels:
     {{- include "graylog.labels" . | nindent 4 }}
   {{- with .Values.ingress.forwarder.annotations }}
@@ -35,7 +35,7 @@ spec:
             {{- end }}
             backend:
               service:
-                name: {{ include "graylog.serviceName" . }}
+                name: graylog-svc
                 port:
                   name: input-forwarder
           {{- end }}

@@ -9,7 +9,7 @@ metadata:
   annotations:
     {{- include "graylog.annotations" . | nindent 4 }}
 spec:
-  replicas: {{ include "datanode.replicas" . | default 1 | int }}
+  replicas: {{ include "datanode.replicas" . | int }}
   serviceName: {{ include "graylog.datanode.serviceName" . }}
   selector:
     matchLabels:
@@ -74,9 +74,9 @@ spec:
               protocol: TCP
           volumeMounts:
             - name: "data"
-              mountPath: {{ .Values.datanode.custom.persistence.data.mountPath | default "/var/lib/graylog-datanode" }}
+              mountPath: {{ .Values.datanode.custom.persistence.data.mountPath | default "/var/lib/graylog-datanode" | quote }}
             - name: native-libs
-              mountPath: /native_libs
+              mountPath: {{ .Values.datanode.custom.persistence.nativeLibs.mountPath | default "/native_libs" | quote }}
           {{- if .Values.datanode.custom.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
@@ -114,24 +114,56 @@ spec:
       {{- with .Values.datanode.affinity }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if and .Values.datanode.custom.persistence.data.enabled .Values.datanode.custom.persistence.nativeLibs.enabled | not }}
       volumes:
+        {{- if not .Values.datanode.custom.persistence.nativeLibs.enabled }}
         - name: native-libs
           emptyDir: {}
-      {{- if not .Values.datanode.custom.persistence.data.enabled }}
+        {{- end }}
+        {{- if not .Values.datanode.custom.persistence.data.enabled }}
         - name: data
           emptyDir: {}
+        {{- end }}
       {{- end }}
+  {{- if or .Values.datanode.custom.persistence.data.enabled .Values.datanode.custom.persistence.nativeLibs.enabled }}
   volumeClaimTemplates:
-  {{- if .Values.datanode.custom.persistence.data.enabled }}
-  - metadata:
-      name: data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      {{- if or .Values.datanode.custom.persistence.data.storageClass .Values.global.defaultStorageClass }}
-      storageClassName: {{ .Values.datanode.custom.persistence.data.storageClass | default .Values.global.defaultStorageClass }}
-      {{- end }}
-      resources:
-        requests:
-          storage: {{ .Values.datanode.custom.persistence.data.size }}
+    {{- if .Values.datanode.custom.persistence.data.enabled }}
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+        {{- if .Values.datanode.custom.persistence.data.accessModes }}
+        {{- range .Values.datanode.custom.persistence.data.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        {{- else }}
+          - "ReadWriteOnce"
+        {{- end }}
+        {{- if or .Values.datanode.custom.persistence.data.storageClass .Values.global.defaultStorageClass }}
+        storageClassName: {{ .Values.datanode.custom.persistence.data.storageClass | default .Values.global.defaultStorageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.datanode.custom.persistence.data.size | default "8Gi" | quote }}
+    {{- end }}
+    {{- if .Values.datanode.custom.persistence.nativeLibs.enabled }}
+    - metadata:
+        name: nativeLibs
+      spec:
+        accessModes:
+        {{- if .Values.datanode.custom.persistence.nativeLibs.accessModes }}
+        {{- range .Values.datanode.custom.persistence.nativeLibs.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        {{- else }}
+          - "ReadWriteOnce"
+        {{- end }}
+        {{- if or .Values.datanode.custom.persistence.nativeLibs.storageClass .Values.global.defaultStorageClass }}
+        storageClassName: {{ .Values.datanode.custom.persistence.nativeLibs.storageClass | default .Values.global.defaultStorageClass }}
+              {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.datanode.custom.persistence.nativeLibs.size | default "8Gi" | quote }}
+    {{- end }}
   {{- end }}
 {{- end }}

@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: {{ include "graylog.datanode.configmapName" . }}
 data:
-  GRAYLOG_DATANODE_NODE_ID_FILE: {{ .Values.datanode.config.nodeIdFile | quote}}
+  GRAYLOG_DATANODE_NODE_ID_FILE: {{ .Values.datanode.config.nodeIdFile | default "/var/lib/graylog-datanode/node-id" | quote }}
   GRAYLOG_DATANODE_OPENSEARCH_HEAP: {{ .Values.datanode.config.opensearchHeap | quote }}
   GRAYLOG_JAVA_OPTS: {{ .Values.datanode.config.javaOpts | quote }}
   GRAYLOG_SKIP_PREFLIGHT_CHECKS: {{ .Values.datanode.config.skipPreflightChecks | quote }}
