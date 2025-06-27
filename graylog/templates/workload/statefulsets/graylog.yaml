@@ -137,7 +137,7 @@ spec:
             {{- end }}
             {{- if len .Values.graylog.plugins | lt 0 }}
             - name: init-plugins
-              mountPath: /ust/share/graylog/plugins
+              mountPath: /usr/share/graylog/plugin
             {{- end }}
       tolerations:
       {{- with .Values.graylog.custom.tolerations }}
