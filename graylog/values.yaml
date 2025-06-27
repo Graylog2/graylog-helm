@@ -1,25 +1,23 @@
 # Default values for Graylog.
 
 nameOverride: ""
-fullnameOverride: ""
-quicksetup:
 
+# Override the (fully qualified) app name (optional)
+fullnameOverride: ""
+
+# Overrides values for Graylog, Datanode, and MongoDB
 global:
-  existingSecret:
   imagePullSecrets: []
   defaultStorageClass: ""
-  # @todo: Allow for these to be defined here if the user wishes
-  # graylogMongodbURI: "NO DEFAULT"
-  # graylogElasticSearchHosts: "NO DEFAULT"
-  # graylogPasswordSecret: "NO DEFAULT"
-  # graylogPasswordSha2: "NO DEFAULT"
+  existingSecretName:
 
-
-# Configuration for Graylog application
+# Graylog application
 graylog:
   enabled: true
-  replicas: 2
+  # Enable enterprise features (license required)
   enterprise: true
+  # Number of Graylog nodes
+  replicas:
   inputs:
     - name: input-gelf
       port: 12201
@@ -33,15 +31,14 @@ graylog:
     rootUsername: "admin"
     rootPassword: ""
     timezone: "UTC"
-    selfsignedStartup: "true"
+    selfSignedStartup: "true"
     serverJavaOpts: "-Xms1g -Xmx1g"
     leaderElectionMode: "automatic"
-    # graylogMigrations: "true"
-    contentPacksAutoInstall: ""
+    contentPacksAutoInstall: "true"
     isCloud: "false"
     mongodb:
-      maxConnections: 1000
-      versionProbeAttempts: 0
+      maxConnections: "1000"
+      versionProbeAttempts: "0"
     messageJournal:
       enabled: "true"
       flushAge: "1m"
@@ -81,9 +78,12 @@ graylog:
       useSsl: "false"
       useTls: "true"
       webInterfaceUrl: "https://graylog.example.com"
+  # Customize Kubernetes-specific parameters
   custom:
     podAnnotations: {}
     nodeSelector: {}
+    inputs:
+      enabled: true
     metrics:
       enabled: true
     image:
@@ -106,21 +106,15 @@ graylog:
         memory: "1Gi"
     persistence:
       enabled: true
-      # @todo: Export these values to the PVCs
-      # persistentVolumeClaimRetentionPolicy:
-      #   enabled: false
-      #   whenScaled: Retain
-      #   whenDeleted: Retain
       storageClass:
       volumeNameOverride:
       existingClaim:
       mountPath:
-      accessModes:
-        - ReadWriteOnce
+      accessModes: []
       size:
-      annotations: { }
-      labels: { }
-      selector: { }
+      annotations: {}
+      labels: {}
+      selector: {}
     livenessProbe:
       enabled: true
       initialDelaySeconds: 60
@@ -141,17 +135,18 @@ graylog:
   tolerations: {}
   affinity: {}
 
-# Configuration for Graylog Datanode
+# Graylog Datanode
 datanode:
   enabled: true
-  replicas: 3
+  replicas:
+  # Graylog Datanode configuration
   config:
-    nodeIdFile: "/var/lib/graylog-datanode/node-id"
+    nodeIdFile: ""
     opensearchHeap: "2g"
     javaOpts: "-Xms1g -Xmx1g"
     skipPreflightChecks: "false"
     nodeSearchCacheSize: "10gb"
-    # graylogEnabledTlsProtocols: ""
+  # Customize Kubernetes-specific parameters
   custom:
     podAnnotations: {}
     nodeSelector: {}
@@ -178,10 +173,9 @@ datanode:
         enabled: true
         storageClass: ""
         existingClaim: ""
-        mountPath: /var/lib/graylog-datanode
-        accessModes:
-          - ReadWriteOnce
-        size: 8Gi
+        mountPath: ""
+        accessModes: []
+        size: "8Gi"
         annotations: {}
         labels: {}
         selector: {}
@@ -190,10 +184,9 @@ datanode:
         enabled: false
         storageClass: ""
         existingClaim: ""
-        mountPath: /native_libs
-        accessModes:
-          - ReadWriteOnce
-        size: 2Gi
+        mountPath: ""
+        accessModes: []
+        size: "2Gi"
         annotations: {}
         labels: {}
         selector: {}
@@ -217,9 +210,16 @@ datanode:
   tolerations: {}
   affinity: {}
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# Graylog service account
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  nameOverride: ""
+
+# Ingress configuration
+# more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
-  enabled: false
   web:
     enabled: false
     className: ""
@@ -250,6 +250,8 @@ serviceAccount:
   annotations: {}
   nameOverride: ""
 
+# MongoDB Bitnami Chart configuration
+# more information can be found here: https://artifacthub.io/packages/helm/bitnami/mongodb
 mongodb:
   subchart:
     enabled: true

@@ -68,31 +68,81 @@ Service account name
 Quick setup values
 */}}
 {{- define "graylog.quicksetup" }}
-{{- $keys := index . 0 | splitList "." -}}
-{{- $ctx := index . 1 -}}
-{{- $small := dict "replicas" 1 | dict "graylog" }}
-{{- $small = dict "replicas" 1 | set $small "datanode" }}
-{{- if and (eq $ctx.Values.quicksetup "small") (len $keys | lt 0) }}
-{{- $nested := index $keys 0 | get $small }}
-{{- range $_, $k := rest $keys }}
-{{- $nested = get $nested $k }}
+{{- $retval := "" -}}
+{{/* get args: dot-separated key path, caller context */}}
+{{- $keypath := index . 0 | splitList "." }}
+{{- $hint := index . 1 }}
+{{- if $hint -}}
+{{/*
+# define quicksetup dicts
+hints:
+  small:
+    size:
+      replicas:
+        graylog: 1
+        datanode: 1
+  large:
+    size:
+      replicas:
+        graylog: 3
+        datanode: 5
+*/}}
+{{- $hints := dict -}}
+{{/* "small" hint */}}
+{{- $small := dict "size" }}
+{{- $ssize := dict "replicas" }}
+{{- $sreplicas := dict }}
+{{- $_ := set $sreplicas "graylog" 1 }}
+{{- $_ = set $sreplicas "datanode" 1 }}
+{{- $_ = set $ssize "replicas" $sreplicas }}
+{{- $_ = set $small "size" $ssize }}
+{{- $_ = set $hints "small" $small -}}
+{{/* "large" hint */}}
+{{- $large := dict "size" }}
+{{- $lsize := dict "replicas" }}
+{{- $lreplicas := dict }}
+{{- $_ = set $lreplicas "graylog" 3 }}
+{{- $_ = set $lreplicas "datanode" 5 }}
+{{- $_ = set $lsize "replicas" $lreplicas }}
+{{- $_ = set $large "size" $lsize }}
+{{- $_ = set $hints "large" $large -}}
+{{/* traverse path, if hint is supported */}}
+{{- $nested := get $hints $hint }}
+{{- range $_, $key := $keypath }}
+{{- $nested = get $nested $key }}
 {{- end }}
-{{- print $nested }}
+{{- $retval = $nested }}
 {{- end }}
+{{- print $retval }}
 {{- end }}
 
 {{/*
 Graylog replicas
 */}}
 {{- define "graylog.replicas" }}
-{{- list "graylog.replicas" . | include "graylog.quicksetup" | int | default .Values.graylog.replicas }}
+{{- .Values.graylog.replicas | default (list "size.replicas.graylog" .Values.quicksetup | include "graylog.quicksetup") | default 2 }}
 {{- end }}
 
 {{/*
 Datanode replicas
 */}}
 {{- define "datanode.replicas" }}
-{{- list "datanode.replicas" . | include "graylog.quicksetup" | int | default .Values.datanode.replicas }}
+{{- .Values.datanode.replicas | default (list "size.replicas.datanode" .Values.quicksetup | include "graylog.quicksetup") | default 3 }}
+{{- end }}
+
+{{/*
+Graylog image tag
+*/}}
+{{- define "graylog.imageTag" }}
+{{- .Values.graylog.custom.image.tag | default .Chart.AppVersion }}
+{{- end }}
+
+{{/*
+Graylog image
+*/}}
+{{- define "graylog.image" }}
+{{- $name := .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}
+{{- include "graylog.imageTag" . | printf "%s:%s" $name }}
 {{- end }}
 
 {{/*
@@ -119,8 +169,8 @@ Graylog secret name
 */}}
 {{- define "graylog.secretsName" -}}
 {{- $defaultName := include "graylog.fullname" . | printf "%s-secrets" }}
-{{- if .Values.global.existingSecret }}
-{{- $defaultName = .Values.global.existingSecret }}
+{{- if .Values.global.existingSecretName }}
+{{- $defaultName = .Values.global.existingSecretName }}
 {{- end }}
 {{- $defaultName }}
 {{- end }}
