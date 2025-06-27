@@ -115,9 +115,9 @@ graylog:
       protocol: TCP
 ```
 
-Let's save it as `inputs.yaml`
+Then, save it as `inputs.yaml`
 
-Then, upgrade your installation like so:
+Finally, upgrade your installation like so:
 ```sh
 helm upgrade graylog ./graylog -n graylog -f inputs.yaml --reuse-values
 ```
