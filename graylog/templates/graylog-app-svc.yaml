@@ -24,6 +24,10 @@ spec:
       targetPort: {{ .targetPort | int }}
       protocol: {{ .protocol }}
     {{- end }}
+    - name: input-forwarder-config
+      port: 13302
+      targetPort: 13302
+      protocol: TCP
   selector:
     app: graylog-app
 {{- end }}
