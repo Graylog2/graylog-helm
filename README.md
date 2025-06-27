@@ -8,25 +8,121 @@ This chart is still under development and does not have locked in api contracts 
 ## Requirements
 - Kubernetes v1.32
 
-## TL;DR
-```sh
-# Clone this repo
-git clone git@github.com:Graylog2/graylog-helm.git
-
-# Install the chart
-helm install graylog ./graylog -n graylog --create-namespace
-```
-
-### Install from repository
+<!--
+### Install
 ```sh
 helm install graylog graylog/graylog -n graylog --create-namespace
 ```
 
 ### Upgrades
 ```sh
-helm repo update
 helm upgrade graylog graylog/graylog -n graylog --reuse-values
 ```
+-->
+
+## Installation
+
+### Clone this repo
+```sh
+git clone git@github.com:Graylog2/graylog-helm.git && cd graylog-helm
+```
+
+### Install local chart
+```sh
+helm install graylog graylog/graylog --namespace graylog --create-namespace
+```
+
+### Change your password
+```sh
+read -sp "Enter your new password and press return: " pass
+helm upgrade graylog ./graylog --namespace graylog --set "graylog.config.rootPassword=$pass" --reuse-values
+```
+
+🏁 That's it!
+
+## Usage
+
+### Scale Graylog
+```sh
+# scaling out: add more Graylog nodes to your cluster
+helm upgrade graylog ./graylog -n graylog --set graylog.replicas=3 --reuse-values
+
+# scaling in: remove Graylog nodes from your cluster
+helm upgrade graylog ./graylog -n graylog --set graylog.replicas=1 --reuse-values
+```
+
+### Scale Datanode
+```sh
+# scaling out: add more Graylog Datanodes to your cluster
+helm upgrade graylog ./graylog -n graylog --set datanode.replicas=5 --reuse-values
+```
+
+### Scale MongoDB
+```sh
+# scaling out: add more MongoDB nodes to your replicaset
+helm upgrade graylog ./graylog -n graylog --set mongodb.replicaCount=4 --reuse-values
+```
+
+### Modify Graylog `server.conf` parameters
+
+```sh
+# A few examples:
+
+# change server tz
+helm upgrade graylog ./graylog -n graylog --set graylog.config.timezone="America/Denver" --reuse-values
+
+# set JVM options
+helm upgrade graylog ./graylog -n graylog --set graylog.config.serverJavaOpts="-Xms2g -Xmx1g" --reuse-values
+
+# redefine message journal maxAge
+helm upgrade graylog ./graylog -n graylog --set graylog.config.messageJournal.maxAge="24h" --reuse-values
+
+# enable CORS headers for HTTP interface
+helm upgrade graylog ./graylog -n graylog --set graylog.config.network.enableCors=true --reuse-values
+
+# enable email transport and set sender address
+helm upgrade graylog ./graylog -n graylog --set graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
+```
+
+### Customize deployed Kubernetes resources
+```sh
+# A few examples: 
+
+# expose the Graylog application with a LoadBalancer service
+helm upgrade graylog ./graylog -n graylog --set graylog.custom.service.type="LoadBalancer" --reuse-values
+
+# modify readiness probe initial delay
+helm upgrade graylog ./graylog -n graylog --set graylog.custom.readinessProbe.initialDelaySeconds=5 --reuse-values
+
+# use a custom Storage Class for all resources (e.g. for AWS EKS)
+helm upgrade graylog ./graylog -n graylog --set global.defaultStorageClass="gp2" --reuse-values
+```
+
+### Add inputs
+
+First, define your inputs in a small YAML file like this one:
+
+```yaml
+graylog:
+  inputs:
+    - name: my-gelf-input
+      port: 12201
+      targetPort: 12201
+      protocol: TCP
+    - name: http1
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+```
+
+Let's save it as `inputs.yaml`
+
+Then, upgrade your installation like so:
+```sh
+helm upgrade graylog ./graylog -n graylog -f inputs.yaml --reuse-values
+```
+
+The inputs should now be exposed. Make sure to complete their configuration through the Graylog UI.
 
 ### Uninstall
 ```sh
@@ -37,24 +133,24 @@ l
 helm uninstall graylog -n graylog
 ```
 
-#### Debugging
+#### Removing Everything
+```sh
+# CAUTION: this will delete ALL your data!
+kubectl delete $(kubectl get pvc -o name -n graylog; kubectl get secret -o name -n graylog) -n graylog
+```
+
+### Debugging
 Get a YAML output of the values being submitted.
 ```bash
 helm template graylog graylog -f graylog/values-glc.yaml | yq
 ```
 
-#### Logging
+### Logging
 ```
 # Graylog app logs
 stern statefulset/graylog-app -n graylog-helm-dev-1
 # Datanode logs
 stern statefulset/graylog-datanode -n graylog-helm-dev-1
-```
-
-#### Remove Everything
-```sh
-# CAUTION: this will delete ALL your data!
-kubectl delete $(kubectl get pvc -o name -n graylog; kubectl get secret -o name -n graylog) -n graylog
 ```
 
 ---
