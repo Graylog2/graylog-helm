@@ -15,13 +15,28 @@ spec:
     matchLabels:
       app: graylog-datanode
       {{- include "graylog.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: {{ .Values.datanode.custom.updateStrategy.type | default "RollingUpdate" | quote }}
+    {{- if .Values.datanode.custom.updateStrategy.type | default "RollingUpdate" | eq "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.datanode.custom.updateStrategy.rollingUpdate.maxUnavailable | default "1" | quote }}
+      {{- with .Values.datanode.custom.updateStrategy.rollingUpdate.partition }}
+      partition: {{ int . }}
+      {{- end }}
+    {{- end }}
   template:
     metadata:
       labels:
         app: graylog-datanode
         {{- include "graylog.selectorLabels" . | nindent 8 }}
-      {{- with .Values.datanode.custom.podAnnotations }}
       annotations:
+        {{- $dd := randAlphaNum 5 | dict "data" }}
+        {{- $config := include "graylog.datanode.configmapName" . | lookup "v1" "ConfigMap" .Release.Namespace | default $dd }}
+        {{- $_ := randAlphaNum 5 | set $dd "data" }}
+        {{- $secret := include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace | default $dd }}
+        checksum/config: {{ $config.data | quote | sha256sum }}
+        checksum/secret: {{ $secret.data | quote | sha256sum }}
+      {{- with .Values.datanode.custom.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:

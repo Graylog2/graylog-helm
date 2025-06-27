@@ -179,56 +179,62 @@ These values affect Graylog, Datanode, and MongoDB
 
 
 ### Graylog application
-| Key Path                                     | Description                        | Default           |
-| -------------------------------------------- |------------------------------------|-------------------|
-| `graylog.enabled`                            | Enable the Graylog server.         | `true`            |
-| `graylog.enterprise`                         | Enable enterprise features.        | `true`            |
-| `graylog.replicas`                           | Number of Graylog server replicas. | `2`               |
-| `graylog.inputs`                             | List of input configurations.      | See below         |
-| `graylog.inputs[0].name`                     | Name of input for GELF messages.   | `input-gelf`      |
-| `graylog.inputs[0].port`                     | Port exposed for input.            | `12201`           |
-| `graylog.inputs[0].targetPort`               | Target container port.             | `12201`           |
-| `graylog.inputs[0].protocol`                 | Protocol used for input.           | `TCP`             |
-| `graylog.inputs[0].ingress`                  | Enable ingress for this input.     | `true`            |
-| `graylog.config.rootUsername`                | Root admin username.               | `"admin"`         |
-| `graylog.config.rootPassword`                | Root admin password.               | `""`              |
-| `graylog.config.timezone`                    | Timezone for the Graylog server.   | `"UTC"`           |
-| `graylog.config.selfSignedStartup`           | Use self-signed certs on startup.  | `"true"`          |
-| `graylog.config.serverJavaOpts`              | Java options for server.           | `"-Xms1g -Xmx1g"` |
-| `graylog.custom.podAnnotations`              | Additional pod annotations.        | `{}`              |
-| `graylog.custom.nodeSelector`                | Node selector for scheduling.      | `{}`              |
-| `graylog.custom.inputs.enabled`              | Enable Graylog inputs.             | `true`            |
-| `graylog.custom.metrics.enabled`             | Enable metrics collection.         | `true`            |
-| `graylog.custom.image.repository`            | Image repository for Graylog.      | `""`              |
-| `graylog.custom.image.tag`                   | Image tag for Graylog.             | `""`              |
-| `graylog.custom.image.imagePullPolicy`       | Pull policy for Graylog image.     | `IfNotPresent`    |
-| `graylog.custom.image.imagePullSecrets`      | Pull secrets for image.            | `[]`              |
-| `graylog.custom.service.nameOverride`        | Override for service name.         | `""`              |
-| `graylog.custom.service.type`                | Kubernetes service type.           | `ClusterIP`       |
-| `graylog.custom.service.ports.app`           | Graylog web UI port.               | `9000`            |
-| `graylog.custom.service.ports.metrics`       | Metrics endpoint port.             | `9833`            |
-| `graylog.custom.service.ports.inputGelfHttp` | GELF HTTP input port.              | `12201`           |
+| Key Path                                              | Description                                     | Default           |
+|-------------------------------------------------------|-------------------------------------------------|-------------------|
+| `graylog.enabled`                                     | Enable the Graylog server.                      | `true`            |
+| `graylog.enterprise`                                  | Enable enterprise features.                     | `true`            |
+| `graylog.replicas`                                    | Number of Graylog server replicas.              | `2`               |
+| `graylog.inputs`                                      | List of input configurations.                   | See below         |
+| `graylog.inputs[0].name`                              | Name of input for GELF messages.                | `input-gelf`      |
+| `graylog.inputs[0].port`                              | Port exposed for input.                         | `12201`           |
+| `graylog.inputs[0].targetPort`                        | Target container port.                          | `12201`           |
+| `graylog.inputs[0].protocol`                          | Protocol used for input.                        | `TCP`             |
+| `graylog.inputs[0].ingress`                           | Enable ingress for this input.                  | `true`            |
+| `graylog.config.rootUsername`                         | Root admin username.                            | `"admin"`         |
+| `graylog.config.rootPassword`                         | Root admin password.                            | `""`              |
+| `graylog.config.timezone`                             | Timezone for the Graylog server.                | `"UTC"`           |
+| `graylog.config.selfSignedStartup`                    | Use self-signed certs on startup.               | `"true"`          |
+| `graylog.config.serverJavaOpts`                       | Java options for server.                        | `"-Xms1g -Xmx1g"` |
+| `graylog.custom.podAnnotations`                       | Additional pod annotations.                     | `{}`              |
+| `graylog.custom.nodeSelector`                         | Node selector for scheduling.                   | `{}`              |
+| `graylog.custom.inputs.enabled`                       | Enable Graylog inputs.                          | `true`            |
+| `graylog.custom.metrics.enabled`                      | Enable metrics collection.                      | `true`            |
+| `graylog.custom.image.repository`                     | Image repository for Graylog.                   | `""`              |
+| `graylog.custom.image.tag`                            | Image tag for Graylog.                          | `""`              |
+| `graylog.custom.image.imagePullPolicy`                | Pull policy for Graylog image.                  | `IfNotPresent`    |
+| `graylog.custom.image.imagePullSecrets`               | Pull secrets for image.                         | `[]`              |
+| `graylog.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
+| `graylog.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
+| `graylog.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
+| `graylog.custom.service.nameOverride`                 | Override for service name.                      | `""`              |
+| `graylog.custom.service.type`                         | Kubernetes service type.                        | `ClusterIP`       |
+| `graylog.custom.service.ports.app`                    | Graylog web UI port.                            | `9000`            |
+| `graylog.custom.service.ports.metrics`                | Metrics endpoint port.                          | `9833`            |
+| `graylog.custom.service.ports.inputGelfHttp`          | GELF HTTP input port.                           | `12201`           |
 
 
 ### Datanode
-| Key Path                                 | Description                       | Default           |
-| ---------------------------------------- | --------------------------------- |-------------------|
-| `datanode.enabled`                       | Enable Graylog datanode.          | `true`            |
-| `datanode.replicas`                      | Number of datanode replicas.      | `3`               |
-| `datanode.config.nodeIdFile`             | Path to datanode ID file.         | `""`              |
-| `datanode.config.opensearchHeap`         | OpenSearch heap size.             | `"2g"`            |
-| `datanode.config.javaOpts`               | Java options for datanode.        | `"-Xms1g -Xmx1g"` |
-| `datanode.config.skipPreflightChecks`    | Skip startup checks.              | `"false"`         |
-| `datanode.config.nodeSearchCacheSize`    | Size of search cache.             | `"10gb"`          |
-| `datanode.custom.podAnnotations`         | Additional pod annotations.       | `{}`              |
-| `datanode.custom.nodeSelector`           | Node selector for datanode.       | `{}`              |
-| `datanode.custom.image.repository`       | Datanode image repository.        | `""`              |
-| `datanode.custom.image.tag`              | Datanode image tag.               | `""`              |
-| `datanode.custom.image.imagePullPolicy`  | Image pull policy.                | `IfNotPresent`    |
-| `datanode.custom.image.imagePullSecrets` | Image pull secrets.               | `[]`              |
-| `datanode.custom.service.ports.api`      | API communication port.           | `8999`            |
-| `datanode.custom.service.ports.data`     | Data communication port.          | `9200`            |
-| `datanode.custom.service.ports.config`   | Configuration communication port. | `9300`            |
+| Key Path                                               | Description                                     | Default           |
+|--------------------------------------------------------|-------------------------------------------------|-------------------|
+| `datanode.enabled`                                     | Enable Graylog datanode.                        | `true`            |
+| `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
+| `datanode.config.nodeIdFile`                           | Path to datanode ID file.                       | `""`              |
+| `datanode.config.opensearchHeap`                       | OpenSearch heap size.                           | `"2g"`            |
+| `datanode.config.javaOpts`                             | Java options for datanode.                      | `"-Xms1g -Xmx1g"` |
+| `datanode.config.skipPreflightChecks`                  | Skip startup checks.                            | `"false"`         |
+| `datanode.config.nodeSearchCacheSize`                  | Size of search cache.                           | `"10gb"`          |
+| `datanode.custom.podAnnotations`                       | Additional pod annotations.                     | `{}`              |
+| `datanode.custom.nodeSelector`                         | Node selector for datanode.                     | `{}`              |
+| `datanode.custom.image.repository`                     | Datanode image repository.                      | `""`              |
+| `datanode.custom.image.tag`                            | Datanode image tag.                             | `""`              |
+| `datanode.custom.image.imagePullPolicy`                | Image pull policy.                              | `IfNotPresent`    |
+| `datanode.custom.image.imagePullSecrets`               | Image pull secrets.                             | `[]`              |
+| `datanode.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
+| `datanode.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
+| `datanode.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
+| `datanode.custom.service.ports.api`                    | API communication port.                         | `8999`            |
+| `datanode.custom.service.ports.data`                   | Data communication port.                        | `9200`            |
+| `datanode.custom.service.ports.config`                 | Configuration communication port.               | `9300`            |
 
 
 ### Service Account
