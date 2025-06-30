@@ -129,6 +129,28 @@ helm upgrade graylog ./graylog -n graylog -f inputs.yaml --reuse-values
 
 The inputs should now be exposed. Make sure to complete their configuration through the Graylog UI.
 
+### Enable TLS
+
+Before you can enable TLS, you must associate a DNS name with your Graylog installation.
+More specifically, it should point to the external IP address (EXTERNAL-IP) associated with your Graylog service.
+You can retrieve this information like this:
+
+```sh
+kubectl get svc graylog-svc -n graylog
+```
+
+## Bring Your Own Certificate
+
+If you already have a TLS certificate-key pair, you can create a Kubernetes secret to store them:
+```sh
+kubectl create secret tls my-cert --cert=public.pem --key=private.key -n graylog
+```
+
+Enable TLS for your Graylog installation, referencing the Kubernetes secret:
+```sh
+helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.byoc.enabled=true --set  graylog.config.tls.byoc.secretName="my-cert"
+```
+
 ### Uninstall
 ```sh
 # optional: scale Graylog down to zero
