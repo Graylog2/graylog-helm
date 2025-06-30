@@ -1,1 +1,58 @@
 Welcome to Graylog!
+
+· Your helm release is named: {{ .Release.Name | quote }}.
+
+· You are running Graylog version {{ include "graylog.imageTag" . | quote | trimAll "\"" }}
+
+· Your credentials are:
+
+  - username: {{ .Values.graylog.config.rootUsername | quote }}
+  - password: {{ include "graylog.rootPassword" .  | quote }}
+
+· The following workloads have been deployed to the cluster:
+
+  - {{ include "graylog.replicas" . | int }} replicas of the Graylog application.
+  - {{ include "datanode.replicas" . | int }} replicas of the Graylog Datanode.
+  - {{ if eq .Values.mongodb.architecture "replicaset" }}{{ .Values.mongodb.replicaCount }} replicas{{ if .Values.mongodb.arbiter.enabled }} (+ 1 arbiter){{ end }} for MongoDB, running as a replicaset in Primary-Secondary{{if .Values.mongodb.arbiter.enabled }}-Arbiter{{ end }} mode.
+    {{- else }}1 replica for MongoDB running in standalone mode.
+    WARNING: running mongoDB in standalone mode is NOT SUPPORTED.{{ end }}
+
+  Use the following command to list all the resources deployed with this release:
+
+    helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+{{- if eq .Values.graylog.custom.service.type "LoadBalancer" }}
+
+· Get the URL of the UI for your Graylog instance by running the following command:
+
+    echo http://$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "graylog.serviceName" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}"):{{ .Values.graylog.custom.service.ports.app | default 9000 | int }}/
+
+{{- if .Release.IsInstall }}
+
+  You might need to wait for a bit until:
+    1. The corresponding LB is provisioned before retrieving the URL (~2 min).
+    2. All workloads are ready before opening the URL in your browser (~5 min).
+{{- end }}
+{{- end }}
+{{- if len .Values.graylog.inputs | lt 0 | and .Values.graylog.custom.inputs.enabled }}
+
+· The following INPUTS are set with their corresponding service:
+{{ range .Values.graylog.inputs }}
+    - name: {{ .name }}
+      port: {{ .port | int }}
+      protocol: {{ .protocol }}
+{{ end }}
+  Make sure to complete their configuration through the Graylog UI.
+{{- end }}
+{{- if empty .Values.graylog.config.rootPassword }}
+
+· WARNING: You are still using the default password {{ include "graylog.rootPassword" . | quote }}. This MUST be changed IMMEDIATELY using the following command:
+
+    read -sp "Enter your new password and press return: " i && helm upgrade {{ .Release.Name }} graylog/graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$i"
+{{- end }}
+
+· Use the following command to print this status page again:
+
+    helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+This chart is a private beta release. Please write to support@graylog.com if you notice any unexpected behavior. We appreciate your feedback.

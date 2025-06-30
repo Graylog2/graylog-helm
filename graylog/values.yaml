@@ -1,84 +1,279 @@
 # Default values for Graylog.
 
-# @todo: utilize these
-imagePullSecrets: []
+# Override the chart name (optional)
 nameOverride: ""
+
+# Override the (fully qualified) app name (optional)
 fullnameOverride: ""
 
-
+# Overrides values for Graylog, Datanode, and MongoDB
 global:
-  # @todo: Allow for use of a secret to set these values
-  graylogMongodbURI: "NO DEFAULT"
-  graylogElasticSearchHosts: "NO DEFAULT"
-  graylogPasswordSecret: "NO DEFAULT"
-  graylogPasswordSha2: "NO DEFAULT"
+  imagePullSecrets: []
+  defaultStorageClass: ""
+  existingSecretName: ""
 
-# Configuration for Graylog application
+# Graylog application
 graylog:
   enabled: true
-  replicas: 2
-  image:
-    repository: "graylog/graylog-enterprise"
-    tag: "6.2"
-    imagePullPolicy: Always
-  service:
-    type: ClusterIP
-    ports:
-      application: 9000
-      inputGelfHttp: 12201
-  resources:
-    limits:
-      cpu: "2"
-      memory: "2Gi"
-    requests:
-      cpu: "1"
-      memory: "1Gi"
-  # @todo: Think about how customers use inputs
-  inputs: []
+  # Enable enterprise features (license required)
+  enterprise: true
+  # Custom number of Graylog nodes (defaults to 2 if empty)
+  replicas:
+  inputs:
+    - name: input-gelf
+      port: 12201
+      targetPort: 12201
+      protocol: TCP
+    - name: input-forwarder
+      port: 13301
+      targetPort: 13301
+      protocol: TCP
+  # Graylog server configuration (server.conf)
+  config:
+    rootUsername: "admin"
+    rootPassword: ""
+    timezone: "UTC"
+    selfSignedStartup: "true"
+    serverJavaOpts: "-Xms1g -Xmx1g"
+    leaderElectionMode: "automatic"
+    contentPacksAutoInstall: "true"
+    isCloud: "false"
+    mongodb:
+      maxConnections: "1000"
+      versionProbeAttempts: "0"
+    messageJournal:
+      enabled: "true"
+      flushAge: "1m"
+      flushInterval: "1000000"
+      maxAge: "12h"
+      segmentAge: "1h"
+      segmentSize: "100mb"
+    network:
+      connectTimeout: "5s"
+      enableCors: "false"
+      enableGzip: "true"
+      maxHeaderSize: "8192"
+      readTimeout: "10s"
+      threadPoolSize: "64"
+    performance:
+      asyncEventbusProcessors: "2"
+      autoRestartInputs: "false"
+      inputBufferProcessors: "2"
+      inputBufferRingSize: "65536"
+      inputBufferWaitStrategy: "blocking"
+      jobSchedulerConcurrencyLimits: ""
+      outputBatchSize: "500"
+      outputFaultCountThreshold: "5"
+      outputFaultPenaltySeconds: "30"
+      outputFlushInterval: "1"
+      outputBufferProcessorThreadsCorePoolSize: "3"
+      outputBufferProcessors: ""
+      processBufferProcessors: ""
+    email:
+      enabled: "false"
+      senderAddress: "graylog@example.com"
+      hostname: "mail.example.com"
+      port: "587"
+      socketConnectionTimeout: "10s"
+      socketTimeout: "10s"
+      useAuth: "true"
+      useSsl: "false"
+      useTls: "true"
+      webInterfaceUrl: "https://graylog.example.com"
+  # Custom Kubernetes-specific parameters
+  custom:
+    podAnnotations: {}
+    nodeSelector: {}
+    tolerations: {}
+    affinity: {}
+    inputs:
+      enabled: true
+    metrics:
+      enabled: true
+    image:
+      repository: ""
+      tag: ""
+      imagePullPolicy: IfNotPresent
+      imagePullSecrets: []
+    updateStrategy:
+      type:
+      rollingUpdate:
+        maxUnavailable:
+        partition:
+    service:
+      nameOverride: ""
+      type: ClusterIP
+      ports:
+        app: 9000
+        metrics: 9833
+    resources:
+      limits:
+        cpu: "2"
+        memory: "2Gi"
+      requests:
+        cpu: "1"
+        memory: "1Gi"
+    persistence:
+      enabled: true
+      storageClass:
+      volumeNameOverride:
+      existingClaim:
+      mountPath:
+      accessModes: []
+      size:
+      annotations: {}
+      labels: {}
+      selector: {}
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    podDisruptionBudget:
+      enabled: false
+      minAvailable: 1
 
-# Configuration for Graylog Datanode
+# Graylog Datanode
 datanode:
-  enabled: True
-  replicas: 3
-  image:
-    repository: "graylog/graylog-datanode"
-    tag: "6.2"
-    imagePullPolicy: Always
-  env:
-    graylogDataNodeOpensearchHeap: "2g"
-    graylogJavaOpts: "-Xms512m -Xmx512m"
-  service:
-    ports:
-      api: 8999
-      data: 9200
-      config: 9300
-  resources:
-    limits:
-      cpu: "1"
-      memory: "4Gi"
-    requests:
-      cpu: "500m"
-      memory: "1Gi"
-  # volumes: []
-  # # - name: foo
-  # #   secret:
-  # #     secretName: mysecret
-  # #     optional: false
+  enabled: true
+  # Custom number of Datanode nodes (defaults to 3 if empty)
+  replicas:
+  config:
+    nodeIdFile: ""
+    opensearchHeap: "2g"
+    javaOpts: "-Xms1g -Xmx1g"
+    skipPreflightChecks: "false"
+    nodeSearchCacheSize: "10gb"
+  # Custom Kubernetes-specific parameters
+  custom:
+    podAnnotations: {}
+    nodeSelector: {}
+    tolerations: {}
+    affinity: {}
+    image:
+      repository: ""
+      tag: ""
+      imagePullPolicy: IfNotPresent
+      imagePullSecrets: []
+    updateStrategy:
+      type:
+      rollingUpdate:
+        maxUnavailable:
+        partition:
+    service:
+      ports:
+        api: 8999
+        data: 9200
+        config: 9300
+    resources:
+      limits:
+        cpu: "1"
+        memory: "5Gi"
+      requests:
+        cpu: "500m"
+        memory: "3.5Gi"
+    persistence:
+      enabled: true
+      data:
+        enabled: true
+        storageClass: ""
+        existingClaim: ""
+        mountPath: ""
+        accessModes: []
+        size: "8Gi"
+        annotations: {}
+        labels: {}
+        selector: {}
+        dataSource: {}
+      nativeLibs:
+        enabled: false
+        storageClass: ""
+        existingClaim: ""
+        mountPath: ""
+        accessModes: []
+        size: "2Gi"
+        annotations: {}
+        labels: {}
+        selector: {}
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    readinessProbe:
+      enabled: true
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      successThreshold: 1
+    podDisruptionBudget:
+      enabled: false
+      minAvailable: 2
 
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-
+# Graylog service account
 serviceAccount:
   create: true
   automount: true
   annotations: {}
-  name: ""
+  nameOverride: ""
 
+# Ingress configuration
+# more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  web:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: chart-example.local
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls: []
+    #  - secretName: chart-example-tls
+    #    hosts:
+    #      - chart-example.local
+  forwarder:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: chart-example.local
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls: []
+
+# MongoDB Bitnami Chart configuration
+# more information can be found here: https://artifacthub.io/packages/helm/bitnami/mongodb
+mongodb:
+  subchart:
+    enabled: true
+  image:
+    tag: "7.0"
+  architecture: "replicaset"
+  arbiter:
+    enabled: true
+  replicaCount: 2
+  persistence:
+    storageClass: ""
+  auth:
+    username: "graylog"
+    database: "graylog"
+    existingSecret: "graylog-mongodb-secret"
+  passwordUpdateJob:
+    enabled: true
+    previousPasswords:
+      existingSecret: "graylog-backup-secret"

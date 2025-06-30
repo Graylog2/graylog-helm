@@ -1,0 +1,33 @@
+{{- if and .Values.graylog.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "graylog.serviceName" . }}
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.graylog.custom.service.type | default "ClusterIP" }}
+  ports:
+    - name: app
+      port: {{ .Values.graylog.custom.service.ports.app | default 9000 | int }}
+      targetPort: app
+      protocol: TCP
+    {{- if .Values.graylog.custom.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.graylog.custom.service.ports.metrics | default 9833 | int }}
+      targetPort: metrics
+      protocol: TCP
+    {{- end }}
+    {{- range .Values.graylog.inputs }}
+    - name: {{ .name }}
+      port: {{ .port | int }}
+      targetPort: {{ .targetPort | default .port | int }}
+      protocol: {{ .protocol }}
+    {{- end }}
+    - name: input-fwd-conf
+      port: 13302
+      targetPort: 13302
+      protocol: TCP
+  selector:
+    app: graylog-app
+{{- end }}

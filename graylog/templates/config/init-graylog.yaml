@@ -1,0 +1,22 @@
+{{- if .Values.graylog.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: init-script-cm
+data:
+  init-script.sh: |
+    #!/bin/sh
+    # initialize data dir
+    if [ -f /mnt/data/journal/.lock ]; then
+      echo "Data already initialized, skipping copy."
+    else
+      cp -r /usr/share/graylog/data/* /mnt/data/
+    fi
+    # check mongo credentials
+    if env | grep GRAYLOG_MONGODB_URI | grep -q "@"; then
+      echo "MongoDB credentials set. We're good to go!"
+    else
+      echo "Error: MongoDB credentials not set in MongoDB URI. Make sure secrets are up to date."
+      exit 1
+    fi
+{{- end }}

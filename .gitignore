@@ -1,3 +1,10 @@
 scratch
 stock
 graylog/values-glc.yaml
+dev/keys
+
+# Various IDEs
+.project
+.idea/
+*.tmproj
+.vscode/

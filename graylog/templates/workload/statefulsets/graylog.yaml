@@ -1,0 +1,177 @@
+{{ if .Values.graylog.enabled  }}
+## Graylog App StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "graylog.fullname" . }}
+  labels:
+    app: graylog-app
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+    {{- include "graylog.annotations" . | nindent 4 }}
+spec:
+  replicas: {{ include "graylog.replicas" . | default 2 | int }}
+  serviceName: {{ include "graylog.serviceName" . }}
+  selector:
+    matchLabels:
+      app: graylog-app
+      {{- include "graylog.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: {{ .Values.graylog.custom.updateStrategy.type | default "RollingUpdate" | quote }}
+    {{- if .Values.graylog.custom.updateStrategy.type | default "RollingUpdate" | eq "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.graylog.custom.updateStrategy.rollingUpdate.maxUnavailable | default "1" | quote }}
+      {{- with .Values.graylog.custom.updateStrategy.rollingUpdate.partition }}
+      partition: {{ int . }}
+      {{- end }}
+    {{- end }}
+  template:
+    metadata:
+      labels:
+        app: graylog-app
+        {{- include "graylog.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- $dd := randAlphaNum 5 | dict "data" }}
+        {{- $config := include "graylog.configmapName" . | lookup "v1" "ConfigMap" .Release.Namespace | default $dd  }}
+        {{- $_ := randAlphaNum 5 | set $dd "data" }}
+        {{- $secret := include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace | default $dd  }}
+        checksum/config: {{ $config.data | quote | sha256sum }}
+        checksum/secret: {{ $secret.data | quote | sha256sum }}
+      {{- with .Values.graylog.custom.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      dnsPolicy: ClusterFirst
+      {{- with .Values.graylog.custom.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.graylog.custom.nodeSelector }}
+      nodeSelector: {{ .Values.graylog.custom.nodeSelector }}
+      {{- end }}
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "graylog.serviceAccountName" . }}
+      {{- end }}
+      securityContext:
+        runAsUser: 1100
+        runAsGroup: 1100
+        fsGroup: 1100
+      initContainers:
+        - name: copy-data
+          image: {{ include "graylog.image" . }}
+          imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
+          command: [ "/bin/sh", "/scripts/init-script.sh" ]
+          envFrom:
+            - configMapRef:
+                name: {{ include "graylog.configmapName" . }}
+            - secretRef:
+                name: {{ include "graylog.secretsName" . }}
+          volumeMounts:
+            - name: {{ include "graylog.volumeName" . }}
+              mountPath: /mnt/data
+            - name: init-script
+              mountPath: /scripts
+      containers:
+        - name: graylog-app
+          image: {{ include "graylog.image" . }}
+          imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "graylog.configmapName" . }}
+            - secretRef:
+                name: {{ include "graylog.secretsName" . }}
+          ports:
+            - name: app
+              containerPort: {{ .Values.graylog.custom.service.ports.app | int }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.graylog.custom.service.ports.metrics | int }}
+              protocol: TCP
+            {{- range .Values.graylog.inputs }}
+            - name: {{ .name }}
+              containerPort: {{ .targetPort | int }}
+              protocol: {{ .protocol }}
+            {{- end }}
+            - name: input-fwd-conf
+              containerPort: 13302
+              protocol: TCP
+          {{- if .Values.graylog.custom.livenessProbe.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.graylog.custom.service.ports.app | int }}
+            initialDelaySeconds: {{ .Values.graylog.custom.livenessProbe.initialDelaySeconds | int }}
+            periodSeconds: {{ .Values.graylog.custom.livenessProbe.periodSeconds | int }}
+            timeoutSeconds: {{ .Values.graylog.custom.livenessProbe.timeoutSeconds | int }}
+            failureThreshold: {{ .Values.graylog.custom.livenessProbe.failureThreshold | int }}
+            successThreshold: {{ .Values.graylog.custom.livenessProbe.successThreshold |int }}
+          {{- end }}
+          {{- if .Values.graylog.custom.readinessProbe.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.graylog.custom.service.ports.app | int }}
+            initialDelaySeconds: {{ .Values.graylog.custom.readinessProbe.initialDelaySeconds | int }}
+            periodSeconds: {{ .Values.graylog.custom.readinessProbe.periodSeconds | int }}
+            timeoutSeconds: {{ .Values.graylog.custom.readinessProbe.timeoutSeconds | int }}
+            failureThreshold: {{ .Values.graylog.custom.readinessProbe.failureThreshold | int }}
+            successThreshold: {{ .Values.graylog.custom.readinessProbe.successThreshold | int }}
+          {{- end }}
+          {{- with .Values.graylog.custom.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: {{ include "graylog.volumeName" . }}
+              mountPath: /usr/share/graylog/data
+      tolerations:
+      {{- with .Values.graylog.custom.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+      {{- with .Values.graylog.custom.affinity }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: init-script
+        configMap:
+          name: init-script-cm
+          defaultMode: 0755  # Make script executable
+      {{- if not .Values.graylog.custom.persistence.enabled | or .Values.graylog.custom.persistence.existingClaim }}
+      - name: {{ include "graylog.volumeName" . }}
+        {{- if .Values.graylog.custom.persistence.existingClaim }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.graylog.custom.persistence.existingClaim }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- end }}
+  {{- if not .Values.graylog.custom.persistence.existingClaim | and .Values.graylog.custom.persistence.enabled }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ include "graylog.volumeName" . }}
+        {{- with .Values.graylog.custom.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.graylog.custom.persistence.labels }}
+        labels:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      spec:
+        {{- if or .Values.graylog.custom.persistence.storageClass .Values.global.defaultStorageClass }}
+        storageClassName: {{ .Values.graylog.custom.persistence.storageClass | default .Values.global.defaultStorageClass }}
+        {{- end }}
+        accessModes:
+        {{- if .Values.graylog.custom.persistence.accessModes }}
+        {{- range .Values.graylog.custom.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        {{- else }}
+          - "ReadWriteOnce"
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.graylog.custom.persistence.size | default "8Gi" | quote }}
+  {{- end }}
+{{- end }}
