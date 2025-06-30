@@ -10,7 +10,7 @@ fullnameOverride: ""
 global:
   imagePullSecrets: []
   defaultStorageClass: ""
-  existingSecretName:
+  existingSecretName: ""
 
 # Graylog application
 graylog:
@@ -80,7 +80,7 @@ graylog:
       useSsl: "false"
       useTls: "true"
       webInterfaceUrl: "https://graylog.example.com"
-  # Customize Kubernetes-specific parameters
+  # Custom Kubernetes-specific parameters
   custom:
     podAnnotations: {}
     nodeSelector: {}
@@ -147,14 +147,13 @@ datanode:
   enabled: true
   # Custom number of Datanode nodes (defaults to 3 if empty)
   replicas:
-  # Graylog Datanode configuration
   config:
     nodeIdFile: ""
     opensearchHeap: "2g"
     javaOpts: "-Xms1g -Xmx1g"
     skipPreflightChecks: "false"
     nodeSearchCacheSize: "10gb"
-  # Customize Kubernetes-specific parameters
+  # Custom Kubernetes-specific parameters
   custom:
     podAnnotations: {}
     nodeSelector: {}
@@ -269,7 +268,7 @@ mongodb:
     enabled: true
   replicaCount: 2
   persistence:
-    storageClass:
+    storageClass: ""
   auth:
     username: "graylog"
     database: "graylog"

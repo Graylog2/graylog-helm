@@ -21,7 +21,7 @@ spec:
     {{- range .Values.graylog.inputs }}
     - name: {{ .name }}
       port: {{ .port | int }}
-      targetPort: {{ .targetPort | int }}
+      targetPort: {{ .targetPort | default .port | int }}
       protocol: {{ .protocol }}
     {{- end }}
     - name: input-fwd-conf
