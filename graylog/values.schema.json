@@ -126,20 +126,16 @@
           "description": "Custom Kubernetes-specific configuration",
           "properties": {
             "podAnnotations": {
-              "type": "object",
-              "default": {}
+              "type": "object"
             },
             "nodeSelector": {
-              "type": "object",
-              "default": {}
+              "type": "object"
             },
             "tolerations": {
-              "type": "object",
-              "default": {}
+              "type": "object"
             },
             "affinity": {
-              "type": "object",
-              "default": {}
+              "type": "object"
             },
             "inputs": {
               "type": "object",
@@ -165,7 +161,7 @@
             "updateStrategy": {
               "type": "object",
               "properties": {
-                "type": "object",
+                "type": { "type": ["string", "null"] },
                 "rollingUpdate": {
                   "type": "object",
                   "properties": {
@@ -179,7 +175,7 @@
               "type": "object",
               "properties": {
                 "nameOverride": { "type": "string" },
-                "type": "object",
+                "type": { "type": "string" },
                 "ports": {
                   "type": "object",
                   "properties": {
@@ -219,16 +215,13 @@
                 "accessModes": { "type": "array" },
                 "size": { "type": [ "string", "null" ] },
                 "annotations": {
-                  "type": "object",
-                  "default": {}
+                  "type": "object"
                 },
                 "labels": {
-                  "type": "object",
-                  "default": {}
+                  "type": "object"
                 },
                 "selector": {
-                  "type": "object",
-                  "default": {}
+                  "type": "object"
                 }
               }
             },
@@ -289,20 +282,16 @@
           "description": "Custom Kubernetes-specific configuration",
           "properties": {
             "podAnnotations": {
-              "type": "object",
-              "default": {}
+              "type": "object"
             },
             "nodeSelector": {
-              "type": "object",
-              "default": {}
+              "type": "object"
             },
             "tolerations": {
-              "type": "object",
-              "default": {}
+              "type": "object"
             },
             "affinity": {
-              "type": "object",
-              "default": {}
+              "type": "object"
             },
             "image": {
               "type": "object",
@@ -316,7 +305,7 @@
             "updateStrategy": {
               "type": "object",
               "properties": {
-                "type": "object",
+                "type": { "type": ["string", "null"] },
                 "rollingUpdate": {
                   "type": "object",
                   "properties": {
@@ -372,20 +361,16 @@
                     "accessModes": { "type": "array" },
                     "size": { "type": "string" },
                     "annotations": {
-                      "type": "object",
-                      "default": {}
+                      "type": "object"
                     },
                     "labels": {
-                      "type": "object",
-                      "default": {}
+                      "type": "object"
                     },
                     "selector": {
-                      "type": "object",
-                      "default": {}
+                      "type": "object"
                     },
                     "dataSource": {
-                      "type": "object",
-                      "default": {}
+                      "type": "object"
                     }
                   }
                 },
@@ -399,16 +384,13 @@
                     "accessModes": { "type": "array" },
                     "size": { "type": "string" },
                     "annotations": {
-                      "type": "object",
-                      "default": {}
+                      "type": "object"
                     },
                     "labels": {
-                      "type": "object",
-                      "default": {}
+                      "type": "object"
                     },
                     "selector": {
-                      "type": "object",
-                      "default": {}
+                      "type": "object"
                     }
                   }
                 }
@@ -452,7 +434,7 @@
       "properties": {
         "create": { "type": "boolean" },
         "automount": { "type": "boolean" },
-        "annotations": { "type": "object",  "default": {} },
+        "annotations": { "type": "object" },
         "nameOverride": { "type": "string" }
       }
     },
