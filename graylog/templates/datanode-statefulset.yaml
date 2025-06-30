@@ -122,11 +122,11 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       tolerations:
-      {{- with .Values.datanode.tolerations }}
+      {{- with .Values.datanode.custom.tolerations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       affinity:
-      {{- with .Values.datanode.affinity }}
+      {{- with .Values.datanode.custom.affinity }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- if and .Values.datanode.custom.persistence.data.enabled .Values.datanode.custom.persistence.nativeLibs.enabled | not }}

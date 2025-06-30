@@ -123,11 +123,11 @@ spec:
             - name: {{ include "graylog.volumeName" . }}
               mountPath: /usr/share/graylog/data
       tolerations:
-      {{- with .Values.graylog.tolerations }}
+      {{- with .Values.graylog.custom.tolerations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       affinity:
-      {{- with .Values.graylog.affinity }}
+      {{- with .Values.graylog.custom.affinity }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:

@@ -1,5 +1,6 @@
 # Default values for Graylog.
 
+# Override the chart name (optional)
 nameOverride: ""
 
 # Override the (fully qualified) app name (optional)
@@ -16,7 +17,7 @@ graylog:
   enabled: true
   # Enable enterprise features (license required)
   enterprise: true
-  # Number of Graylog nodes
+  # Custom number of Graylog nodes (defaults to 2 if empty)
   replicas:
   inputs:
     - name: input-gelf
@@ -27,6 +28,7 @@ graylog:
       port: 13301
       targetPort: 13301
       protocol: TCP
+  # Graylog server configuration (server.conf)
   config:
     rootUsername: "admin"
     rootPassword: ""
@@ -82,6 +84,8 @@ graylog:
   custom:
     podAnnotations: {}
     nodeSelector: {}
+    tolerations: {}
+    affinity: {}
     inputs:
       enabled: true
     metrics:
@@ -137,12 +141,11 @@ graylog:
     podDisruptionBudget:
       enabled: false
       minAvailable: 1
-  tolerations: {}
-  affinity: {}
 
 # Graylog Datanode
 datanode:
   enabled: true
+  # Custom number of Datanode nodes (defaults to 3 if empty)
   replicas:
   # Graylog Datanode configuration
   config:
@@ -155,6 +158,8 @@ datanode:
   custom:
     podAnnotations: {}
     nodeSelector: {}
+    tolerations: {}
+    affinity: {}
     image:
       repository: ""
       tag: ""
@@ -217,8 +222,6 @@ datanode:
     podDisruptionBudget:
       enabled: false
       minAvailable: 2
-  tolerations: {}
-  affinity: {}
 
 # Graylog service account
 serviceAccount:
@@ -253,12 +256,6 @@ ingress:
           - path: /
             pathType: ImplementationSpecific
     tls: []
-
-serviceAccount:
-  create: true
-  automount: true
-  annotations: {}
-  nameOverride: ""
 
 # MongoDB Bitnami Chart configuration
 # more information can be found here: https://artifacthub.io/packages/helm/bitnami/mongodb
