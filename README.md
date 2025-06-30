@@ -29,14 +29,11 @@ git clone git@github.com:Graylog2/graylog-helm.git
 
 # cd into the newly created graylog-helm directory
 cd graylog-helm
-
-# checkout this branch
-git checkout feat/mongodb
 ```
 
 ### Install local chart
 ```sh
-helm install graylog graylog/graylog --namespace graylog --create-namespace
+helm install graylog ./graylog --namespace graylog --create-namespace
 ```
 
 ### Change your password
