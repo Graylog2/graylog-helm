@@ -31,15 +31,14 @@ git clone git@github.com:Graylog2/graylog-helm.git
 cd graylog-helm
 ```
 
-### Install local chart
-```sh
-helm install graylog ./graylog --namespace graylog --create-namespace
-```
-
-### Change your password
+### Set Root Graylog Password
 ```sh
 read -sp "Enter your new password and press return: " pass
-helm upgrade graylog ./graylog --namespace graylog --set "graylog.config.rootPassword=$pass" --reuse-values
+```
+
+### Install local chart
+```sh
+helm install graylog ./graylog --namespace graylog --create-namespace --set "graylog.config.rootPassword=$pass"
 ```
 
 🏁 That's it!
@@ -132,7 +131,7 @@ The inputs should now be exposed. Make sure to complete their configuration thro
 ```sh
 # optional: scale Graylog down to zero
 kubectl scale sts graylog -n graylog --replicas 0  && kubectl wait --for=delete pod graylog-0 -n graylog
-l
+
 # remove chart
 helm uninstall graylog -n graylog
 ```
