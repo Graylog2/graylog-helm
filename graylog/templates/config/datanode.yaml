@@ -8,3 +8,7 @@ data:
   GRAYLOG_JAVA_OPTS: {{ .Values.datanode.config.javaOpts | quote }}
   GRAYLOG_SKIP_PREFLIGHT_CHECKS: {{ .Values.datanode.config.skipPreflightChecks | quote }}
   GRAYLOG_NODE_SEARCH_CACHE_SIZE: {{ .Values.datanode.config.nodeSearchCacheSize | quote }}
+  GRAYLOG_S3_CLIENT_DEFAULT_ENDPOINT: {{ .Values.datanode.config.s3ClientDefaultEndpoint | quote }}
+  GRAYLOG_S3_CLIENT_DEFAULT_REGION: {{ .Values.datanode.config.s3ClientDefaultRegion | quote }}
+  GRAYLOG_S3_CLIENT_DEFAULT_PROTOCOL: {{ .Values.datanode.config.s3ClientDefaultProtocol | quote }}
+  GRAYLOG_S3_CLIENT_DEFAULT_PATH_STYLE_ACCESS: {{ .Values.datanode.config.s3ClientDefaultPathStyleAccess | quote }}
