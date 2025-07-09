@@ -12,7 +12,12 @@ data:
     else
       cp -r /usr/share/graylog/data/* /mnt/data/
     fi
-    # get plugins
+    {{- if and .Values.graylog.config.plugins.enabled }}
+    # copy plugins
+    [ -d /mnt/shared/plugins ] && find /mnt/shared/plugins/ -type f -name '*.jar' -exec cp {} /mnt/plugins/ \;
+
+    {{- if .Values.graylog.config.plugins.initialFetch.enabled }}
+    # retrieve plugins directly
     for urlchecksum in $(echo "${GRAYLOG_PLUGIN_URLS}" | tr "^" "\n"); do
       name=$(echo "$urlchecksum" | cut -d'|' -f1)
       url=$(echo "$urlchecksum" | cut -d'|' -f2)
@@ -32,6 +37,8 @@ data:
         cp "$name.jar" "/mnt/plugins/" && rm "$name.jar"
       fi
     done
+    {{- end }}
+    {{- end }}
     # check mongo credentials
     if env | grep GRAYLOG_MONGODB_URI | grep -q "@"; then
       echo "MongoDB credentials set. We're good to go!"
@@ -39,4 +46,4 @@ data:
       echo "Error: MongoDB credentials not set in MongoDB URI. Make sure secrets are up to date."
       exit 1
     fi
-{{- end }}
+    {{- end }}
