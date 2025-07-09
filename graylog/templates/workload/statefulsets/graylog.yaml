@@ -61,7 +61,7 @@ spec:
           image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
           command: [ "/bin/sh", "/scripts/init-script.sh" ]
-          {{- if len .Values.graylog.plugins | lt 0 }}
+          {{- if len .Values.graylog.initialFetch.plugins | lt 0 | and .Values.graylog.config.plugins.enabled .Values.graylog.config.plugins.initialFetch.enabled }}
           env:
             - name: GRAYLOG_PLUGIN_URLS
               value: {{ include "graylog.pluginURLs" . }}
@@ -76,14 +76,40 @@ spec:
               mountPath: /mnt/data
             - name: init-script
               mountPath: /scripts
-            {{- if len .Values.graylog.plugins | lt 0 }}
+            {{- if .Values.graylog.config.plugins.enabled }}
             - name: init-plugins
               mountPath: /mnt/plugins
+            {{- range .Values.graylog.plugins }}
+            {{- if empty .image | and .existingClaim }}
+            - name: {{ .name }}
+              mountPath: {{ printf "/mnt/shared/plugins/%s" .name }}
             {{- end }}
+            {{- end }}
+            {{- end }}
+        {{- if .Values.graylog.config.plugins.enabled }}
+        {{- range .Values.graylog.plugins }}
+        {{- if empty .existingClaim | and .image }}
+        - name: {{ printf "copy-plugin-%s" .name }}
+          image: {{ .image }}
+          command: [ "/bin/sh", "-c", "cp *.jar /mnt/plugins/" ]
+          volumeMounts:
+            - name: init-plugins
+              mountPath: /mnt/plugins
+        {{- end }}
+        {{- end }}
+        {{- end }}
       containers:
         - name: graylog-app
           image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
+          {{- if .Values.graylog.custom.env | default list | len | lt 0 }}
+          env:
+            {{- range .Values.graylog.custom.env }}
+            {{- $envList := splitList "=" . }}
+            - name: {{ index $envList 0 | quote }}
+              value: {{ index $envList 1 | quote }}
+            {{- end }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "graylog.configmapName" . }}
@@ -135,7 +161,7 @@ spec:
             - name: tls-creds
               mountPath: /usr/share/graylog/tls
             {{- end }}
-            {{- if len .Values.graylog.plugins | lt 0 }}
+            {{- if .Values.graylog.config.plugins.enabled }}
             - name: init-plugins
               mountPath: /usr/share/graylog/plugin
             {{- end }}
@@ -157,9 +183,18 @@ spec:
         secret:
           secretName: {{ .Values.graylog.config.tls.byoc.secretName | quote }}
       {{- end }}
-      {{- if len .Values.graylog.plugins | lt 0 }}
+      {{- if .Values.graylog.config.plugins.enabled }}
       - name: init-plugins
         emptyDir: {}
+      {{- range .Values.graylog.plugins }}
+      - name: {{ .name }}
+        {{- if .existingClaim }}
+        persistentVolumeClaim:
+          claimName: {{ .existingClaim }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- end }}
       {{- end }}
       {{- if not .Values.graylog.custom.persistence.enabled | or .Values.graylog.custom.persistence.existingClaim }}
       - name: {{ include "graylog.volumeName" . }}
