@@ -1,4 +1,6 @@
 # Graylog Helm
+![Tests](https://github.com/graylog2/graylog-helm/actions/workflows/lint-and-test.yaml/badge.svg)
+
 Official helm chart for Graylog.
 
 ## Not For External Use
