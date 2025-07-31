@@ -112,11 +112,6 @@ spec:
             failureThreshold: {{ .Values.datanode.custom.readinessProbe.failureThreshold | int }}
             successThreshold: {{ .Values.datanode.custom.readinessProbe.successThreshold | int }}
           {{- end }}
-          readinessProbe:
-            tcpSocket:
-              port: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}
-            initialDelaySeconds: 15
-            periodSeconds: 10
           {{- with .Values.datanode.custom.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
