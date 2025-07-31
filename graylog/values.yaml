@@ -108,10 +108,11 @@ graylog:
         metrics: 9833
     resources:
       limits:
-        cpu: "2"
-        memory: "2Gi"
+        cpu: "4"
+        # Ensure value is > graylog.config.serverJavaOpts
+        memory: "8Gi"
       requests:
-        cpu: "1"
+        cpu: "500m"
         memory: "1Gi"
     persistence:
       enabled: true
@@ -176,11 +177,12 @@ datanode:
         config: 9300
     resources:
       limits:
-        cpu: "1"
-        memory: "5Gi"
+        cpu: "4"
+        # Ensure value is > (datanode.config.javaOpts + datanode.config.opensearchHeap)
+        memory: "31Gi"
       requests:
         cpu: "500m"
-        memory: "3.5Gi"
+        memory: "3Gi"
     persistence:
       enabled: true
       data:

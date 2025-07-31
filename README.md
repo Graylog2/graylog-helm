@@ -54,11 +54,17 @@ helm upgrade graylog ./graylog -n graylog --set graylog.replicas=3 --reuse-value
 helm upgrade graylog ./graylog -n graylog --set graylog.replicas=1 --reuse-values
 ```
 
+> [!WARNING]  
+> Always ensure `graylog.custom.resources.limits.memory` is ***greater than*** the `-Xmx` value set in `graylog.config.serverJavaOpts` to avoid Pod runtime issues!
+
 ### Scale Datanode
 ```sh
 # scaling out: add more Graylog Datanodes to your cluster
 helm upgrade graylog ./graylog -n graylog --set datanode.replicas=5 --reuse-values
 ```
+
+> [!WARNING]  
+> Always ensure `datanode.custom.resources.limits.memory` is ***greater than*** the `-Xmx` value set in `datanode.config.javaOpts` to avoid Pod runtime issues!
 
 ### Scale MongoDB
 ```sh
