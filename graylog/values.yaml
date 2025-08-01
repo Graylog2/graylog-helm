@@ -38,16 +38,6 @@ graylog:
       targetPort: 13301
       protocol: TCP
   plugins:
-    - name: apisec
-      image: localhost:32000/plugin-apisec:0.0.1
-      existingClaim:
-  initialFetch:
-    plugins:
-      - name: myPlugin
-        url: "https://someurl/myplugin.jar"
-        checksum:
-    databases:
-      geo:
   # Graylog server configuration (server.conf)
   config:
     rootUsername: "admin"
@@ -107,11 +97,17 @@ graylog:
       webInterfaceUrl: "https://graylog.example.com"
     plugins:
       enabled: false
-      initialFetch:
+    init:
+      assetFetch:
         enabled: false
-        baseUrl:
-        skipChecksum:
-        allowHttp:
+        skipChecksum: false
+        allowHttp: false
+        plugins:
+          enabled: false
+          baseUrl:
+        geolocation:
+          enabled: false
+          baseUrl:
   # Custom Kubernetes-specific parameters
   custom:
     podAnnotations: {}
