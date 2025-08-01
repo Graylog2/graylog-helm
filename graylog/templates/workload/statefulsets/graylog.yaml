@@ -61,7 +61,7 @@ spec:
           image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
           command: [ "/bin/sh", "/scripts/init-script.sh" ]
-          {{- if len .Values.graylog.initialFetch.plugins | lt 0 | and .Values.graylog.config.plugins.enabled .Values.graylog.config.plugins.initialFetch.enabled }}
+          {{- if and .Values.graylog.config.plugins.enabled .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled .Values.graylog.plugins }}
           env:
             - name: GRAYLOG_PLUGIN_URLS
               value: {{ include "graylog.pluginURLs" . }}
@@ -124,7 +124,7 @@ spec:
               protocol: TCP
             {{- range .Values.graylog.inputs }}
             - name: {{ .name }}
-              containerPort: {{ .targetPort | int }}
+              containerPort: {{ .targetPort | default .port | int }}
               protocol: {{ .protocol }}
             {{- end }}
             - name: input-fwd-conf
@@ -187,6 +187,7 @@ spec:
       - name: init-plugins
         emptyDir: {}
       {{- range .Values.graylog.plugins }}
+      {{- if empty .url }}
       - name: {{ .name }}
         {{- if .existingClaim }}
         persistentVolumeClaim:
@@ -194,6 +195,7 @@ spec:
         {{- else }}
         emptyDir: {}
         {{- end }}
+      {{- end }}
       {{- end }}
       {{- end }}
       {{- if not .Values.graylog.custom.persistence.enabled | or .Values.graylog.custom.persistence.existingClaim }}

@@ -12,11 +12,11 @@ data:
     else
       cp -r /usr/share/graylog/data/* /mnt/data/
     fi
-    {{- if and .Values.graylog.config.plugins.enabled }}
+    {{- if .Values.graylog.config.plugins.enabled }}
     # copy plugins
     [ -d /mnt/shared/plugins ] && find /mnt/shared/plugins/ -type f -name '*.jar' -exec cp {} /mnt/plugins/ \;
 
-    {{- if .Values.graylog.config.plugins.initialFetch.enabled }}
+    {{- if and .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled }}
     # retrieve plugins directly
     for urlchecksum in $(echo "${GRAYLOG_PLUGIN_URLS}" | tr "^" "\n"); do
       name=$(echo "$urlchecksum" | cut -d'|' -f1)

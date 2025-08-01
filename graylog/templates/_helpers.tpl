@@ -263,16 +263,17 @@ Datanode configmap name
 Graylog plugins
 */}}
 {{- define "graylog.pluginURLs" }}
-{{- if and .Values.graylog.config.plugins.enabled .Values.graylog.config.plugins.initialFetch.enabled }}
+{{- if and .Values.graylog.config.plugins.enabled .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled }}
 {{- $urls := list }}
-{{- $baseUrl := .Values.graylog.config.plugins.initialFetch.baseUrl | default "" }}
-{{- $skipChecksum := .Values.graylog.config.plugins.initialFetch.skipChecksum | default false }}
-{{- $allowHttp := .Values.graylog.config.plugins.initialFetch.allowHttp | default false }}
+{{- $baseUrl := .Values.graylog.config.init.assetFetch.plugins.baseUrl | default "" }}
+{{- $skipChecksum := .Values.graylog.config.init.assetFetch.skipChecksum | default false }}
+{{- $allowHttp := .Values.graylog.config.init.assetFetch.allowHttp | default false }}
 {{- if not $allowHttp | and (hasPrefix "http://" $baseUrl) }}
 {{- printf "Validation error: plugin baseUrl is '%s'. Only HTTPS is allowed for plugin URLs." $baseUrl | fail }}
 {{- end }}
-{{- range $name, $plugin := .Values.graylog.initialFetch.plugins }}
+{{- range $name, $plugin := .Values.graylog.config.plugins }}
 {{- $url := $plugin.url }}
+{{- if $url }}
 {{- if and (not $skipChecksum) (empty $plugin.checksum) }}
 {{- printf "Validation error: checksum verification is enabled but no checksum hash has been provided for plugin '%s'." $name | fail }}
 {{- end }}
@@ -286,6 +287,7 @@ Graylog plugins
 {{- $url = printf "%s|%s" $url $plugin.checksum }}
 {{- end }}
 {{- $urls = printf "%s|%s" $name $url | append $urls }}
+{{- end }}
 {{- end }}
 {{- $urls | join "^" | quote }}
 {{- end }}
