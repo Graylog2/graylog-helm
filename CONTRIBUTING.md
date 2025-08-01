@@ -22,9 +22,9 @@ git rebase origin/main
 # Testing
 
 - [Setting up a MicroK8s cluster](#setting-up-a-microk8s-cluster)
-- [Before installing]
-- [Installing Graylog](#installing-graylog)
-- []
+- [Validating chart](#validating-chart)
+- [Installing Graylog](#installing-chart)
+- [Upgrading chart](#upgrading-chart)
 
 ## Setting up a MicroK8s cluster
 
