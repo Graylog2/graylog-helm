@@ -200,6 +200,13 @@ Graylog service name
 {{- end }}
 
 {{/*
+Graylog service app port
+*/}}
+{{- define "graylog.service.port.app" -}}
+{{- .Values.graylog.custom.service.ports.app | default 9000 | int }}
+{{- end }}
+
+{{/*
 Graylog configmap name
 */}}
 {{- define "graylog.configmapName" -}}
