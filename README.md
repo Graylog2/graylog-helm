@@ -33,6 +33,17 @@ git clone git@github.com:Graylog2/graylog-helm.git
 cd graylog-helm
 ```
 
+### Set default StorageClass
+***If your cluster already has a default `storageclass` you can skip this step.***
+
+If not, you're unsure, or you don't want to affect cluster-wide settings, set the default `storageclass` for this Chart at runtime by passing `--set global.defaultStorageClass="my-sc"` to your `helm install` command. Or by adding the following lines to `values-custom.yaml`:
+```
+global:
+  defaultStorageClass: "my-sc"
+```
+
+Just be sure to pass `-f values-custom.yaml` to your `helm install` command below!
+
 ### Set Root Graylog Password
 ```sh
 read -sp "Enter your new password and press return: " pass
