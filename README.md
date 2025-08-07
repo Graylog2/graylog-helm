@@ -7,6 +7,37 @@ Official helm chart for Graylog.
 This chart is still in development. We should not distribute this chart or any part of this repository externally until we've cleaned up the git history and recieved approval for external distribution.
 This chart is still under development and does not have locked in api contracts yet.
 
+
+## Table of Contents
+* [Requirements](#requirements)
+* [Installation](#installation)
+  * [Clone this repo](#clone-this-repo)
+  * [Install local chart](#install-local-chart)
+* [Post-installation](#post-installation)
+  * [Set root Graylog password](#set-root-graylog-password)
+  * [Set external access](#set-external-access)
+    * [LoadBalancer Service](#alternative-loadbalancer-service)
+    * [Port Forwarding](#temporary-access-port-forwarding)
+* [Usage](#usage)
+  * [Scale Graylog](#scale-graylog)
+  * [Scale DataNode](#scale-datanode)
+  * [Scale MongoDB](#scale-mongodb)
+  * [Modify Graylog `server.conf` parameters](#modify-graylog-serverconf-parameters)
+  * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
+  * [Add inputs](#add-inputs)
+  * [Enable TLS](#enable-tls)
+    * [Bring Your Own Certificate](#bring-your-own-certificate)
+* [Uninstall](#uninstall)
+  * [Removing everything](#removing-everything)
+* [Debugging](#debugging)
+* [Logging](#logging)
+* [Graylog Helm Chart Values Reference](#graylog-helm-chart-values-reference)
+  * [Global](#global)
+  * [Graylog application](#graylog-application)
+  * [DataNode](#datanode)
+  * [Service Account](#service-account)
+  * [Ingress](#ingress)
+
 ## Requirements
 - Kubernetes v1.32
 
@@ -33,28 +64,51 @@ git clone git@github.com:Graylog2/graylog-helm.git
 cd graylog-helm
 ```
 
-### Set default StorageClass
-***If your cluster already has a default `storageclass` you can skip this step.***
-
-If not, you're unsure, or you don't want to affect cluster-wide settings, set the default `storageclass` for this Chart at runtime by passing `--set global.defaultStorageClass="my-sc"` to your `helm install` command. Or by adding the following lines to `values-custom.yaml`:
-```
-global:
-  defaultStorageClass: "my-sc"
-```
-
-Just be sure to pass `-f values-custom.yaml` to your `helm install` command below!
-
-### Set Root Graylog Password
-```sh
-read -sp "Enter your new password and press return: " pass
-```
-
 ### Install local chart
 ```sh
-helm install graylog ./graylog --namespace graylog --create-namespace --set "graylog.config.rootPassword=$pass"
+helm install graylog ./graylog --namespace graylog --create-namespace
 ```
 
 🏁 That's it!
+
+## Post Installation
+
+### Set Root Graylog Password
+Graylog is installed with a simple password by default. This **MUST be changed** once all pods achieve the `RUNNING` state using 
+the following command:
+
+```sh
+echo "Enter your new password and press return:" && read -s pass
+helm upgrade graylog ./graylog --namespace graylog --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
+```
+
+### Set External Access
+
+There are a number of ways to enable external access to the Graylog application. We recommend using an 
+[Ingress Controller](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/) 
+to provide external access both the Graylog UI and the Graylog API, as well as any configured inputs.
+
+Once an Ingress Controller has been installed and configured, run the following command to provision the appropriate
+[Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) resource:
+
+```sh
+helm upgrade graylog ./graylog -n graylog --set ingress.web.enabled="true" --reuse-values
+```
+
+#### Alternative: LoadBalancer Service
+Alternatively, external access can be configured directly through the provided service without the need for any 
+pre-existing dependencies.
+
+```sh
+helm upgrade graylog ./graylog -n graylog --set graylog.custom.service.type="LoadBalancer" --reuse-values
+```
+
+#### Temporary access: Port Forwarding
+Finally, if you wish to enable external access _temporarily_, you can always use port forwarding:
+
+```sh
+kubectl port-forward service/graylog-svc 9000:9000 -n graylog
+```
 
 ## Usage
 
@@ -67,9 +121,9 @@ helm upgrade graylog ./graylog -n graylog --set graylog.replicas=3 --reuse-value
 helm upgrade graylog ./graylog -n graylog --set graylog.replicas=1 --reuse-values
 ```
 
-### Scale Datanode
+### Scale DataNode
 ```sh
-# scaling out: add more Graylog Datanodes to your cluster
+# scaling out: add more Graylog Data Nodes to your cluster
 helm upgrade graylog ./graylog -n graylog --set datanode.replicas=5 --reuse-values
 ```
 
@@ -150,7 +204,7 @@ You can retrieve this information like this:
 kubectl get svc graylog-svc -n graylog
 ```
 
-## Bring Your Own Certificate
+#### Bring Your Own Certificate
 
 If you already have a TLS certificate-key pair, you can create a Kubernetes secret to store them:
 ```sh
@@ -162,7 +216,7 @@ Enable TLS for your Graylog installation, referencing the Kubernetes secret:
 helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.byoc.enabled=true --set  graylog.config.tls.byoc.secretName="my-cert"
 ```
 
-### Uninstall
+## Uninstall
 ```sh
 # optional: scale Graylog down to zero
 kubectl scale sts graylog -n graylog --replicas 0  && kubectl wait --for=delete pod graylog-0 -n graylog
@@ -171,23 +225,23 @@ kubectl scale sts graylog -n graylog --replicas 0  && kubectl wait --for=delete 
 helm uninstall graylog -n graylog
 ```
 
-#### Removing Everything
+### Removing Everything
 ```sh
 # CAUTION: this will delete ALL your data!
 kubectl delete $(kubectl get pvc -o name -n graylog; kubectl get secret -o name -n graylog) -n graylog
 ```
 
-### Debugging
+## Debugging
 Get a YAML output of the values being submitted.
 ```bash
 helm template graylog graylog -f graylog/values-glc.yaml | yq
 ```
 
-### Logging
+## Logging
 ```
 # Graylog app logs
 stern statefulset/graylog-app -n graylog-helm-dev-1
-# Datanode logs
+# DataNode logs
 stern statefulset/graylog-datanode -n graylog-helm-dev-1
 ```
 
@@ -200,7 +254,7 @@ stern statefulset/graylog-datanode -n graylog-helm-dev-1
 | `fullnameOverride` | Override the fully qualified name of the application. | `""`      |
 
 ### Global
-These values affect Graylog, Datanode, and MongoDB
+These values affect Graylog, DataNode, and MongoDB
 
 | Key Path                     | Description                                 | Default |
 |------------------------------| ------------------------------------------- |---------|
@@ -244,20 +298,20 @@ These values affect Graylog, Datanode, and MongoDB
 | `graylog.custom.service.ports.inputGelfHttp`          | GELF HTTP input port.                           | `12201`           |
 
 
-### Datanode
+### DataNode
 | Key Path                                               | Description                                     | Default           |
 |--------------------------------------------------------|-------------------------------------------------|-------------------|
-| `datanode.enabled`                                     | Enable Graylog datanode.                        | `true`            |
-| `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
-| `datanode.config.nodeIdFile`                           | Path to datanode ID file.                       | `""`              |
+| `datanode.enabled`                                     | Enable Graylog Data Node.                       | `true`            |
+| `datanode.replicas`                                    | Number of DataNode replicas.                    | `3`               |
+| `datanode.config.nodeIdFile`                           | Path to DataNode ID file.                       | `""`              |
 | `datanode.config.opensearchHeap`                       | OpenSearch heap size.                           | `"2g"`            |
-| `datanode.config.javaOpts`                             | Java options for datanode.                      | `"-Xms1g -Xmx1g"` |
+| `datanode.config.javaOpts`                             | Java options for DataNode.                      | `"-Xms1g -Xmx1g"` |
 | `datanode.config.skipPreflightChecks`                  | Skip startup checks.                            | `"false"`         |
 | `datanode.config.nodeSearchCacheSize`                  | Size of search cache.                           | `"10gb"`          |
 | `datanode.custom.podAnnotations`                       | Additional pod annotations.                     | `{}`              |
-| `datanode.custom.nodeSelector`                         | Node selector for datanode.                     | `{}`              |
-| `datanode.custom.image.repository`                     | Datanode image repository.                      | `""`              |
-| `datanode.custom.image.tag`                            | Datanode image tag.                             | `""`              |
+| `datanode.custom.nodeSelector`                         | Node selector for DataNode.                     | `{}`              |
+| `datanode.custom.image.repository`                     | DataNode image repository.                      | `""`              |
+| `datanode.custom.image.tag`                            | DataNode image tag.                             | `""`              |
 | `datanode.custom.image.imagePullPolicy`                | Image pull policy.                              | `IfNotPresent`    |
 | `datanode.custom.image.imagePullSecrets`               | Image pull secrets.                             | `[]`              |
 | `datanode.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
