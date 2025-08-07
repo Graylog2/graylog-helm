@@ -1,0 +1,18 @@
+{{- if and (eq .Values.provider "aws") (empty .Values.global.defaultStorageClass) }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  # fsType: ext4
+  # encrypted: "true"
+  # iops: "3000"
+  # throughput: "125"  # MiB/s
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+{{- end }}
