@@ -134,7 +134,7 @@ Datanode replicas
 Graylog image tag
 */}}
 {{- define "graylog.imageTag" }}
-{{- .Values.graylog.custom.image.tag | default .Chart.AppVersion }}
+{{- coalesce .Values.graylog.custom.image.tag .Values.version | default .Chart.AppVersion }}
 {{- end }}
 
 {{/*
@@ -143,6 +143,21 @@ Graylog image
 {{- define "graylog.image" }}
 {{- $name := .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}
 {{- include "graylog.imageTag" . | printf "%s:%s" $name }}
+{{- end }}
+
+{{/*
+Graylog Datanode image tag
+*/}}
+{{- define "datanode.imageTag" }}
+{{- coalesce .Values.datanode.custom.image.tag .Values.version | default .Chart.AppVersion }}
+{{- end }}
+
+{{/*
+Graylog Datanode image
+*/}}
+{{- define "datanode.image" }}
+{{- $name := .Values.datanode.custom.image.repository | default "graylog/graylog-datanode" }}
+{{- include "datanode.imageTag" . | printf "%s:%s" $name }}
 {{- end }}
 
 {{/*
