@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waitingroom
+  namespace: default
+data:
+  index.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Waiting Room</title>
+        <meta name="robots" content="noindex" />
+        <style>
+          :root { --font: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, sans-serif; }
+          html,body { height: 100%; margin: 0; }
+          body {
+            font-family: var(--font);
+            display: grid;
+            place-items: center;
+            background-image: linear-gradient(180deg, #03c3ff 19%, #20194d 100%);
+            color: #e6eaf2;
+          }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes bounce {
+            0%   { --bounce-y: 0px; }
+            30%  { --bounce-y: -8px; }
+            60%  { --bounce-y: 0px; }
+            80%  { --bounce-y: -4px; }
+            100% { --bounce-y: 0px; }
+          }
+          .wrapper { position: relative; display: inline-block; }
+          .wrapper > svg {
+            --scale: 0.25;
+            --base-x: 25%;
+            --base-y: -40%;
+            --bounce-y: 0px;
+
+            position: absolute;
+            width: 1024px;
+            height: auto;
+            transform: scale(var(--scale)) translateY(calc(var(--base-y) + var(--bounce-y))) translateX(var(--base-x));
+            transform-origin: top right;
+            top: 0;
+            right: 60px;
+            z-index: 0;
+          }
+          .wrapper > svg:hover { animation: bounce 0.4s ease; }
+          .card { position: relative; z-index: 1; text-align: center; padding: 2.25rem 2rem; background: rgba(255,255,255,0.1); backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; max-width: 520px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+          .spinner { width: 40px; height: 40px; margin: 0 auto 1rem; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); border-top-color: #fff; animation: spin 1s linear infinite; }
+          h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
+          p { margin: 0 0 1rem; line-height: 1.5; opacity: .9; }
+          .small { opacity: .7; font-size: .9rem; }
+          button { border: 0; padding: .6rem .9rem; border-radius: 10px; cursor: pointer; background: rgba(255, 255, 255, 0.8); color: #111827; font-weight: 600; }
+          button:focus { outline: 2px solid #93c5fd; outline-offset: 2px; }
+        </style>
+    </head>
+      <body>
+        <div class="wrapper">
+{{/*            {{- .Files.Get "arti.svg" | nindent 12 }}*/}}
+            <main class="card" role="main" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <h1>Pods are warming up</h1>
+            <p>We’ve got your request. The service is starting, and will be ready shortly.</p>
+            <p class="small">Please, wait a few minutes and try again:</p>
+            <button onclick="location.reload()">Refresh</button>
+          </main>
+        </div>
+      </body>
+    </html>
