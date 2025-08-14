@@ -447,3 +447,37 @@ Graylog Java Options
 {{- end }}
 {{- prepend $extraOpts .Values.graylog.config.serverJavaOpts | compact | join " " }}
 {{- end }}
+
+
+{{/*
+Ingress name
+*/}}
+{{- define "ingress.web.name" }}
+{{- include "graylog.fullname" . | printf "%s-web" }}
+{{- end }}
+
+{{/*
+Cert-manager issuer name
+*/}}
+{{- define "cert-manager.issuer.name" }}
+{{- include "graylog.fullname" . | printf "%s-letsencrypt" }}
+{{- end }}
+
+{{/*
+Cert-manager issuer checker
+Return: true if there is at least one Issuer or ClusterIssuer in the cluster.
+Usage: if (include "issuer.exists.any" . | fromYaml) ...
+*/}}
+{{- define "issuer.exists.any" }}
+{{- $gv := "cert-manager.io/v1" }}
+{{- $exists := false }}
+{{- if .Capabilities.APIVersions.Has $gv }}
+{{- $ci := lookup $gv "ClusterIssuer" "" "" | default dict }}
+{{- $ni := lookup $gv "Issuer" .Release.Namespace "" | default dict }}
+{{- $hasCI := $ci.items | default (list) | len | lt 0 }}
+{{- $hasNI := $ni.items | default (list) | len | lt 0 }}
+{{- $exists = or $hasCI $hasNI }}
+{{- end }}
+{{ $exists }}
+{{- end }}
+

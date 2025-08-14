@@ -289,6 +289,17 @@ serviceAccount:
 # Ingress configuration
 # more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
+  enabled: false
+  config:
+    defaultBackend:
+      enabled: true
+      image:
+    tls:
+      issuer:
+        existingName:
+        autoissue:
+          enabled: false
+          staging: true
   web:
     enabled: false
     className: ""

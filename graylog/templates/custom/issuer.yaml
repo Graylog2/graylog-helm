@@ -1,0 +1,25 @@
+{{- if not .Values.graylog.config.tls.byoc.enabled | and (include "issuer.exists.any" . | fromYaml | not) .Values.ingress.enabled .Values.ingress.config.tls.autoissue.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "cert-manager.issuer.name" . }}
+spec:
+  acme:
+    server: {{ .Values.ingress.config.tls.issuer.autoissue.staging | ternary "-staging" "" | printf "https://acme%s-v02.api.letsencrypt.org/directory" }}
+    privateKeySecretRef:
+      name: {{ include "graylog.fullname" . | printf "%s-acme-pk" }}
+    solvers:
+      - http01:
+          ingress:
+            {{- if .Values.ingress.web.className }}
+            ingressClassName: {{ .Values.ingress.web.className }}
+            {{- else }}
+            name: {{ include "ingress.web.name" . }}
+            {{- end }}
+            {{- with .Values.tolerations }}
+            podTemplate:
+              spec:
+                tolerations:
+                  {{- toYaml . | nindent 18 }}
+            {{- end }}
+{{- end }}

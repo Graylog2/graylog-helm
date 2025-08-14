@@ -2,18 +2,21 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: "{{ include "graylog.fullname" . }}-web"
+  name: {{ include "ingress.web.name" . }}
   labels:
     {{- include "graylog.labels" . | nindent 4 }}
-  {{- with .Values.ingress.web.annotations }}
   annotations:
+  {{- if or .Values.ingress.config.tls.issuer.autoissue.enabled .Values.ingress.config.tls.issuer.existingName }}
+    cert-manager.io/issuer: {{ include "cert-manager.issuer.name" . | coalesce .Values.ingress.config.tls.issuer.existingName }}
+  {{- end }}
+  {{- with .Values.ingress.web.annotations }}
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   {{- with .Values.ingress.web.className }}
   ingressClassName: {{ . }}
   {{- end }}
-  {{- if .Values.ingress.tls }}
+  {{- if .Values.ingress.web.tls }}
   tls:
     {{- range .Values.ingress.web.tls }}
     - hosts:
