@@ -1,0 +1,45 @@
+{{- if and .Values.ingress.enabled .Values.ingress.config.defaultBackend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fallback.name" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      graylog-app: {{ include "fallback.name" . }}
+  template:
+    metadata:
+      labels:
+        graylog-app: {{ include "fallback.name" . }}
+    spec:
+      containers:
+        - name: busybox
+          image: busybox:latest
+          command: ["httpd", "-f", "-v", "-h", "/home", "-p", "3000", "-h", "/var/www/html", "-c", "/etc/httpd.conf"]
+          volumeMounts:
+            - name: content
+              mountPath: /var/www/html/healthz
+              subPath: healthz
+            - name: content
+              mountPath: /var/www/html/livez
+              subPath: livez
+            - name: content
+              mountPath: /var/www/html/readyz
+              subPath: readyz
+            - name: content
+              mountPath: /etc/error.html
+              subPath: error.html
+            - name: config
+              mountPath: /etc/httpd.conf
+              subPath: httpd.conf
+          ports:
+            - containerPort: 3000
+      volumes:
+        - name: content
+          configMap:
+            name: {{ include "fallback.name" . | printf "%s-content" }}
+        - name: config
+          configMap:
+            name: {{ include "fallback.name" . | printf "%s-config" }}
+{{- end }}

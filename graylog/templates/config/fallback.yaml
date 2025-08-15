@@ -1,10 +1,23 @@
+{{- if and .Values.ingress.enabled .Values.ingress.config.defaultBackend.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: waitingroom
-  namespace: default
+  name: {{ include "fallback.name" . | printf "%s-config" }}
 data:
-  index.html: |
+  httpd.conf: |
+    H:/var/www/html
+    I:index.html
+    E404:/etc/error.html
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fallback.name" . | printf "%s-content" }}
+data:
+  healthz: "ok"
+  livez: "ok"
+  readyz: "ok"
+  error.html: |
     <!doctype html>
     <html lang="en">
     <head>
@@ -58,7 +71,7 @@ data:
     </head>
       <body>
         <div class="wrapper">
-{{/*            {{- .Files.Get "arti.svg" | nindent 12 }}*/}}
+{{/*            {{- .Files.Get "assets/arti.svg" | nindent 12 }}*/}}
             <main class="card" role="main" aria-live="polite">
             <div class="spinner" aria-hidden="true"></div>
             <h1>Pods are warming up</h1>
@@ -69,3 +82,4 @@ data:
         </div>
       </body>
     </html>
+{{- end }}
