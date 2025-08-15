@@ -1,4 +1,4 @@
-{{- if not .Values.graylog.config.tls.byoc.enabled | and (include "issuer.exists.any" . | fromYaml | not) .Values.ingress.enabled .Values.ingress.config.tls.autoissue.enabled }}
+{{- if not .Values.graylog.config.tls.byoc.enabled | and (include "cert-manager.issuer.exists.any" . | eq "false") .Values.ingress.enabled .Values.ingress.config.tls.issuer.autoissue.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -11,11 +11,7 @@ spec:
     solvers:
       - http01:
           ingress:
-            {{- if .Values.ingress.web.className }}
-            ingressClassName: {{ .Values.ingress.web.className }}
-            {{- else }}
             name: {{ include "ingress.web.name" . }}
-            {{- end }}
             {{- with .Values.tolerations }}
             podTemplate:
               spec:

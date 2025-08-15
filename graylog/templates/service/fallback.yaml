@@ -1,0 +1,12 @@
+{{- if and .Values.ingress.enabled .Values.ingress.config.defaultBackend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fallback.name" . }}
+spec:
+  selector:
+    graylog-app: {{ include "fallback.name" . }}
+  ports:
+    - port: 80
+      targetPort: 3000
+{{- end }}

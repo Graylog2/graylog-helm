@@ -293,7 +293,6 @@ ingress:
   config:
     defaultBackend:
       enabled: true
-      image:
     tls:
       issuer:
         existingName:
