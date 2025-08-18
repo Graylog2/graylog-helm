@@ -7,7 +7,7 @@ size:
 provider:
 
 # Override Graylog and Graylog Data Node version (optional)
-version: "6.3"
+version: ""
 
 # Override the chart name (optional)
 nameOverride: ""
