@@ -9,7 +9,7 @@ spec:
   type: {{ .Values.graylog.custom.service.type | default "ClusterIP" }}
   ports:
     - name: app
-      port: {{ .Values.graylog.custom.service.ports.app | default 9000 | int }}
+      port: {{ include "graylog.service.port.app" . }}
       targetPort: app
       protocol: TCP
     {{- if .Values.graylog.custom.metrics.enabled }}

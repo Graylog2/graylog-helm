@@ -38,6 +38,11 @@ graylog:
     leaderElectionMode: "automatic"
     contentPacksAutoInstall: "true"
     isCloud: "false"
+    tls:
+      byoc:
+        enabled: false
+        secretName:
+        keyPassword:
     mongodb:
       maxConnections: "1000"
       versionProbeAttempts: "0"

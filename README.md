@@ -1,4 +1,6 @@
 # Graylog Helm
+![Tests](https://github.com/graylog2/graylog-helm/actions/workflows/lint-and-test.yaml/badge.svg)
+
 Official helm chart for Graylog.
 
 ## Not For External Use
@@ -30,6 +32,17 @@ git clone git@github.com:Graylog2/graylog-helm.git
 # cd into the newly created graylog-helm directory
 cd graylog-helm
 ```
+
+### Set default StorageClass
+***If your cluster already has a default `storageclass` you can skip this step.***
+
+If not, you're unsure, or you don't want to affect cluster-wide settings, set the default `storageclass` for this Chart at runtime by passing `--set global.defaultStorageClass="my-sc"` to your `helm install` command. Or by adding the following lines to `values-custom.yaml`:
+```
+global:
+  defaultStorageClass: "my-sc"
+```
+
+Just be sure to pass `-f values-custom.yaml` to your `helm install` command below!
 
 ### Set Root Graylog Password
 ```sh
@@ -126,6 +139,28 @@ helm upgrade graylog ./graylog -n graylog -f inputs.yaml --reuse-values
 ```
 
 The inputs should now be exposed. Make sure to complete their configuration through the Graylog UI.
+
+### Enable TLS
+
+Before you can enable TLS, you must associate a DNS name with your Graylog installation.
+More specifically, it should point to the external IP address (EXTERNAL-IP) associated with your Graylog service.
+You can retrieve this information like this:
+
+```sh
+kubectl get svc graylog-svc -n graylog
+```
+
+## Bring Your Own Certificate
+
+If you already have a TLS certificate-key pair, you can create a Kubernetes secret to store them:
+```sh
+kubectl create secret tls my-cert --cert=public.pem --key=private.key -n graylog
+```
+
+Enable TLS for your Graylog installation, referencing the Kubernetes secret:
+```sh
+helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.byoc.enabled=true --set  graylog.config.tls.byoc.secretName="my-cert"
+```
 
 ### Uninstall
 ```sh

@@ -122,6 +122,10 @@ spec:
           volumeMounts:
             - name: {{ include "graylog.volumeName" . }}
               mountPath: /usr/share/graylog/data
+            {{- if .Values.graylog.config.tls.byoc.enabled }}
+            - name: tls-creds
+              mountPath: /usr/share/graylog/tls
+            {{- end }}
       tolerations:
       {{- with .Values.graylog.custom.tolerations }}
         {{- toYaml . | nindent 8 }}
@@ -135,6 +139,11 @@ spec:
         configMap:
           name: init-script-cm
           defaultMode: 0755  # Make script executable
+      {{- if .Values.graylog.config.tls.byoc.enabled }}
+      - name: tls-creds
+        secret:
+          secretName: {{ .Values.graylog.config.tls.byoc.secretName | quote }}
+      {{- end }}
       {{- if not .Values.graylog.custom.persistence.enabled | or .Values.graylog.custom.persistence.existingClaim }}
       - name: {{ include "graylog.volumeName" . }}
         {{- if .Values.graylog.custom.persistence.existingClaim }}
