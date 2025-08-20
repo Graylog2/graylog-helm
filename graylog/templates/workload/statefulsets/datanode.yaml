@@ -87,6 +87,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "graylog.secretsName" . }}
                   key: GRAYLOG_S3_CLIENT_DEFAULT_ACCESS_KEY
+            {{- include "graylog.custom.env" .Values.datanode | indent 12 }}
           ports:
             - name: api
               containerPort: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}

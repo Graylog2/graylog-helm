@@ -257,69 +257,136 @@ stern statefulset/graylog-datanode -n graylog-helm-dev-1
 These values affect Graylog, DataNode, and MongoDB
 
 | Key Path                     | Description                                 | Default |
-|------------------------------| ------------------------------------------- |---------|
+|------------------------------|---------------------------------------------|---------|
 | `global.existingSecretName`  | Reference to an existing Kubernetes secret. | `""`    |
 | `global.imagePullSecrets`    | Image pull secrets for private registries.  | `[]`    |
 | `global.defaultStorageClass` | Default storage class for PVCs.             | `""`    |
 
 
 ### Graylog application
-| Key Path                                              | Description                                     | Default           |
-|-------------------------------------------------------|-------------------------------------------------|-------------------|
-| `graylog.enabled`                                     | Enable the Graylog server.                      | `true`            |
-| `graylog.enterprise`                                  | Enable enterprise features.                     | `true`            |
-| `graylog.replicas`                                    | Number of Graylog server replicas.              | `2`               |
-| `graylog.inputs`                                      | List of input configurations.                   | See below         |
-| `graylog.inputs[0].name`                              | Name of input for GELF messages.                | `input-gelf`      |
-| `graylog.inputs[0].port`                              | Port exposed for input.                         | `12201`           |
-| `graylog.inputs[0].targetPort`                        | Target container port.                          | `12201`           |
-| `graylog.inputs[0].protocol`                          | Protocol used for input.                        | `TCP`             |
-| `graylog.inputs[0].ingress`                           | Enable ingress for this input.                  | `true`            |
-| `graylog.config.rootUsername`                         | Root admin username.                            | `"admin"`         |
-| `graylog.config.rootPassword`                         | Root admin password.                            | `""`              |
-| `graylog.config.timezone`                             | Timezone for the Graylog server.                | `"UTC"`           |
-| `graylog.config.selfSignedStartup`                    | Use self-signed certs on startup.               | `"true"`          |
-| `graylog.config.serverJavaOpts`                       | Java options for server.                        | `"-Xms1g -Xmx1g"` |
-| `graylog.custom.podAnnotations`                       | Additional pod annotations.                     | `{}`              |
-| `graylog.custom.nodeSelector`                         | Node selector for scheduling.                   | `{}`              |
-| `graylog.custom.inputs.enabled`                       | Enable Graylog inputs.                          | `true`            |
-| `graylog.custom.metrics.enabled`                      | Enable metrics collection.                      | `true`            |
-| `graylog.custom.image.repository`                     | Image repository for Graylog.                   | `""`              |
-| `graylog.custom.image.tag`                            | Image tag for Graylog.                          | `""`              |
-| `graylog.custom.image.imagePullPolicy`                | Pull policy for Graylog image.                  | `IfNotPresent`    |
-| `graylog.custom.image.imagePullSecrets`               | Pull secrets for image.                         | `[]`              |
-| `graylog.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
-| `graylog.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
-| `graylog.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
-| `graylog.custom.service.nameOverride`                 | Override for service name.                      | `""`              |
-| `graylog.custom.service.type`                         | Kubernetes service type.                        | `ClusterIP`       |
-| `graylog.custom.service.ports.app`                    | Graylog web UI port.                            | `9000`            |
-| `graylog.custom.service.ports.metrics`                | Metrics endpoint port.                          | `9833`            |
-| `graylog.custom.service.ports.inputGelfHttp`          | GELF HTTP input port.                           | `12201`           |
+| Key Path                                                              | Description                                     | Default                         |
+|-----------------------------------------------------------------------|-------------------------------------------------|---------------------------------|
+| `graylog.enabled`                                                     | Enable the Graylog server.                      | `true`                          |
+| `graylog.enterprise`                                                  | Enable enterprise features.                     | `true`                          |
+| `graylog.replicas`                                                    | Number of Graylog server replicas.              | `2`                             |
+| `graylog.inputs`                                                      | List of inputs to configure.                    | See below                       |
+| `graylog.plugins`                                                     | List of plugins to configure.                   | See below                       |
+| `graylog.config.rootUsername`                                         | Root admin username.                            | `"admin"`                       |
+| `graylog.config.rootPassword`                                         | Root admin password.                            | `""`                            |
+| `graylog.config.timezone`                                             | Timezone for the Graylog server.                | `"UTC"`                         |
+| `graylog.config.selfSignedStartup`                                    | Use self-signed certs on startup.               | `"true"`                        |
+| `graylog.config.serverJavaOpts`                                       | Java options for server.                        | `"-Xms1g -Xmx1g"`               |
+| `graylog.config.leaderElectionMode`                                   | Mode for leader election.                       | `"automatic"`                   |
+| `graylog.config.contentPacksAutoInstall`                              | Auto-install content packs.                     | `"true"`                        |
+| `graylog.config.isCloud`                                              | Indicates if deployment is on cloud.            | `"false"`                       |
+| `graylog.config.mongodb.maxConnections`                               | Max MongoDB connections.                        | `"1000"`                        |
+| `graylog.config.mongodb.versionProbeAttempts`                         | MongoDB version probe attempts.                 | `"0"`                           |
+| `graylog.config.messageJournal.enabled`                               | Enable message journal.                         | `"true"`                        |
+| `graylog.config.messageJournal.flushAge`                              | Journal flush age.                              | `"1m"`                          |
+| `graylog.config.messageJournal.flushInterval`                         | Journal flush interval.                         | `"1000000"`                     |
+| `graylog.config.messageJournal.maxAge`                                | Max journal age.                                | `"12h"`                         |
+| `graylog.config.messageJournal.segmentAge`                            | Journal segment age.                            | `"1h"`                          |
+| `graylog.config.messageJournal.segmentSize`                           | Journal segment size.                           | `"100mb"`                       |
+| `graylog.config.network.connectTimeout`                               | Network connect timeout.                        | `"5s"`                          |
+| `graylog.config.network.enableCors`                                   | Enable CORS.                                    | `"false"`                       |
+| `graylog.config.network.enableGzip`                                   | Enable Gzip compression.                        | `"true"`                        |
+| `graylog.config.network.maxHeaderSize`                                | Max header size.                                | `"8192"`                        |
+| `graylog.config.network.readTimeout`                                  | Network read timeout.                           | `"10s"`                         |
+| `graylog.config.network.threadPoolSize`                               | Network thread pool size.                       | `"64"`                          |
+| `graylog.config.performance.asyncEventbusProcessors`                  | Async event bus processors.                     | `"2"`                           |
+| `graylog.config.performance.autoRestartInputs`                        | Automatically restart inputs.                   | `"false"`                       |
+| `graylog.config.performance.inputBufferProcessors`                    | Input buffer processors.                        | `"2"`                           |
+| `graylog.config.performance.inputBufferRingSize`                      | Input buffer ring size.                         | `"65536"`                       |
+| `graylog.config.performance.inputBufferWaitStrategy`                  | Input buffer wait strategy.                     | `"blocking"`                    |
+| `graylog.config.performance.jobSchedulerConcurrencyLimits`            | Scheduler concurrency limits.                   | `""`                            |
+| `graylog.config.performance.outputBatchSize`                          | Output batch size.                              | `"500"`                         |
+| `graylog.config.performance.outputFaultCountThreshold`                | Output fault threshold.                         | `"5"`                           |
+| `graylog.config.performance.outputFaultPenaltySeconds`                | Output fault penalty seconds.                   | `"30"`                          |
+| `graylog.config.performance.outputFlushInterval`                      | Output flush interval.                          | `"1"`                           |
+| `graylog.config.performance.outputBufferProcessorThreadsCorePoolSize` | Output processor thread pool size.              | `"3"`                           |
+| `graylog.config.performance.outputBufferProcessors`                   | Output buffer processors.                       | `""`                            |
+| `graylog.config.performance.processBufferProcessors`                  | Process buffer processors.                      | `""`                            |
+| `graylog.config.email.enabled`                                        | Enable email notifications.                     | `"false"`                       |
+| `graylog.config.email.senderAddress`                                  | Email sender address.                           | `"graylog@example.com"`         |
+| `graylog.config.email.hostname`                                       | SMTP hostname.                                  | `"mail.example.com"`            |
+| `graylog.config.email.port`                                           | SMTP port.                                      | `"587"`                         |
+| `graylog.config.email.socketConnectionTimeout`                        | SMTP socket connect timeout.                    | `"10s"`                         |
+| `graylog.config.email.socketTimeout`                                  | SMTP socket timeout.                            | `"10s"`                         |
+| `graylog.config.email.useAuth`                                        | Use SMTP authentication.                        | `"true"`                        |
+| `graylog.config.email.useSsl`                                         | Use SSL for SMTP.                               | `"false"`                       |
+| `graylog.config.email.useTls`                                         | Use TLS for SMTP.                               | `"true"`                        |
+| `graylog.config.email.webInterfaceUrl`                                | Web interface URL for email links.              | `"https://graylog.example.com"` |
+| `graylog.config.plugins.enabled`                                      | Enable Graylog plugin system.                   | `"false"`                       |
+| `graylog.config.init.assetFetch.enabled`                              | Enable asset fetch init.                        | `"false"`                       |
+| `graylog.config.init.assetFetch.skipChecksum`                         | Skip checksum validation for assets.            | `"false"`                       |
+| `graylog.config.init.assetFetch.allowHttp`                            | Allow HTTP fetch for assets.                    | `"false"`                       |
+| `graylog.config.init.assetFetch.plugins.enabled`                      | Enable plugin asset fetch.                      | `"false"`                       |
+| `graylog.config.init.assetFetch.plugins.baseUrl`                      | Base URL for plugin assets.                     | `""`                            |
+| `graylog.config.init.geolocation.enabled`                             | Enable geolocation asset fetch.                 | `"false"`                       |
+| `graylog.config.init.geolocation.baseUrl`                             | Base URL for geolocation assets.                | `""`                            |
+| `graylog.custom.podAnnotations`                                       | Additional pod annotations.                     | `{}`                            |
+| `graylog.custom.nodeSelector`                                         | Node selector for scheduling.                   | `{}`                            |
+| `graylog.custom.env`                                                  | Custom environment variables                    | `[]`                            |
+| `graylog.custom.extraEnv`                                             | Custom EnvVar environment variables             | `[]`                            |
+| `graylog.custom.inputs.enabled`                                       | Enable Graylog inputs.                          | `true`                          |
+| `graylog.custom.metrics.enabled`                                      | Enable metrics collection.                      | `true`                          |
+| `graylog.custom.image.repository`                                     | Image repository for Graylog.                   | `""`                            |
+| `graylog.custom.image.tag`                                            | Image tag for Graylog.                          | `""`                            |
+| `graylog.custom.image.imagePullPolicy`                                | Pull policy for Graylog image.                  | `IfNotPresent`                  |
+| `graylog.custom.image.imagePullSecrets`                               | Pull secrets for image.                         | `[]`                            |
+| `graylog.custom.updateStrategy.type`                                  | Pod update strategy for StatefulSet.            | `"RollingUpdate"`               |
+| `graylog.custom.updateStrategy.rollingUpdate.maxUnavailable`          | Max unavailable pods during an update.          | `1`                             |
+| `graylog.custom.updateStrategy.rollingUpdate.partition`               | Pods that will remain unaffected by the update. | `""`                            |
+| `graylog.custom.service.nameOverride`                                 | Override for service name.                      | `""`                            |
+| `graylog.custom.service.type`                                         | Kubernetes service type.                        | `ClusterIP`                     |
+| `graylog.custom.service.ports.app`                                    | Graylog web UI port.                            | `9000`                          |
+| `graylog.custom.service.ports.metrics`                                | Metrics endpoint port.                          | `9833`                          |
 
+#### Graylog inputs
+| Key Path                       | Description                       | Example            |
+|--------------------------------|-----------------------------------|--------------------|
+| `graylog.inputs[i].name`       | Name to identify this input.      | `input-gelf`       |
+| `graylog.inputs[i].port`       | Port exposed for this input.      | `12201`            |
+| `graylog.inputs[i].targetPort` | Target container port (optional). | `12201`            |
+| `graylog.inputs[i].protocol`   | Protocol used for this input.     | `TCP`              |
 
-### DataNode
-| Key Path                                               | Description                                     | Default           |
-|--------------------------------------------------------|-------------------------------------------------|-------------------|
-| `datanode.enabled`                                     | Enable Graylog Data Node.                       | `true`            |
-| `datanode.replicas`                                    | Number of DataNode replicas.                    | `3`               |
-| `datanode.config.nodeIdFile`                           | Path to DataNode ID file.                       | `""`              |
-| `datanode.config.opensearchHeap`                       | OpenSearch heap size.                           | `"2g"`            |
-| `datanode.config.javaOpts`                             | Java options for DataNode.                      | `"-Xms1g -Xmx1g"` |
-| `datanode.config.skipPreflightChecks`                  | Skip startup checks.                            | `"false"`         |
-| `datanode.config.nodeSearchCacheSize`                  | Size of search cache.                           | `"10gb"`          |
-| `datanode.custom.podAnnotations`                       | Additional pod annotations.                     | `{}`              |
-| `datanode.custom.nodeSelector`                         | Node selector for DataNode.                     | `{}`              |
-| `datanode.custom.image.repository`                     | DataNode image repository.                      | `""`              |
-| `datanode.custom.image.tag`                            | DataNode image tag.                             | `""`              |
-| `datanode.custom.image.imagePullPolicy`                | Image pull policy.                              | `IfNotPresent`    |
-| `datanode.custom.image.imagePullSecrets`               | Image pull secrets.                             | `[]`              |
-| `datanode.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
-| `datanode.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
-| `datanode.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
-| `datanode.custom.service.ports.api`                    | API communication port.                         | `8999`            |
-| `datanode.custom.service.ports.data`                   | Data communication port.                        | `9200`            |
-| `datanode.custom.service.ports.config`                 | Configuration communication port.               | `9300`            |
+#### Graylog plugins
+| Key Path                           | Description                            | Example                                                            |
+|------------------------------------|----------------------------------------|--------------------------------------------------------------------|
+| `graylog.plugins[i].name`          | Name to identify this plugin.          | `graylog-plugin-slack`                                             |
+| `graylog.plugins[i].image`         | Image containing the JAR to be copied. | `myrepo/graylog-plugin-slack:1.2.3`                                |
+| `graylog.plugins[i].existingClaim` | Existing PVC with JAR to be copied.    | `myotherapp-pvc-0`                                                 |
+| `graylog.plugins[i].url`           | URL of JAR to be retrieved.            | `https://myurl/plugins/graylog-plugin-slack.jar`                   |
+| `graylog.plugins[i].checksum`      | Checksum of JAR file.                  | `13550350a8681c84c861aac2e5b440161c2b33a3e4f302ac680ca5b686de48de` |
+
+#### Graylog environment variables
+| Key Path                | Descriptions                                                                                                                                                                                   | Example                                                                                                                                                          |
+|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `graylog.custom.env`    | Simple key/value environment variables                                                                                                                                                         | `["FOO=BAR", "HELLO=123"]`                                                                                                                                       |
+| `graylog.custom.EnvVar` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables<br/>(valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:<br/>  - name: MADE_UP_PASSWORD<br/>    valueFrom:<br/>      secretKeyRef:<br/>        name: mysecret<br/>        key: password</code></pre> |
+
+### Datanode
+| Key Path                                                      | Description                                     | Default           |
+|---------------------------------------------------------------|-------------------------------------------------|-------------------|
+| `datanode.enabled`                                            | Enable Graylog datanode.                        | `true`            |
+| `datanode.replicas`                                           | Number of datanode replicas.                    | `3`               |
+| `datanode.config.nodeIdFile`                                  | Path to datanode ID file.                       | `""`              |
+| `datanode.config.opensearchHeap`                              | OpenSearch heap size.                           | `"2g"`            |
+| `datanode.config.javaOpts`                                    | Java options for datanode.                      | `"-Xms1g -Xmx1g"` |
+| `datanode.config.skipPreflightChecks`                         | Skip startup checks.                            | `"false"`         |
+| `datanode.config.nodeSearchCacheSize`                         | Size of search cache.                           | `"10gb"`          |
+| `datanode.custom.podAnnotations`                              | Additional pod annotations.                     | `{}`              |
+| `datanode.custom.nodeSelector`                                | Node selector for datanode.                     | `{}`              |
+| `datanode.custom.image.repository`                            | Datanode image repository.                      | `""`              |
+| `datanode.custom.image.tag`                                   | Datanode image tag.                             | `""`              |
+| `datanode.custom.image.imagePullPolicy`                       | Image pull policy.                              | `IfNotPresent`    |
+| `datanode.custom.image.imagePullSecrets`                      | Image pull secrets.                             | `[]`              |
+| `datanode.custom.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
+| `datanode.custom.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
+| `datanode.custom.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
+| `datanode.custom.service.ports.api`                           | API communication port.                         | `8999`            |
+| `datanode.custom.service.ports.data`                          | Data communication port.                        | `9200`            |
+| `datanode.custom.service.ports.config`                        | Configuration communication port.               | `9300`            |
 
 
 ### Service Account
@@ -332,13 +399,25 @@ These values affect Graylog, DataNode, and MongoDB
 
 
 ### Ingress
-| Key Path                             | Description                       | Default                  |
-| ------------------------------------ | --------------------------------- | ------------------------ |
-| `ingress.enabled`                    | Enable ingress for Graylog.       | `false`                  |
-| `ingress.className`                  | Ingress class name.               | `""`                     |
-| `ingress.annotations`                | Annotations for ingress resource. | `{}`                     |
-| `ingress.hosts[0].host`              | Hostname for ingress.             | `chart-example.local`    |
-| `ingress.hosts[0].paths[0].path`     | Path for routing.                 | `/`                      |
-| `ingress.hosts[0].paths[0].pathType` | Path matching type.               | `ImplementationSpecific` |
-| `ingress.tls`                        | TLS configuration.                | `[]`                     |
 
+#### Web Ingress
+| Key Path                                 | Description                        | Default                  |
+|------------------------------------------|------------------------------------| ------------------------ |
+| `ingress.web.enabled`                    | Enable ingress for Graylog Web.    | `false`                  |
+| `ingress.web.className`                  | Ingress class name.                | `""`                     |
+| `ingress.web.annotations`                | Annotations for ingress resource.  | `{}`                     |
+| `ingress.web.hosts[0].host`              | Hostname for ingress.              | `chart-example.local`    |
+| `ingress.web.hosts[0].paths[0].path`     | Path for routing.                  | `/`                      |
+| `ingress.web.hosts[0].paths[0].pathType` | Path matching type.                | `ImplementationSpecific` |
+| `ingress.web.tls`                        | TLS configuration.                 | `[]`                     |
+
+#### Forwarder Ingress
+| Key Path                                       | Description                           | Default                  |
+|------------------------------------------------|---------------------------------------|--------------------------|
+| `ingress.forwarder.enabled`                    | Enable ingress for Graylog Forwarder. | `false`                  |
+| `ingress.forwarder.className`                  | Ingress class name.                   | `""`                     |
+| `ingress.forwarder.annotations`                | Annotations for ingress resource.     | `{}`                     |
+| `ingress.forwarder.hosts[0].host`              | Hostname for ingress.                 | `chart-example.local`    |
+| `ingress.forwarder.hosts[0].paths[0].path`     | Path for routing.                     | `/`                      |
+| `ingress.forwarder.hosts[0].paths[0].pathType` | Path matching type.                   | `ImplementationSpecific` |
+| `ingress.forwarder.tls`                        | TLS configuration.                    | `[]`                     |

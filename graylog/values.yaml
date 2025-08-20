@@ -114,6 +114,8 @@ graylog:
     nodeSelector: {}
     tolerations: {}
     affinity: {}
+    env: {}
+    extraEnv: []
     inputs:
       enabled: true
     metrics:
@@ -123,7 +125,6 @@ graylog:
       tag: ""
       imagePullPolicy: IfNotPresent
       imagePullSecrets: []
-    env:
     updateStrategy:
       type:
       rollingUpdate:
@@ -195,6 +196,8 @@ datanode:
     nodeSelector: {}
     tolerations: {}
     affinity: {}
+    env: {}
+    extraEnv: []
     image:
       repository: ""
       tag: ""
