@@ -158,6 +158,13 @@ datanode:
     javaOpts: "-Xms1g -Xmx1g"
     skipPreflightChecks: "false"
     nodeSearchCacheSize: "10gb"
+    s3ClientDefaultSecretKey: ""
+    s3ClientDefaultAccessKey: ""
+    s3ClientDefaultEndpoint: ""
+    s3ClientDefaultRegion: "us-east-2"
+    s3ClientDefaultProtocol: "http"
+    s3ClientDefaultPathStyleAccess: "true"
+
   # Custom Kubernetes-specific parameters
   custom:
     podAnnotations: {}
