@@ -137,6 +137,18 @@
             "affinity": {
               "type": "object"
             },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "type": ["string","number","boolean"]
+              },
+              "description": "Key/value env vars rendered as literals"
+            },
+            "extraEnv": {
+              "type": "array",
+              "items": { "type": "object" },
+              "description": "Full EnvVar objects (supports valueFrom)"
+            },
             "inputs": {
               "type": "object",
               "properties": {
@@ -292,6 +304,18 @@
             },
             "affinity": {
               "type": "object"
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "type": ["string","number","boolean"]
+              },
+              "description": "Key/value env vars rendered as literals"
+            },
+            "extraEnv": {
+              "type": "array",
+              "items": { "type": "object" },
+              "description": "Full EnvVar objects (supports valueFrom)"
             },
             "image": {
               "type": "object",

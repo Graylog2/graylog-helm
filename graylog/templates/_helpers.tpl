@@ -260,10 +260,28 @@ Datanode configmap name
 {{- end }}
 
 {{/*
+Custom enviroment variables
+usage: {{ include "graylog.custom.env" .Values.{graylog|datanode} | indent N }}
+*/}}
+{{- define "graylog.custom.env" }}
+{{- $explicit := list }}
+{{- range $_, $e := .custom.extraEnv }}
+{{- if $e.name }}{{ $explicit = append $explicit .name }}{{ end }}
+- {{ toYaml $e | nindent 2 | trim }}
+{{- end }}
+{{- range $k, $v := .custom.env }}
+{{- if has $k $explicit | not }}
+- name: {{ $k }}
+  value: {{ $v | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
 Graylog plugins
 */}}
 {{- define "graylog.pluginURLs" }}
-{{- if and .Values.graylog.config.plugins.enabled .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled }}
+{{- if and .Values.graylog.config.plugins.enabled .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled .Values.graylog.plugins }}
 {{- $urls := list }}
 {{- $baseUrl := .Values.graylog.config.init.assetFetch.plugins.baseUrl | default "" }}
 {{- $skipChecksum := .Values.graylog.config.init.assetFetch.skipChecksum | default false }}
@@ -271,22 +289,22 @@ Graylog plugins
 {{- if not $allowHttp | and (hasPrefix "http://" $baseUrl) }}
 {{- printf "Validation error: plugin baseUrl is '%s'. Only HTTPS is allowed for plugin URLs." $baseUrl | fail }}
 {{- end }}
-{{- range $name, $plugin := .Values.graylog.config.plugins }}
-{{- $url := $plugin.url }}
+{{- range .Values.graylog.plugins }}
+{{- $url := .url }}
 {{- if $url }}
-{{- if and (not $skipChecksum) (empty $plugin.checksum) }}
-{{- printf "Validation error: checksum verification is enabled but no checksum hash has been provided for plugin '%s'." $name | fail }}
+{{- if and (not $skipChecksum) (empty .checksum) }}
+{{- printf "Validation error: checksum verification is enabled but no checksum hash has been provided for plugin '%s'." .name | fail }}
 {{- end }}
 {{- if and (hasPrefix "http://" $url | not) (hasPrefix "https://" $url | not) }}
 {{- $url = printf "%s/%s" (trimSuffix "/" $baseUrl) (trimPrefix "/" $url) }}
 {{- end }}
 {{- if not $allowHttp | and (hasPrefix "http://" $url) }}
-{{- printf "Validation error: plugin '%s' is using URL '%s'. Only HTTPS is allowed for plugin URLs." $name $url | fail }}
+{{- printf "Validation error: plugin '%s' is using URL '%s'. Only HTTPS is allowed for plugin URLs." .name $url | fail }}
 {{- end }}
 {{- if not $skipChecksum }}
-{{- $url = printf "%s|%s" $url $plugin.checksum }}
+{{- $url = printf "%s|%s" $url .checksum }}
 {{- end }}
-{{- $urls = printf "%s|%s" $name $url | append $urls }}
+{{- $urls = printf "%s|%s" .name $url | append $urls }}
 {{- end }}
 {{- end }}
 {{- $urls | join "^" | quote }}
