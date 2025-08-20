@@ -278,9 +278,45 @@ usage: {{ include "graylog.custom.env" .Values.{graylog|datanode} | indent N }}
 {{- end }}
 
 {{/*
-Graylog plugins
+GeoIP update JobSpec
+usage: {{ list $geoSecretName $claimName $podIndex | include "graylog.geoip.job.spec" | indent }}
 */}}
-{{- define "graylog.pluginURLs" }}
+{{- define "graylog.geoip.job.spec" }}
+backoffLimit: 2
+activeDeadlineSeconds: 900
+template:
+  spec:
+    securityContext:
+      runAsUser: 1100
+      runAsGroup: 1100
+      fsGroup: 1100
+    containers:
+      - name: geoipupdate
+        image: maxmindinc/geoipupdate:latest
+        envFrom:
+          - secretRef:
+              name: {{ index . 0 }}
+        env:
+          - name: GEOIPUPDATE_EDITION_IDS
+            value: "GeoLite2-City GeoLite2-ASN"
+          - name: GEOIPUPDATE_FREQUENCY
+            value: "0"
+          - name: GEOIPUPDATE_DB_DIR
+            value: "/usr/share/data/geolocation"
+        volumeMounts:
+          - name: geoip-db
+            mountPath: /usr/share/data
+    restartPolicy: OnFailure
+    volumes:
+      - name: geoip-db
+        persistentVolumeClaim:
+          claimName: {{ printf "%s-%d" (index . 1) (index . 2) }}
+{{- end }}
+
+{{/*
+Graylog plugin URLs
+*/}}
+{{- define "graylog.plugin.URLs" }}
 {{- if and .Values.graylog.config.plugins.enabled .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled .Values.graylog.plugins }}
 {{- $urls := list }}
 {{- $baseUrl := .Values.graylog.config.init.assetFetch.plugins.baseUrl | default "" }}
@@ -305,6 +341,43 @@ Graylog plugins
 {{- $url = printf "%s|%s" $url .checksum }}
 {{- end }}
 {{- $urls = printf "%s|%s" .name $url | append $urls }}
+{{- end }}
+{{- end }}
+{{- $urls | join "^" | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
+Geolocation mmdb URLs
+*/}}
+{{- define "graylog.mmdb.URLs" }}
+{{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.init.assetFetch.geolocation.enabled .Values.graylog.config.geolocation.mmdbSources.city.url .Values.graylog.config.geolocation.mmdbSources.asn.url }}
+{{- $urls := list }}
+{{- $baseUrl := .Values.graylog.config.init.assetFetch.geolocation.baseUrl | default "" }}
+{{- $skipChecksum := .Values.graylog.config.init.assetFetch.skipChecksum | default false }}
+{{- $allowHttp := .Values.graylog.config.init.assetFetch.allowHttp | default false }}
+{{- if not $allowHttp | and (hasPrefix "http://" $baseUrl) }}
+{{- printf "Validation error: baseUrl is '%s' for geolocation mmdb sources. Only HTTPS is allowed for mmdb URLs." $baseUrl | fail }}
+{{- end }}
+{{- range $key, $vals := .Values.graylog.config.geolocation.mmdbSources }}
+{{- $name := eq $key "asn" | ternary ($key | upper) ($key | title) | printf "GeoLite2-%s" }}
+{{- with $vals }}
+{{- $url := .url }}
+{{- if $url }}
+{{- if and (not $skipChecksum) (empty .checksum) }}
+{{- printf "Validation error: checksum verification is enabled but no checksum hash has been provided for mmdb '%s'." $name | fail }}
+{{- end }}
+{{- if and (hasPrefix "http://" $url | not) (hasPrefix "https://" $url | not) }}
+{{- $url = printf "%s/%s" (trimSuffix "/" $baseUrl) (trimPrefix "/" $url) }}
+{{- end }}
+{{- if not $allowHttp | and (hasPrefix "http://" $url) }}
+{{- printf "Validation error: geolocation database '%s' is using URL '%s'. Only HTTPS is allowed for mmdb URLs." $name $url | fail }}
+{{- end }}
+{{- if not $skipChecksum }}
+{{- $url = printf "%s|%s" $url .checksum }}
+{{- end }}
+{{- $urls = printf "%s|%s" $name $url | append $urls }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- $urls | join "^" | quote }}

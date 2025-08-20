@@ -84,15 +84,6 @@ graylog:
       outputBufferProcessorThreadsCorePoolSize: "3"
       outputBufferProcessors: ""
       processBufferProcessors: ""
-    geolocation:
-      enabled:
-      directDownload:
-        cityUrl:
-        asnUrl:
-      maxmindGeoIp:
-        enabled:
-        accountId:
-        licenseKey:
     email:
       enabled: "false"
       senderAddress: "graylog@example.com"
@@ -106,6 +97,21 @@ graylog:
       webInterfaceUrl: "https://graylog.example.com"
     plugins:
       enabled: false
+    geolocation:
+      enabled: false
+      maxmindGeoIp:
+        enabled: true
+        accountId:
+        licenseKey:
+        cronSchedule: "0 0 * * *"
+        postInstallRun: true
+      mmdbSources:
+        city:
+          url:
+          checksum:
+        asn:
+          url:
+          checksum:
     init:
       assetFetch:
         enabled: false
