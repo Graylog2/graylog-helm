@@ -13,6 +13,8 @@ data:
   GEOIPUPDATE_LICENSE_KEY: {{ .Values.graylog.config.geolocation.maxmindGeoIp.licenseKey | quote | trimAll "\"" | b64enc }}
 {{- $cronJobName := include "graylog.fullname" . | printf "%s-geoip-update" }}
 {{- $claimName := printf "%s-%s" (include "graylog.volumeName" .) (include "graylog.fullname" .) }}
+{{- $cronSchedule := .Values.graylog.config.geolocation.maxmindGeoIp.cronSchedule | default "0 0 * * *" }}
+{{- $hookIsEnabled := .Values.graylog.config.geolocation.maxmindGeoIp.postInstallRun | default true }}
 {{- range $i := include "graylog.replicas" . | default 2 | int | until }}
 ---
 apiVersion: batch/v1
@@ -20,31 +22,22 @@ kind: CronJob
 metadata:
   name: {{ printf "%s-%d" $cronJobName $i }}
 spec:
-  schedule: "0 0 * * *"  # daily
+  schedule: {{ $cronSchedule }}
   jobTemplate:
     spec:
-      template:
-        spec:
-          containers:
-            - name: geoipupdate
-              image: maxmindinc/geoipupdate:latest
-              envFrom:
-                - secretRef:
-                    name: {{ $geoSecretName }}
-              env:
-                - name: GEOIPUPDATE_EDITION_IDS
-                  value: "GeoLite2-City GeoLite2-ASN"
-                - name: GEOIPUPDATE_FREQUENCY
-                  value: "0"
-                - name: GEOIPUPDATE_DB_DIR
-                  value: "/usr/share/GeoIP/geolocation"
-              volumeMounts:
-                - name: geoip-db
-                  mountPath: /usr/share/GeoIP
-          restartPolicy: OnFailure
-          volumes:
-            - name: geoip-db
-              persistentVolumeClaim:
-                claimName: {{ printf "%s-%d" $claimName $i }}
+      {{- list $geoSecretName $claimName $i | include "graylog.geoip.job.spec" | nindent 6 }}
+{{- if $hookIsEnabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-%d-hook" $cronJobName $i }}
+  annotations:
+    "helm.sh/hook": "post-install,post-upgrade"
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
+spec:
+{{- list $geoSecretName $claimName $i | include "graylog.geoip.job.spec" | nindent 2 }}
+{{- end }}
 {{- end }}
 {{- end }}

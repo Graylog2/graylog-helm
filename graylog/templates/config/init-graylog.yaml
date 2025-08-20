@@ -11,7 +11,6 @@ data:
       echo "Data already initialized, skipping copy."
     else
       cp -r /usr/share/graylog/data/* /mnt/data/
-      mkdir -p /mnt/data/geolocation
     fi
     {{- if .Values.graylog.config.plugins.enabled }}
     # copy plugins
@@ -19,11 +18,11 @@ data:
 
     {{- if and .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.plugins.enabled }}
     # retrieve plugins directly
-    for urlchecksum in $(echo "${GRAYLOG_PLUGIN_URLS}" | tr "^" "\n"); do
+    for urlchecksum in $(echo "${INIT_GRAYLOG_PLUGIN_URLS}" | tr "^" "\n"); do
       name=$(echo "$urlchecksum" | cut -d'|' -f1)
       url=$(echo "$urlchecksum" | cut -d'|' -f2)
       checksum=$(echo "$urlchecksum" | cut -d'|' -f3)
-      wget "$url" -O "$name.jar" || { echo "Failed to fetch plugin $name.jar at $url"; continue; }
+      wget -T 5 -t 3 "$url" -O "$name.jar" || { echo "Failed to fetch plugin $name.jar at $url"; continue; }
       if [ -n "$checksum" ]; then
         actual=$(sha256sum "$name.jar" | awk '{print $1}')
         if [ "$checksum" = "$actual" ]; then
@@ -40,14 +39,29 @@ data:
     done
     {{- end }}
     {{- end }}
-    # get geolocation city database
-    if [ -n "$GRAYLOG_GEO_CITY_DB_URL" ]; then
-      wget "$GRAYLOG_GEO_CITY_DB_URL" -O "/mnt/data/geolocation/city.mmdb" || echo "Failed to fetch geolocation database at $GRAYLOG_GEO_CITY_DB_URL"
-    fi
-    # get geolocation ASN database
-    if [ -n "$GRAYLOG_GEO_ASN_DB_URL" ]; then
-      wget "$GRAYLOG_GEO_ASN_DB_URL" -O "/mnt/data/geolocation/asn.mmdb" || echo "Failed to fetch geolocation database at $GRAYLOG_GEO_ASN_DB_URL"
-    fi
+    {{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.init.assetFetch.enabled .Values.graylog.config.init.assetFetch.geolocation.enabled }}
+    mkdir -p /mnt/data/geolocation
+    # retrieve geolocation mmdb files directly
+    for urlchecksum in $(echo "${INIT_GRAYLOG_GEO_MMDB_URLS}" | tr "^" "\n"); do
+      name=$(echo "$urlchecksum" | cut -d'|' -f1)
+      url=$(echo "$urlchecksum" | cut -d'|' -f2)
+      checksum=$(echo "$urlchecksum" | cut -d'|' -f3)
+      wget -T 5 -t 3 "$url" -O "$name.mmdb" || { echo "Failed to fetch geolocation database $name.mmdb at $url"; continue; }
+      if [ -n "$checksum" ]; then
+        actual=$(sha256sum "$name.mmdb" | awk '{print $1}')
+        if [ "$checksum" = "$actual" ]; then
+          echo "Checksum matches for $name.mmdb"
+          cp "$name.mmdb" "/mnt/data/geolocation/" && rm "$name.mmdb"
+        else
+          echo "Checksum does NOT match for $name.mmdb. Skipping database."
+          rm "$name.mmdb"
+        fi
+      else
+        echo "Warning: no checksum validation has been performed for database $name.mmdb"
+        cp "$name.mmdb" "/mnt/data/geolocation/" && rm "$name.mmdb"
+      fi
+    done
+    {{- end }}
     # check mongo credentials
     if env | grep GRAYLOG_MONGODB_URI | grep -q "@"; then
       echo "MongoDB credentials set. We're good to go!"
@@ -55,4 +69,4 @@ data:
       echo "Error: MongoDB credentials not set in MongoDB URI. Make sure secrets are up to date."
       exit 1
     fi
-{{- end }}
+    {{- end }}
