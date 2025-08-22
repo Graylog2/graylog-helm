@@ -106,7 +106,7 @@ multipass exec microk8s-vm -- sudo sysctl -w vm.max_map_count=262144
 helm template graylog . --debug | less
 
 # do a dry run with a small configuration
-helm install graylog . --dry-run --debug --create-namespace -n graylog --set quicksetup="small"
+helm install graylog . --dry-run --debug --create-namespace -n graylog --set size="xs"
 
 # do a dry run with the default configuration
 helm install graylog . --dry-run --debug --create-namespace -n graylog
@@ -116,7 +116,7 @@ helm install graylog . --dry-run --debug --create-namespace -n graylog
 ### Installing chart
 
 ```bash
-helm install graylog . -n graylog --create-namespace -n graylog --set quicksetup="small" --set graylog.custom.service.type="LoadBalancer"
+helm install graylog . -n graylog --create-namespace -n graylog --set size="xs" --set graylog.custom.service.type="LoadBalancer"
 ```
 
 ### Upgrading chart

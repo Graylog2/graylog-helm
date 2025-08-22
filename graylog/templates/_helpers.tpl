@@ -65,76 +65,67 @@ Service account name
 {{- end }}
 
 {{/*
-Quick setup values
+Size presets
+usage: (list <size preset key> <size field to index> . | list "graylog" | include "presets.size")
 */}}
-{{- define "graylog.quicksetup" }}
-{{- $retval := "" -}}
-{{/* get args: dot-separated key path, caller context */}}
-{{- $keypath := index . 0 | splitList "." }}
-{{- $hint := index . 1 }}
-{{- if $hint -}}
+{{- define "presets.size" }}
+{{- $indices := dict "replicas" 0 "cpu" 1 "memory" 2 -}}
+{{- $defaults := dict }}
+{{- $_ := list 2 1 1 | set $defaults "graylog" }}
+{{- $_  = list 3 0.5 3.5 | set $defaults "datanode" }}
+{{- $dictName  := index . 0 }}
+{{- $args := index . 1 | initial }}
+{{- $ctx := index . 1 | last }}
+{{- $sizeKey   := index $args 0 | default "default" }}
+{{- $fieldToIndex := index $args 1 | required "please request a valid size field: replicas, cpu, memory" }}
+{{- if hasKey $defaults $dictName | not }}
+  {{- fail "presets are only available for 'graylog' and 'datanode'" }}
+{{- end }}
+{{- $default := index $defaults $dictName }}
+{{- $presets := $ctx.Files.Get "files/presets.yaml" | fromYaml | default dict }}
+{{- $values := dig "size" $sizeKey $dictName $default $presets }}
+{{- index $indices $fieldToIndex | index $values }}
+{{- end }}
+
 {{/*
-# define quicksetup dicts
-hints:
-  small:
-    size:
-      replicas:
-        graylog: 1
-        datanode: 1
-  large:
-    size:
-      replicas:
-        graylog: 3
-        datanode: 5
+Graylog size presets
+Returns {replicas|cpu|memory} values for a given preset
+usage: (list $key <field> . | include "graylog.presets.size")
+  e.g. (list "small" "replicas" . | include "graylog.presets.size")
 */}}
-{{- $hints := dict -}}
-{{/* "small" hint */}}
-{{- $small := dict "size" }}
-{{- $ssize := dict "replicas" }}
-{{- $sreplicas := dict }}
-{{- $_ := set $sreplicas "graylog" 1 }}
-{{- $_ = set $sreplicas "datanode" 1 }}
-{{- $_ = set $ssize "replicas" $sreplicas }}
-{{- $_ = set $small "size" $ssize }}
-{{- $_ = set $hints "small" $small -}}
-{{/* "large" hint */}}
-{{- $large := dict "size" }}
-{{- $lsize := dict "replicas" }}
-{{- $lreplicas := dict }}
-{{- $_ = set $lreplicas "graylog" 3 }}
-{{- $_ = set $lreplicas "datanode" 5 }}
-{{- $_ = set $lsize "replicas" $lreplicas }}
-{{- $_ = set $large "size" $lsize }}
-{{- $_ = set $hints "large" $large -}}
-{{/* traverse path, if hint is supported */}}
-{{- $nested := get $hints $hint }}
-{{- range $_, $key := $keypath }}
-{{- $nested = get $nested $key }}
+{{- define "graylog.presets.size" }}
+{{- list "graylog" . | include "presets.size" }}
 {{- end }}
-{{- $retval = $nested }}
-{{- end }}
-{{- print $retval }}
+
+{{/*
+Datanode size presets
+Returns {replicas|cpu|memory} values for a given preset
+usage: (list $key <field> . | include "datanode.presets.size")
+  e.g. (list "small" "replicas" . | include "datanode.presets.size")
+*/}}
+{{- define "datanode.presets.size" }}
+{{- list "datanode" . | include "presets.size" }}
 {{- end }}
 
 {{/*
 Graylog replicas
 */}}
 {{- define "graylog.replicas" }}
-{{- .Values.graylog.replicas | default (list "size.replicas.graylog" .Values.quicksetup | include "graylog.quicksetup") | default 2 }}
+{{- .Values.graylog.replicas | default (list .Values.size "replicas" . | include "graylog.presets.size") | default 2 }}
 {{- end }}
 
 {{/*
 Datanode replicas
 */}}
 {{- define "datanode.replicas" }}
-{{- .Values.datanode.replicas | default (list "size.replicas.datanode" .Values.quicksetup | include "graylog.quicksetup") | default 3 }}
+{{- .Values.datanode.replicas | default (list .Values.size "replicas" . | include "datanode.presets.size") | default 3 }}
 {{- end }}
 
 {{/*
 Graylog image tag
 */}}
 {{- define "graylog.imageTag" }}
-{{- .Values.graylog.custom.image.tag | default .Chart.AppVersion }}
+{{- coalesce .Values.graylog.custom.image.tag .Values.version | default .Chart.AppVersion }}
 {{- end }}
 
 {{/*
@@ -143,6 +134,21 @@ Graylog image
 {{- define "graylog.image" }}
 {{- $name := .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}
 {{- include "graylog.imageTag" . | printf "%s:%s" $name }}
+{{- end }}
+
+{{/*
+Graylog Datanode image tag
+*/}}
+{{- define "datanode.imageTag" }}
+{{- coalesce .Values.datanode.custom.image.tag .Values.version | default .Chart.AppVersion }}
+{{- end }}
+
+{{/*
+Graylog Datanode image
+*/}}
+{{- define "datanode.image" }}
+{{- $name := .Values.datanode.custom.image.repository | default "graylog/graylog-datanode" }}
+{{- include "datanode.imageTag" . | printf "%s:%s" $name }}
 {{- end }}
 
 {{/*

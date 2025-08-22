@@ -53,7 +53,7 @@ spec:
       {{- end }}
       containers:
         - name: graylog-datanode
-          image: "{{ .Values.datanode.custom.image.repository | default "graylog/graylog-datanode"  }}:{{ .Values.datanode.custom.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "datanode.image" . }}
           imagePullPolicy: {{ .Values.datanode.custom.image.imagePullPolicy }}
           envFrom:
             - configMapRef:
@@ -77,6 +77,16 @@ spec:
                 secretKeyRef:
                   name: {{ include "graylog.secretsName" . }}
                   key: GRAYLOG_MONGODB_URI
+            - name: GRAYLOG_S3_CLIENT_DEFAULT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "graylog.secretsName" . }}
+                  key: GRAYLOG_S3_CLIENT_DEFAULT_SECRET_KEY
+            - name: GRAYLOG_S3_CLIENT_DEFAULT_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "graylog.secretsName" . }}
+                  key: GRAYLOG_S3_CLIENT_DEFAULT_ACCESS_KEY
           ports:
             - name: api
               containerPort: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}

@@ -1,0 +1,27 @@
+size:
+  # <key>:
+  #   {graylog|datanode}: [ <number of node replicas>, <vCPU/node>, <memory/node> ]
+  poc:
+    graylog:  [ 1,   1,   1 ]
+    datanode: [ 1, 0.5, 3.5 ]
+  xs:
+    graylog:  [ 1,   2,   4 ]
+    datanode: [ 1,   1,   4 ]
+  small:
+    graylog:  [ 1,   2,   4 ]
+    datanode: [ 2,   2,   8 ]
+  medium:
+    graylog:  [ 2,   4,   8 ]
+    datanode: [ 2,   4,  16 ]
+  large:
+    graylog:  [ 2,   4,   8 ]
+    datanode: [ 3,   4,  16 ]
+  xl:
+    graylog:  [ 3,   4,   8 ]
+    datanode: [ 4,   4,  16 ]
+  xxl:
+    graylog:  [ 4,   4,   8 ]
+    datanode: [ 6,   4,  16 ]
+  default:
+    graylog:  [ 2,   1,   1 ]
+    datanode: [ 3, 0.5, 3.5 ]
