@@ -11,13 +11,9 @@ This chart is still under development and does not have locked in api contracts 
 ## Table of Contents
 * [Requirements](#requirements)
 * [Installation](#installation)
-  * [Clone this repo](#clone-this-repo)
-  * [Install local chart](#install-local-chart)
 * [Post-installation](#post-installation)
   * [Set root Graylog password](#set-root-graylog-password)
   * [Set external access](#set-external-access)
-    * [LoadBalancer Service](#alternative-loadbalancer-service)
-    * [Port Forwarding](#temporary-access-port-forwarding)
 * [Usage](#usage)
   * [Scale Graylog](#scale-graylog)
   * [Scale DataNode](#scale-datanode)
@@ -26,17 +22,11 @@ This chart is still under development and does not have locked in api contracts 
   * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
   * [Add inputs](#add-inputs)
   * [Enable TLS](#enable-tls)
-    * [Bring Your Own Certificate](#bring-your-own-certificate)
 * [Uninstall](#uninstall)
   * [Removing everything](#removing-everything)
 * [Debugging](#debugging)
 * [Logging](#logging)
 * [Graylog Helm Chart Values Reference](#graylog-helm-chart-values-reference)
-  * [Global](#global)
-  * [Graylog application](#graylog-application)
-  * [DataNode](#datanode)
-  * [Service Account](#service-account)
-  * [Ingress](#ingress)
 
 ## Requirements
 - Kubernetes v1.32
