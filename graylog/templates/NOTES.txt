@@ -25,7 +25,7 @@ Welcome to Graylog!
 
 · Get the URL of the UI for your Graylog instance by running the following command:
 
-    echo http://$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "graylog.serviceName" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}"):{{ .Values.graylog.custom.service.ports.app | default 9000 | int }}/
+    echo http://$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "graylog.serviceName" . }} --template "{{"{{ with (index .status.loadBalancer.ingress 0) }}{{ or .hostname .ip }}{{ end }}"}}"):{{ .Values.graylog.custom.service.ports.app | default 9000 | int }}/
 
 {{- if .Release.IsInstall }}
 

@@ -10,6 +10,11 @@ data:
     if [ -f /mnt/data/journal/.lock ]; then
       echo "Data already initialized, skipping copy."
     else
+      # append publish uri manually
+      {{- $host := printf "${HOSTNAME}.%s.%s.svc.cluster.local" (include "graylog.serviceName" .) (.Release.Namespace) }}
+      {{- $port := .Values.graylog.custom.service.ports.app | default 9000 | int }}
+      echo http_publish_uri={{ printf "http://%s:%d/" $host $port | quote }} >> /usr/share/graylog/data/config/graylog.conf
+      # copy data dir
       cp -r /usr/share/graylog/data/* /mnt/data/
     fi
     {{- if .Values.graylog.config.plugins.enabled }}
