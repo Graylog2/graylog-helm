@@ -100,8 +100,14 @@ spec:
         - name: graylog-app
           image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.custom.image.imagePullPolicy }}
-          {{- if or .Values.graylog.custom.env .Values.graylog.custom.extraEnv }}
           env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: GRAYLOG_HTTP_PUBLISH_URI
+              value: {{ include "graylog.publishUri" . | quote }}
+          {{- if or .Values.graylog.custom.env .Values.graylog.custom.extraEnv }}
             {{- include "graylog.custom.env" .Values.graylog | indent 12 }}
           {{- end }}
           envFrom:

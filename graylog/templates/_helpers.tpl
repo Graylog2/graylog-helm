@@ -285,6 +285,15 @@ usage: {{ include "graylog.custom.env" .Values.{graylog|datanode} | indent N }}
 {{- end }}
 
 {{/*
+Graylog Publish URI
+*/}}
+{{- define "graylog.publishUri" }}
+{{- $port := .Values.graylog.custom.service.ports.app | default 9000 | int }}
+{{- $scheme := .Values.graylog.config.tls.byoc.enabled | ternary "https" "http" }}
+{{- printf "%s://$(POD_NAME).%s.%s.svc.cluster.local:%d/" $scheme (include "graylog.serviceName" .) .Release.Namespace $port }}
+{{- end }}
+
+{{/*
 Graylog External URI
 */}}
 {{- define "graylog.externalUri" }}
