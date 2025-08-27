@@ -70,6 +70,7 @@ graylog:
       maxHeaderSize: "8192"
       readTimeout: "10s"
       threadPoolSize: "64"
+      externalUri: ""
     performance:
       asyncEventbusProcessors: "2"
       autoRestartInputs: "false"

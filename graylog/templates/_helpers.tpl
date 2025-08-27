@@ -285,6 +285,34 @@ usage: {{ include "graylog.custom.env" .Values.{graylog|datanode} | indent N }}
 {{- end }}
 
 {{/*
+Graylog External URI
+*/}}
+{{- define "graylog.externalUri" }}
+{{- $externalHost := "" }}
+{{- $scheme := "http" }}
+{{- $port := include "graylog.service.port.app" . | printf ":%s" }}
+{{- $svc := include "graylog.serviceName" . | lookup "v1" "Service" .Release.Namespace }}
+{{- if and .Values.graylog.config.tls.byoc.enabled .Values.graylog.config.tls.byoc.cn }}
+  {{- $externalHost = .Values.graylog.config.tls.byoc.cn }}
+  {{- $scheme = "https" }}
+{{- else if len .Values.ingress.web.tls | lt 0 | and .Values.ingress.web.enabled }}
+  {{- $externalHost = index (index .Values.ingress.web.tls 0).hosts 0 }}
+  {{- $scheme = "https" }}
+  {{- $port = "" }}
+{{- else if len .Values.ingress.web.hosts | lt 0 | and .Values.ingress.web.enabled }}
+  {{- $externalHost = (index .Values.ingress.web.hosts 0).host }}
+  {{- $port = "" }}
+{{- else if eq .Values.graylog.custom.service.type "LoadBalancer" | and $svc $svc.status.loadBalancer }}
+  {{- $lbName := index $svc.status.loadBalancer.ingress 0 }}
+  {{- $externalHost = coalesce $lbName.hostname $lbName.ip }}
+{{- end }}
+{{- $externalHost = $externalHost | default .Values.graylog.config.network.externalUri }}
+{{- if $externalHost }}
+  {{- printf "%s://%s%s/" $scheme $externalHost $port }}
+{{- end }}
+{{- end }}
+
+{{/*
 GeoIP update JobSpec
 usage: {{ list $geoSecretName $claimName $podIndex | include "graylog.geoip.job.spec" | indent }}
 */}}

@@ -46,9 +46,11 @@ data:
   GRAYLOG_HTTP_ENABLE_TLS: {{ .Values.graylog.config.tls.byoc.enabled | quote }}
   GRAYLOG_HTTP_TLS_CERT_FILE: "/usr/share/graylog/tls/tls.crt"
   GRAYLOG_HTTP_TLS_KEY_FILE: "/usr/share/graylog/tls/tls.key"
-  {{- if and .Values.graylog.config.tls.byoc.enabled .Values.graylog.config.tls.byoc.cn }}
-  GRAYLOG_HTTP_EXTERNAL_URI: {{ include "graylog.service.port.app" . | printf "https://%s:%s/" .Values.graylog.config.tls.byoc.cn }}
-  {{- end }}
+  {{- $externalUri := include "graylog.externalUri" . }}
+  {{- if $externalUri }}
+  GRAYLOG_HTTP_EXTERNAL_URI: {{ $externalUri | quote }}
+  {{- end -}}
+  {{/* http_publish_uri is added manually to graylog.conf for each node */}}
   # GRAYLOG_HTTP_PUBLISH_URI: ""
 
   # Performance Tuning
