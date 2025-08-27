@@ -48,7 +48,7 @@ Welcome to Graylog!
 
 · WARNING: You are still using the default password {{ include "graylog.rootPassword" . | quote }}. This MUST be changed IMMEDIATELY using the following command:
 
-    echo "Enter your new password and press return:" && read -s pass && helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
+    echo "Enter your new password and press return:" && read -s pass && echo "Upgrading helm release {{ squote .Release.Name}}..." && helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 {{- end }}
 
 · Use the following command to print this status page again:

@@ -50,7 +50,7 @@ data:
   {{- if $externalUri }}
   GRAYLOG_HTTP_EXTERNAL_URI: {{ $externalUri | quote }}
   {{- end -}}
-  {{/* http_publish_uri is added manually to graylog.conf for each node */}}
+  {{/* http_publish_uri is rendered directly on the PodSpec for each Graylog node based on $POD_NAME */}}
   # GRAYLOG_HTTP_PUBLISH_URI: ""
 
   # Performance Tuning
