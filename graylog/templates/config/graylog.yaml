@@ -6,7 +6,7 @@ data:
   GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.custom.metrics.enabled | ternary true false | quote }}
   GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfSignedStartup | default true | quote }}
   GRAYLOG_IS_CLOUD: {{ .Values.graylog.config.isCloud | default false | quote }}
-  GRAYLOG_SERVER_JAVA_OPTS: {{.Values.graylog.config.serverJavaOpts | quote }}
+  GRAYLOG_SERVER_JAVA_OPTS: {{ include "graylog.javaOpts" . | quote }}
   GRAYLOG_LEADER_ELECTION_MODE: {{ .Values.graylog.config.leaderElectionMode | quote }}
   GRAYLOG_MONGODB_MAX_CONNECTIONS: {{ .Values.graylog.config.mongodb.maxConnections | int | quote }}
   GRAYLOG_MONGODB_VERSION_PROBE_ATTEMPTS: {{ .Values.graylog.config.mongodb.versionProbeAttempts | int | quote }}

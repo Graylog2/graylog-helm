@@ -45,14 +45,17 @@ graylog:
     timezone: "UTC"
     selfSignedStartup: "true"
     serverJavaOpts: "-Xms1g -Xmx1g"
+    extraServerJavaOpts: []
     leaderElectionMode: "automatic"
     contentPacksAutoInstall: "true"
     isCloud: "false"
     tls:
       byoc:
         enabled: false
-        secretName:
-        keyPassword:
+        secretName: ""
+        keyPassword: ""
+        updateKeyStore: true
+        keyStorePass: "changeit"
     mongodb:
       maxConnections: "1000"
       versionProbeAttempts: "0"

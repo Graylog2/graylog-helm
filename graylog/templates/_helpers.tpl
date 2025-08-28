@@ -427,3 +427,15 @@ Geolocation mmdb URLs
 {{- $urls | join "^" | quote }}
 {{- end }}
 {{- end }}
+
+{{/*
+Graylog Java Options
+*/}}
+{{- define "graylog.javaOpts" }}
+{{- $extraOpts := .Values.graylog.config.extraServerJavaOpts | default list }}
+{{- if and .Values.graylog.config.tls.byoc.enabled .Values.graylog.config.tls.byoc.updateKeyStore }}
+{{- $extraOpts = append $extraOpts "-Djavax.net.ssl.trustStore=/usr/share/graylog/data/cacerts/graylog.jks" }}
+{{- $extraOpts = .Values.graylog.config.tls.byoc.keyStorePass | default "changeit" | printf "-Djavax.net.ssl.trustStorePassword=%s" | append $extraOpts }}
+{{- end }}
+{{- prepend $extraOpts .Values.graylog.config.serverJavaOpts | compact | join " " }}
+{{- end }}
