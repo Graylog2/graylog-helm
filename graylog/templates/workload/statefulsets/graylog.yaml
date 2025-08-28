@@ -76,6 +76,12 @@ spec:
               mountPath: /mnt/data
             - name: init-script
               mountPath: /scripts
+            {{- if .Values.graylog.config.tls.byoc.enabled }}
+            - name: tls-creds
+              mountPath: /mnt/tls/tls.crt
+              subPath: tls.crt
+              readOnly: true
+            {{- end }}
         {{- if .Values.graylog.config.plugins.enabled }}
             - name: init-plugins
               mountPath: /mnt/plugins
