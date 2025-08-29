@@ -1,4 +1,4 @@
-# Bring Your Own Mogngo
+# Bring Your Own Mongo
 Graylog Helm supports bringing your own Mongo, the only requirement is that it fits within our
 [compatability matrix](https://go2docs.graylog.org/current/downloading_and_installing_graylog/compatibility_matrix.htm).
 ## Steps
