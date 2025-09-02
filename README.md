@@ -42,7 +42,7 @@ These dependencies are not bundled with the chart and must be installed separate
 > We do not provide support for any of these optional dependencies.
 > Please refer to their respective documentation for installation, usage, and troubleshooting.
 
-#### Ingress Controller
+#### _Ingress Controller_
 
 By default, the chart exposes a Kubernetes service.
 However, we also recommend using an **Ingress Controller** for better management of external traffic.
@@ -51,7 +51,7 @@ If you set `ingress.enabled` to `true`, the chart will provision an Ingress reso
 > [!IMPORTANT]
 > You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's installed in your cluster beforehand.
 
-#### cert-manager
+#### _cert-manager_
 
 You can always [bring your own certificates](#bring-your-own-certificate-ingress-controller-recommended),
 but using `cert-manager` can simplify TLS setup and certificate renewal considerably.
