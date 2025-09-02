@@ -76,7 +76,7 @@ spec:
               mountPath: /mnt/data
             - name: init-script
               mountPath: /scripts
-            {{- if .Values.graylog.config.tls.byoc.enabled }}
+            {{- if .Values.graylog.config.tls.enabled }}
             - name: tls-creds
               mountPath: /mnt/tls/tls.crt
               subPath: tls.crt
@@ -163,7 +163,7 @@ spec:
           volumeMounts:
             - name: {{ include "graylog.volumeName" . }}
               mountPath: /usr/share/graylog/data
-            {{- if .Values.graylog.config.tls.byoc.enabled }}
+            {{- if .Values.graylog.config.tls.enabled }}
             - name: tls-creds
               mountPath: /usr/share/graylog/tls
             {{- end }}
@@ -184,10 +184,10 @@ spec:
         configMap:
           name: init-script-cm
           defaultMode: 0755
-      {{- if .Values.graylog.config.tls.byoc.enabled }}
+      {{- if .Values.graylog.config.tls.enabled }}
       - name: tls-creds
         secret:
-          secretName: {{ .Values.graylog.config.tls.byoc.secretName | quote }}
+          secretName: {{ .Values.graylog.config.tls.secretName | quote }}
       {{- end }}
       {{- if .Values.graylog.config.plugins.enabled }}
       - name: init-plugins

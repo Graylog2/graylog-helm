@@ -289,7 +289,7 @@ Graylog Publish URI
 */}}
 {{- define "graylog.publishUri" }}
 {{- $port := .Values.graylog.custom.service.ports.app | default 9000 | int }}
-{{- $scheme := .Values.graylog.config.tls.byoc.enabled | ternary "https" "http" }}
+{{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
 {{- printf "%s://$(POD_NAME).%s.%s.svc.cluster.local:%d/" $scheme (include "graylog.serviceName" .) .Release.Namespace $port }}
 {{- end }}
 
@@ -301,8 +301,8 @@ Graylog External URI
 {{- $scheme := "http" }}
 {{- $port := include "graylog.service.port.app" . | printf ":%s" }}
 {{- $svc := include "graylog.serviceName" . | lookup "v1" "Service" .Release.Namespace }}
-{{- if and .Values.graylog.config.tls.byoc.enabled .Values.graylog.config.tls.byoc.cn }}
-  {{- $externalHost = .Values.graylog.config.tls.byoc.cn }}
+{{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.cn }}
+  {{- $externalHost = .Values.graylog.config.tls.cn }}
   {{- $scheme = "https" }}
 {{- else if len .Values.ingress.web.tls | lt 0 | and .Values.ingress.web.enabled }}
   {{- $externalHost = index (index .Values.ingress.web.tls 0).hosts 0 }}
@@ -433,9 +433,9 @@ Graylog Java Options
 */}}
 {{- define "graylog.javaOpts" }}
 {{- $extraOpts := .Values.graylog.config.extraServerJavaOpts | default list }}
-{{- if and .Values.graylog.config.tls.byoc.enabled .Values.graylog.config.tls.byoc.updateKeyStore }}
+{{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.updateKeyStore }}
 {{- $extraOpts = append $extraOpts "-Djavax.net.ssl.trustStore=/usr/share/graylog/data/cacerts/graylog.jks" }}
-{{- $extraOpts = .Values.graylog.config.tls.byoc.keyStorePass | default "changeit" | printf "-Djavax.net.ssl.trustStorePassword=%s" | append $extraOpts }}
+{{- $extraOpts = .Values.graylog.config.tls.keyStorePass | default "changeit" | printf "-Djavax.net.ssl.trustStorePassword=%s" | append $extraOpts }}
 {{- end }}
 {{- prepend $extraOpts .Values.graylog.config.serverJavaOpts | compact | join " " }}
 {{- end }}

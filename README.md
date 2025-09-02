@@ -10,6 +10,7 @@ This chart is still under development and does not have locked in api contracts 
 
 ## Table of Contents
 * [Requirements](#requirements)
+  * [Optional Dependencies](#optional-dependencies)
 * [Installation](#installation)
 * [Post-installation](#post-installation)
   * [Set root Graylog password](#set-root-graylog-password)
@@ -30,6 +31,58 @@ This chart is still under development and does not have locked in api contracts 
 
 ## Requirements
 - Kubernetes v1.32
+
+### Optional Dependencies
+
+This Helm chart is designed as a turnkey solution for quick demos and proofs of concept,
+as well as streamlined production-grade setups through optional dependencies.
+These dependencies are not bundled with the chart and must be installed separately.
+
+> [!WARNING]
+> We do not provide support for any of these optional dependencies.
+> Please refer to their respective documentation for installation, usage, and troubleshooting.
+
+#### Ingress Controller
+
+By default, the chart exposes a Kubernetes service.
+However, we also recommend using an **Ingress Controller** for better management of external traffic.
+If you set `ingress.enabled` to `true`, the chart will provision an Ingress resource for you.
+
+> [!IMPORTANT]
+> You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's installed in your cluster beforehand.
+
+#### cert-manager
+
+You can always [bring your own certificates](#bring-your-own-certificate-ingress-controller-recommended),
+but using `cert-manager` can simplify TLS setup and certificate renewal considerably.
+
+Make sure you have [Ingress Controller](#ingress-controller) installed, and that `ingress.enabled` is set to `true`.
+Then, configure `ingress.tls` and `ingress.config.issuer` with the name of an existing Issuer resource,
+and let `cert-manager` do the rest!
+
+<!--
+For convenience, this chart also provides an optional built-in feature to automatically create a Let's Encrypt issuer
+for `cert-manager`. This feature is disabled by default, since issuers are typically managed directly by cluster
+administrators. However, if you don't want to manage the issuer yourself, just set `managed.issuer=true` and
+we'll provision one automatically for you.
+-->
+<!--
+#### MongoDB Operator
+
+By default, this chart includes the Bitnami MongoDB sub-chart for simplicity and ease of use as it provides a
+zero-config, self-contained database setup. However, note that:
+
+- Bitnami’s free MongoDB containers are being deprecated.
+- The official MongoDB team recommends using the MongoDB Kubernetes Operator for production environments
+
+Thus, our chart also works with the **MongoDB Operator**, via a custom resource template rendered when the mongo
+subchart is disabled by setting `mongo.enabled = false`.
+
+> [!IMPORTANT]
+> The MongoDB operator must be installed and running in your cluster before disabling the subchart.
+
+This decoupled approach provides greater flexibility, lifecycle control, and production-readiness.
+-->
 
 <!--
 ### Install
@@ -187,23 +240,96 @@ The inputs should now be exposed. Make sure to complete their configuration thro
 ### Enable TLS
 
 Before you can enable TLS, you must associate a DNS name with your Graylog installation.
-More specifically, it should point to the external IP address (EXTERNAL-IP) associated with your Graylog service.
-You can retrieve this information like this:
+More specifically, it should point to the IP address/hostname associated the service used for [External Acess](#set-external-access).
+You may retrieve this information like this:
 
 ```sh
-kubectl get svc graylog-svc -n graylog
+kubectl get svc $SERVICE_NAME -n graylog
+# look for the EXTERNAL-IP field
 ```
 
-#### Bring Your Own Certificate
+With `SERVICE_NAME` being equal to the name of the service exposed by your ingress controller, if you're using one, or
+`graylog-svc` otherwise.
+
+Depending on your setup, TLS can be enabled in three different ways
+
+#### Bring Your Own Certificate: Ingress Controller (recommended)
 
 If you already have a TLS certificate-key pair, you can create a Kubernetes secret to store them:
 ```sh
 kubectl create secret tls my-cert --cert=public.pem --key=private.key -n graylog
 ```
 
-Enable TLS for your Graylog installation, referencing the Kubernetes secret:
+Enable TLS termination at the Ingress entrypoint for your Graylog installation, by referencing the Kubernetes secret:
+
+```yaml
+# ingress-with-tls.yaml
+ingress:
+  web:
+    enabled: true
+    hosts:
+      - host: graylog.hostname.example  # must match the one under 'tls'
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: my-cert             # <--- reference your secret name here!
+        hosts:
+          - graylog.hostname.example    # must match the one under 'hosts'
+```
+
 ```sh
-helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.byoc.enabled=true --set  graylog.config.tls.byoc.secretName="my-cert"
+helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yaml
+```
+
+#### cert-manager
+
+> [!NOTE]
+> An Issuer or ClusterIssuer resource is required for cert-manager to issue TLS certificates automatically.
+> Please refer to [cert-manager docs](https://cert-manager.io/docs/) for instructions.
+
+> [!NOTE]
+> TLS certificates issued by cert-manager are to be used in conjunction with Ingress.
+> Please make sure you already have an Ingress Controller running in your cluster before proceeding.
+
+This option allows you to enable TLS for your Graylog installation from well known CAs,
+without having to provision a TLS certificate yourself.
+
+```yaml
+# ingress-with-tls.yaml
+ingress:
+  web:
+    enabled: true
+    hosts:
+      - host: graylog.hostname.example  # must match the one under 'tls'
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: my-autoissued-cert  # cert-manager will mount the TLS certificate issued as a secret with this name
+        hosts:
+          - graylog.hostname.example    # this will end up in the certificate subjectAltName. Must match the one under 'hosts'
+```
+
+```sh
+helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yaml --set ingress.config.tls.issuer.existingName='<name of your existing issuer resource>'
+```
+
+#### Bring Your Own Certificate: Graylog Native TLS
+
+> [!IMPORTANT]
+> Native TLS requires one additional SAN in your certificate: `DNS:*.graylog-svc.graylog.svc.cluster.local`
+> Please, make sure your certificate includes this SAN. Otherwise, please reissue the certificate including the additional SAN.
+> If your CA won't (re)issue a certificate with this SAN, please consider TLS termination at the [Ingress Controller](#ingress-controller) as an alternative.
+
+If you already have a TLS certificate-key pair, you can create a Kubernetes secret to store them:
+```sh
+kubectl create secret tls my-cert --cert=public.pem --key=private.key -n graylog
+```
+
+Enable TLS for your Graylog nodes, referencing the Kubernetes secret:
+```sh
+helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.enabled=true --set  graylog.config.tls.secretName="my-cert" --set graylog.config.tls.updateKeyStore=true
 ```
 
 ### Enable Geolocation
