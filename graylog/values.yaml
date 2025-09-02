@@ -50,12 +50,11 @@ graylog:
     contentPacksAutoInstall: "true"
     isCloud: "false"
     tls:
-      byoc:
-        enabled: false
-        secretName: ""
-        keyPassword: ""
-        updateKeyStore: true
-        keyStorePass: "changeit"
+      enabled: false
+      secretName: ""
+      keyPassword: ""
+      updateKeyStore: true
+      keyStorePass: "changeit"
     mongodb:
       maxConnections: "1000"
       versionProbeAttempts: "0"
