@@ -2,6 +2,7 @@ scratch
 stock
 graylog/values-glc.yaml
 dev/keys
+graylog/assets
 
 # Various IDEs
 .project

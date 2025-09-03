@@ -182,6 +182,13 @@ Graylog secret name
 {{- end }}
 
 {{/*
+Graylog Datanode secret name
+*/}}
+{{- define "graylog.datanode.secretsName" -}}
+{{- include "graylog.secretsName" . | printf "%s-datanode" }}
+{{- end }}
+
+{{/*
 Graylog backup-secret name
 */}}
 {{- define "graylog.backupSecretName" -}}

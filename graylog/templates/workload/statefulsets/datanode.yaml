@@ -58,6 +58,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "graylog.datanode.configmapName" . }}
+            - secretRef:
+                name: {{ include "graylog.datanode.secretsName" . }}
           env:
             - name: POD_NAME
               valueFrom:
@@ -77,16 +79,6 @@ spec:
                 secretKeyRef:
                   name: {{ include "graylog.secretsName" . }}
                   key: GRAYLOG_MONGODB_URI
-            - name: GRAYLOG_S3_CLIENT_DEFAULT_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "graylog.secretsName" . }}
-                  key: GRAYLOG_S3_CLIENT_DEFAULT_SECRET_KEY
-            - name: GRAYLOG_S3_CLIENT_DEFAULT_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "graylog.secretsName" . }}
-                  key: GRAYLOG_S3_CLIENT_DEFAULT_ACCESS_KEY
             {{- include "graylog.custom.env" .Values.datanode | indent 12 }}
           ports:
             - name: api
