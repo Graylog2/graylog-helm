@@ -240,7 +240,7 @@ The inputs should now be exposed. Make sure to complete their configuration thro
 ### Enable TLS
 
 Before you can enable TLS, you must associate a DNS name with your Graylog installation.
-More specifically, it should point to the IP address/hostname associated the service used for [External Acess](#set-external-access).
+More specifically, your domain should point to the IP address/hostname associated the service used for [External Acess](#set-external-access).
 You may retrieve this information like this:
 
 ```sh
@@ -251,7 +251,7 @@ kubectl get svc $SERVICE_NAME -n graylog
 With `SERVICE_NAME` being equal to the name of the service exposed by your ingress controller, if you're using one, or
 `graylog-svc` otherwise.
 
-Depending on your setup, TLS can be enabled in three different ways
+Depending on your setup, TLS can be enabled in three different ways:
 
 #### Bring Your Own Certificate: Ingress Controller (recommended)
 
@@ -331,6 +331,9 @@ Enable TLS for your Graylog nodes, referencing the Kubernetes secret:
 ```sh
 helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.enabled=true --set  graylog.config.tls.secretName="my-cert" --set graylog.config.tls.updateKeyStore=true
 ```
+The default set of trusted Certificate Authorities bundled in the Java Runtime for Java 17 is aligned with major,
+well-known public root CAs. Make sure to set `graylog.config.tls.updateKeyStore` to `true` if you are using a
+self-signed certificate, or if you think the CA that signed your certificate might not be among this default set.
 
 ### Enable Geolocation
 ```sh

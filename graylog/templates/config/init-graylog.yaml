@@ -24,14 +24,14 @@ data:
     {{- if .Values.graylog.config.tls.updateKeyStore}}
       # check if root CA is in cert file
       openssl crl2pkcs7 -nocrl -certfile "/mnt/tls/tls.crt" | openssl pkcs7 -print_certs -outform PEM | awk -v out="cert" '
-      /-----BEGIN CERTIFICATE-----/ {n++; f=sprintf("%s-%03d.pem", out, n)}
-      {print > f}
-      /-----END CERTIFICATE-----/ {close(f)}
+      /-----BEGIN CERTIFICATE-----/ {n++; f=sprintf("%s-%03d.pem", out, n); writing=1}
+      writing {print > f}
+      /-----END CERTIFICATE-----/ {close(f); writing=0}
       '
       ROOT_CA=""
       for f in cert-*.pem; do
-        subj="$(openssl x509 -in "$f" -noout -subject -nameopt RFC2253 | sed "s/^subject= //")"
-        issu="$(openssl x509 -in "$f" -noout -issuer  -nameopt RFC2253 | sed "s/^issuer= //")"
+        subj="$(openssl x509 -in "$f" -noout -subject -nameopt RFC2253 | sed "s/^subject=//")"
+        issu="$(openssl x509 -in "$f" -noout -issuer  -nameopt RFC2253 | sed "s/^issuer=//")"
         if [ "$subj" = "$issu" ]; then
           ROOT_CA="root-ca.pem"
           cp "$f" "${ROOT_CA}"
@@ -50,7 +50,7 @@ data:
       cp "${JAVA_HOME_LOCAL}/lib/security/cacerts" "${CACERTS_SRC}/graylog.jks"
       chown graylog:graylog "${CACERTS_SRC}/graylog.jks"
       keytool -importcert -noprompt -alias byoc -file "/mnt/tls/tls.crt" -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
-      [ -n "${ROOT_CA}" ] && keytool -importcert -noprompt -alias byoc-ca -file "${ROOT_CA}" -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
+      [ -n "${ROOT_CA}" ] && echo "Adding root CA..." && keytool -importcert -noprompt -alias byoc-ca -file "${ROOT_CA}" -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
       if [ ! -e "${CACERTS_DST}/graylog.jks" ] || ! cmp -s "${CACERTS_SRC}/graylog.jks" "${CACERTS_DST}/graylog.jks"; then
         cp "${CACERTS_SRC}/graylog.jks" "${CACERTS_DST}/graylog.jks"
         echo "Updated Java Key Store."
