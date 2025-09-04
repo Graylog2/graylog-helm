@@ -294,6 +294,8 @@ ingress:
     defaultBackend:
       enabled: true
     tls:
+      clusterIssuer:
+        existingName:
       issuer:
         existingName:
         autoissue:
