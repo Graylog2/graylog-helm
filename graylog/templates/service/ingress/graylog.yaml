@@ -46,6 +46,15 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          {{- if not .paths }}
+          - path: "/"
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "graylog.serviceName" $ }}
+                port:
+                  number: {{ $.Values.graylog.custom.service.ports.app }}
+          {{- end }}
           {{- range .paths }}
           - path: {{ .path }}
             {{- with .pathType }}

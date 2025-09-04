@@ -504,4 +504,3 @@ Fallback service/deployment name
 {{- define "fallback.name" }}
 {{- include "graylog.fullname" . | printf "%s-waiting-room" }}
 {{- end }}
-
