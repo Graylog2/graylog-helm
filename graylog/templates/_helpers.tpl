@@ -464,23 +464,6 @@ Cert-manager issuer name
 {{- end }}
 
 {{/*
-Cert-manager ClusterIssuer name getter
-*/}}
-{{- define "cert-manager.clusterissuer.existing.name" }}
-{{- $gv := "cert-manager.io/v1" }}
-{{- $name := "" }}
-{{- if .Capabilities.APIVersions.Has $gv }}
-{{- $ci := lookup $gv "ClusterIssuer" "" "" | default dict }}
-{{- $hasCI := $ci.items | default (list) | len | lt 0 }}
-{{- if $hasCI }}
-{{- $name = (index $ci.items 0).metadata.name | default "" }}
-{{- end }}
-{{- end }}
-{{- $name }}
-{{- end }}
-
-
-{{/*
 Cert-manager issuer checker
 Return: true if there is at least one Issuer or ClusterIssuer in the cluster.
 Usage: if (include "cert-manager.issuer.exists.any" . | eq "true") ...
@@ -489,9 +472,9 @@ Usage: if (include "cert-manager.issuer.exists.any" . | eq "true") ...
 {{- $gv := "cert-manager.io/v1" }}
 {{- $exists := false }}
 {{- if .Capabilities.APIVersions.Has $gv }}
-{{- $ci := include "cert-manager.clusterissuer.existing.name" . }}
+{{- $ci := lookup $gv "ClusterIssuer" "" "" | default dict }}
 {{- $ni := lookup $gv "Issuer" .Release.Namespace "" | default dict }}
-{{- $hasCI := empty $ci | not }}
+{{- $hasCI := $ci.items | default (list) | len | lt 0 }}
 {{- $hasNI := $ni.items | default (list) | len | lt 0 }}
 {{- $exists = or $hasCI $hasNI }}
 {{- end }}
