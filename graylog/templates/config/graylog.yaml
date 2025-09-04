@@ -46,9 +46,8 @@ data:
   GRAYLOG_HTTP_ENABLE_TLS: {{ .Values.graylog.config.tls.enabled | quote }}
   GRAYLOG_HTTP_TLS_CERT_FILE: "/usr/share/graylog/tls/tls.crt"
   GRAYLOG_HTTP_TLS_KEY_FILE: "/usr/share/graylog/tls/tls.key"
-  {{- $externalUri := include "graylog.externalUri" . }}
-  {{- if $externalUri }}
-  GRAYLOG_HTTP_EXTERNAL_URI: {{ $externalUri | quote }}
+  {{- with (include "graylog.externalUri" .) }}
+  GRAYLOG_HTTP_EXTERNAL_URI: {{ . | quote }}
   {{- end -}}
   {{/* http_publish_uri is rendered directly on the PodSpec for each Graylog node based on $POD_NAME */}}
   # GRAYLOG_HTTP_PUBLISH_URI: ""

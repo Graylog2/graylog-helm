@@ -304,12 +304,20 @@ Graylog External URI
 {{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.cn }}
   {{- $externalHost = .Values.graylog.config.tls.cn }}
   {{- $scheme = "https" }}
-{{- else if len .Values.ingress.web.tls | lt 0 | and .Values.ingress.web.enabled }}
-  {{- $externalHost = index (index .Values.ingress.web.tls 0).hosts 0 }}
+{{- else if and .Values.ingress.enabled .Values.ingress.web.enabled .Values.ingress.web.tls }}
+  {{- with .Values.ingress.web.tls }}
+    {{- with (index . 0).hosts }}
+        {{- $externalHost = index . 0 | default "" }}
+    {{- end }}
+  {{- end }}
   {{- $scheme = "https" }}
   {{- $port = "" }}
-{{- else if len .Values.ingress.web.hosts | lt 0 | and .Values.ingress.web.enabled }}
-  {{- $externalHost = (index .Values.ingress.web.hosts 0).host }}
+{{- else if and .Values.ingress.enabled .Values.ingress.web.enabled .Values.ingress.web.hosts }}
+  {{- with .Values.ingress.web.hosts }}
+    {{- with (index . 0) }}
+        {{- $externalHost = .host | default "" }}
+    {{- end }}
+  {{- end }}
   {{- $port = "" }}
 {{- else if eq .Values.graylog.custom.service.type "LoadBalancer" | and $svc $svc.status.loadBalancer }}
   {{- $lbName := index $svc.status.loadBalancer.ingress 0 }}
