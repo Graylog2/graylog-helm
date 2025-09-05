@@ -38,7 +38,7 @@ spec:
         {{- range .hosts }}
         - {{ . | quote }}
         {{- end }}
-      secretName: {{ .secretName }}
+      secretName: {{ .secretName | default (include "graylog.fullname" $ | printf "%s-tls") }}
     {{- end }}
   {{- end }}
   rules:
