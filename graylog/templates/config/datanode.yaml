@@ -8,7 +8,10 @@ data:
   GRAYLOG_DATANODE_OPENSEARCH_HEAP: {{ .Values.datanode.config.opensearchHeap | quote }}
   GRAYLOG_DATANODE_SKIP_PREFLIGHT_CHECKS: {{ .Values.datanode.config.skipPreflightChecks | quote }}
   GRAYLOG_DATANODE_NODE_SEARCH_CACHE_SIZE: {{ .Values.datanode.config.nodeSearchCacheSize | quote }}
-  {{- if .Values.datanode.config.s3ClientDefaultEndpoint | and .Values.datanode.config.s3ClientDefaultSecretKey .Values.datanode.config.s3ClientDefaultAccessKey | not }}
+  {{- $sk := .Values.datanode.config.s3ClientDefaultSecretKey }}
+  {{- $ak := .Values.datanode.config.s3ClientDefaultAccessKey }}
+  {{- $endpoint := .Values.datanode.config.s3ClientDefaultEndpoint }}
+  {{- if or (not $ak | and $sk) (not $endpoint | and $ak) (not $sk | and $endpoint) }}
     {{ fail "All three values are required: datanode.config.s3ClientDefaultEndpoint, datanode.config.s3ClientDefaultSecretKey, and datanode.config.s3ClientDefaultAccessKey" }}
   {{- end }}
   GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ENDPOINT: {{ .Values.datanode.config.s3ClientDefaultEndpoint | quote }}
