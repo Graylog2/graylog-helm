@@ -1,4 +1,4 @@
-{{- if not .Values.graylog.config.tls.byoc.enabled | and (include "cert-manager.issuer.exists.any" . | eq "false") .Values.ingress.enabled .Values.ingress.config.tls.issuer.autoissue.enabled }}
+{{- if not .Values.graylog.config.tls.enabled | and (include "cert-manager.issuer.exists.any" . | eq "false") .Values.ingress.enabled .Values.ingress.config.tls.issuer.autoissue.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
