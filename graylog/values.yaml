@@ -251,6 +251,17 @@ datanode:
         labels: {}
         selector: {}
         dataSource: {}
+      warmTier:
+        enabled: false
+        storageClass: ""
+        existingClaim: ""
+        mountPath: ""
+        accessModes: []
+        size: "8Gi"
+        annotations: {}
+        labels: {}
+        selector: {}
+        dataSource: {}
       nativeLibs:
         enabled: false
         storageClass: ""
