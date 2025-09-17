@@ -361,10 +361,10 @@ helm upgrade -i graylog ./graylog -n graylog --reuse-values --set global.existin
 > [!IMPORTANT]
 > As a result of setting a global secret override, all Graylog and Mongo secrets are assumed to be managed externally.
 > Accordingly, any of the following configuration values will be ignored:
-> - graylog.config.rootPassword
-> - graylog.config.rootUsername
-> - graylog.config.secretPepper
-> - graylog.config.tls.keyPassword
+> - `graylog.config.rootPassword`
+> - `graylog.config.rootUsername`
+> - `graylog.config.secretPepper`
+> - `graylog.config.tls.keyPassword`
 
 ## Bring Your Own MongoDB
 
@@ -372,13 +372,17 @@ By default, this chart deploys a MongoDB replicaset using [the Bitnami MongoDB c
 If you prefer to use your own MongoDB instance, you can disable the bundled MongoDB and configure the chart to connect to your external database:
 
 ```sh
-helm upgrade -i graylog ./graylog -n graylog --reuse-values --set mongodb.subchart.enabled=false --set graylog.config.mongodb.customUri="mongodb://<username>:<password>@<hostname>:<port>[,<hostname-i>:<port-i>]/<db>"
+helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
+--set mongodb.subchart.enabled=false \
+--set graylog.config.mongodb.customUri="mongodb[+srv]://<username>:<password>@<hostname>:<port>[,<i-th hostname>:<i-th port>]/<db name>"
 ```
 
 **Alternatively**, the MongoDB URI can also be provided as part of an externally-managed secret:
 
 ```sh
-helm upgrade -i graylog ./graylog -n graylog --reuse-values --set mongodb.subchart.enabled=false --set global.existingSecretName="<your secret name>"
+helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
+--set mongodb.subchart.enabled=false \
+--set global.existingSecretName="<your secret name>"
 ```
 
 # Uninstall
