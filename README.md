@@ -373,16 +373,16 @@ If you prefer to use your own MongoDB instance, you can disable the bundled Mong
 
 ```sh
 helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
---set mongodb.subchart.enabled=false \
---set graylog.config.mongodb.customUri="mongodb[+srv]://<username>:<password>@<hostname>:<port>[,<i-th hostname>:<i-th port>]/<db name>"
+  --set mongodb.subchart.enabled=false \
+  --set graylog.config.mongodb.customUri="mongodb[+srv]://<username>:<password>@<hostname>:<port>[,<i-th hostname>:<i-th port>]/<db name>"
 ```
 
 **Alternatively**, the MongoDB URI can also be provided as part of an externally-managed secret:
 
 ```sh
 helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
---set mongodb.subchart.enabled=false \
---set global.existingSecretName="<your secret name>"
+  --set mongodb.subchart.enabled=false \
+  --set global.existingSecretName="<your secret name>"
 ```
 
 # Uninstall
