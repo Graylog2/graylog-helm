@@ -29,10 +29,10 @@ This chart is still under development and does not have locked in api contracts 
 * [Logging](#logging)
 * [Graylog Helm Chart Values Reference](#graylog-helm-chart-values-reference)
 
-## Requirements
+# Requirements
 - Kubernetes v1.32
 
-### Optional Dependencies
+## Optional Dependencies
 
 This Helm chart is designed as a turnkey solution for quick demos and proofs of concept,
 as well as streamlined production-grade setups through optional dependencies.
@@ -42,7 +42,7 @@ These dependencies are not bundled with the chart and must be installed separate
 > We do not provide support for any of these optional dependencies.
 > Please refer to their respective documentation for installation, usage, and troubleshooting.
 
-#### _Ingress Controller_
+### Ingress Controller
 
 By default, the chart exposes a Kubernetes service.
 However, we also recommend using an **Ingress Controller** for better management of external traffic.
@@ -51,7 +51,7 @@ If you set `ingress.enabled` to `true`, the chart will provision an Ingress reso
 > [!IMPORTANT]
 > You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's installed in your cluster beforehand.
 
-#### _cert-manager_
+### cert-manager
 
 You can always [bring your own certificates](#bring-your-own-certificate-ingress-controller-recommended),
 but using `cert-manager` can simplify TLS setup and certificate renewal considerably.
@@ -96,9 +96,9 @@ helm upgrade graylog graylog/graylog -n graylog --reuse-values
 ```
 -->
 
-## Installation
+# Installation
 
-### Clone this repo
+## Clone this repo
 ```sh
 # clone repo
 git clone git@github.com:Graylog2/graylog-helm.git
@@ -107,16 +107,16 @@ git clone git@github.com:Graylog2/graylog-helm.git
 cd graylog-helm
 ```
 
-### Install local chart
+## Install local chart
 ```sh
 helm install graylog ./graylog --namespace graylog --create-namespace
 ```
 
 🏁 That's it!
 
-## Post Installation
+# Post Installation
 
-### Set Root Graylog Password
+## Set Root Graylog Password
 Graylog is installed with a simple password by default. This **MUST be changed** once all pods achieve the `RUNNING` state using 
 the following command:
 
@@ -125,7 +125,7 @@ echo "Enter your new password and press return:" && read -s pass
 helm upgrade graylog ./graylog --namespace graylog --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 ```
 
-### Set External Access
+## Set External Access
 
 There are a number of ways to enable external access to the Graylog application. We recommend using an 
 [Ingress Controller](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/) 
@@ -138,7 +138,7 @@ Once an Ingress Controller has been installed and configured, run the following 
 helm upgrade graylog ./graylog -n graylog --set ingress.web.enabled="true" --reuse-values
 ```
 
-#### Alternative: LoadBalancer Service
+### Alternative: LoadBalancer Service
 Alternatively, external access can be configured directly through the provided service without the need for any 
 pre-existing dependencies.
 
@@ -146,16 +146,16 @@ pre-existing dependencies.
 helm upgrade graylog ./graylog -n graylog --set graylog.custom.service.type="LoadBalancer" --reuse-values
 ```
 
-#### Temporary access: Port Forwarding
+### Temporary access: Port Forwarding
 Finally, if you wish to enable external access _temporarily_, you can always use port forwarding:
 
 ```sh
 kubectl port-forward service/graylog-svc 9000:9000 -n graylog
 ```
 
-## Usage
+# Usage
 
-### Scale Graylog
+## Scale Graylog
 ```sh
 # scaling out: add more Graylog nodes to your cluster
 helm upgrade graylog ./graylog -n graylog --set graylog.replicas=3 --reuse-values
@@ -164,19 +164,19 @@ helm upgrade graylog ./graylog -n graylog --set graylog.replicas=3 --reuse-value
 helm upgrade graylog ./graylog -n graylog --set graylog.replicas=1 --reuse-values
 ```
 
-### Scale DataNode
+## Scale DataNode
 ```sh
 # scaling out: add more Graylog Data Nodes to your cluster
 helm upgrade graylog ./graylog -n graylog --set datanode.replicas=5 --reuse-values
 ```
 
-### Scale MongoDB
+## Scale MongoDB
 ```sh
 # scaling out: add more MongoDB nodes to your replicaset
 helm upgrade graylog ./graylog -n graylog --set mongodb.replicaCount=4 --reuse-values
 ```
 
-### Modify Graylog `server.conf` parameters
+## Modify Graylog `server.conf` parameters
 
 ```sh
 # A few examples:
@@ -197,7 +197,7 @@ helm upgrade graylog ./graylog -n graylog --set graylog.config.network.enableCor
 helm upgrade graylog ./graylog -n graylog --set graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
 ```
 
-### Customize deployed Kubernetes resources
+## Customize deployed Kubernetes resources
 ```sh
 # A few examples: 
 
@@ -211,7 +211,7 @@ helm upgrade graylog ./graylog -n graylog --set graylog.custom.readinessProbe.in
 helm upgrade graylog ./graylog -n graylog --set global.defaultStorageClass="gp2" --reuse-values
 ```
 
-### Add inputs
+## Add inputs
 
 First, define your inputs in a small YAML file like this one:
 
@@ -237,7 +237,7 @@ helm upgrade graylog ./graylog -n graylog -f inputs.yaml --reuse-values
 
 The inputs should now be exposed. Make sure to complete their configuration through the Graylog UI.
 
-### Enable TLS
+## Enable TLS
 
 Before you can enable TLS, you must associate a DNS name with your Graylog installation.
 More specifically, your domain should point to the IP address/hostname associated the service used for [External Acess](#set-external-access).
@@ -253,7 +253,7 @@ With `SERVICE_NAME` being equal to the name of the service exposed by your ingre
 
 Depending on your setup, TLS can be enabled in three different ways:
 
-#### Bring Your Own Certificate: Ingress Controller (recommended)
+### Option 1: Bring Your Own Certificate with Ingress Controller (recommended)
 
 If you already have a TLS certificate-key pair, you can create a Kubernetes secret to store them:
 ```sh
@@ -282,7 +282,7 @@ ingress:
 helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yaml
 ```
 
-#### cert-manager
+### Option 2: Auto-issued certificates using cert-manager
 
 > [!NOTE]
 > An Issuer or ClusterIssuer resource is required for cert-manager to issue TLS certificates automatically.
@@ -315,7 +315,7 @@ ingress:
 helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yaml --set ingress.config.tls.issuer.existingName='<name of your existing issuer resource>'
 ```
 
-#### Bring Your Own Certificate: Graylog Native TLS
+### Option 3: Bring Your Own Certificate with Graylog Native TLS
 
 > [!IMPORTANT]
 > Native TLS requires one additional SAN in your certificate: `DNS:*.graylog-svc.graylog.svc.cluster.local`
@@ -335,7 +335,7 @@ The default set of trusted Certificate Authorities bundled in the Java Runtime f
 well-known public root CAs. Make sure to set `graylog.config.tls.updateKeyStore` to `true` if you are using a
 self-signed certificate, or if you think the CA that signed your certificate might not be among this default set.
 
-### Enable Geolocation
+## Enable Geolocation
 ```sh
 helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.geolocation.enabled=true --set graylog.config.geolocation.maxmindGeoIp.enabled=true --set graylog.config.geolocation.maxmindGeoIp.accountId="<YOUR-MAXMIND-ACCOUNT-ID-HERE>" --set graylog.config.geolocation.maxmindGeoIp.licenseKey="<YOUR-MAXMIND-LICENSE-KEY-HERE>"
 ```
@@ -345,7 +345,41 @@ Use the following paths when enabling the Geo-location processor in the Graylog 
 - Path to the city database: `/usr/share/graylog/data/geolocation/GeoLite2-City.mmdb`
 - Path to the ASN database: `/usr/share/graylog/data/geolocation/GeoLite2-ASN.mmdb`
 
-## Uninstall
+# Using External Resources
+
+## Managing Secrets Externally
+
+By default, this chart manages application secrets (including MongoDB credentials) through Helm.
+If you already manage secrets using an external system, you can disable Helm-managed secrets and point the chart to your existing resources.
+
+```sh
+helm upgrade -i graylog ./graylog -n graylog --reuse-values --set global.existingSecretName="<your secret name>"
+```
+
+> [!IMPORTANT]
+> As a result of setting a global secret override, all Graylog and Mongo secrets are assumed to be managed externally.
+> Accordingly, any of the following configuration values will be ignored:
+> - graylog.config.rootPassword
+> - graylog.config.rootUsername
+> - graylog.config.secretPepper
+> - graylog.config.tls.keyPassword
+
+## Bring Your Own MongoDB
+
+By default, this chart deploys a MongoDB replicaset using [the Bitnami MongoDB chart](https://artifacthub.io/packages/helm/bitnami/mongodb) as a dependency.
+If you prefer to use your own MongoDB instance, you can disable the bundled MongoDB and configure the chart to connect to your external database:
+
+```sh
+helm upgrade -i graylog ./graylog -n graylog --reuse-values --set mongodb.subchart.enabled=false --set graylog.config.mongodb.customUri="mongodb://<username>:<password>@<hostname>:<port>[,<hostname-i>:<port-i>]/<db>"
+```
+
+**Alternatively**, the MongoDB URI can also be provided as part of an externally-managed secret:
+
+```sh
+helm upgrade -i graylog ./graylog -n graylog --reuse-values --set mongodb.subchart.enabled=false --set global.existingSecretName="<your secret name>"
+```
+
+# Uninstall
 ```sh
 # optional: scale Graylog down to zero
 kubectl scale sts graylog -n graylog --replicas 0  && kubectl wait --for=delete pod graylog-0 -n graylog
@@ -354,19 +388,19 @@ kubectl scale sts graylog -n graylog --replicas 0  && kubectl wait --for=delete 
 helm uninstall graylog -n graylog
 ```
 
-### Removing Everything
+## Removing Everything
 ```sh
 # CAUTION: this will delete ALL your data!
 kubectl delete $(kubectl get pvc -o name -n graylog; kubectl get secret -o name -n graylog) -n graylog
 ```
 
-## Debugging
+# Debugging
 Get a YAML output of the values being submitted.
 ```bash
 helm template graylog graylog -f graylog/values-glc.yaml | yq
 ```
 
-## Logging
+# Logging
 ```
 # Graylog app logs
 stern statefulset/graylog-app -n graylog-helm-dev-1
@@ -376,13 +410,13 @@ stern statefulset/graylog-datanode -n graylog-helm-dev-1
 
 ---
 
-## Graylog Helm Chart Values Reference
+# Graylog Helm Chart Values Reference
 | Key Path           | Description                                           | Default   |
 | ------------------ |-------------------------------------------------------| --------- |
 | `nameOverride`     | Override the `app.kubernetes.io/name` label value.    | `""`      |
 | `fullnameOverride` | Override the fully qualified name of the application. | `""`      |
 
-### Global
+## Global
 These values affect Graylog, DataNode, and MongoDB
 
 | Key Path                     | Description                                 | Default |
@@ -392,7 +426,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `global.defaultStorageClass` | Default storage class for PVCs.             | `""`    |
 
 
-### Graylog application
+## Graylog application
 | Key Path                                                              | Description                                                | Default                         |
 |-----------------------------------------------------------------------|------------------------------------------------------------|---------------------------------|
 | `graylog.enabled`                                                     | Enable the Graylog server.                                 | `true`                          |
@@ -481,7 +515,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.custom.service.ports.app`                                    | Graylog web UI port.                                       | `9000`                          |
 | `graylog.custom.service.ports.metrics`                                | Metrics endpoint port.                                     | `9833`                          |
 
-#### Graylog inputs
+### Graylog inputs
 | Key Path                       | Description                       | Example            |
 |--------------------------------|-----------------------------------|--------------------|
 | `graylog.inputs[i].name`       | Name to identify this input.      | `input-gelf`       |
@@ -489,7 +523,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.inputs[i].targetPort` | Target container port (optional). | `12201`            |
 | `graylog.inputs[i].protocol`   | Protocol used for this input.     | `TCP`              |
 
-#### Graylog plugins
+### Graylog plugins
 | Key Path                           | Description                            | Example                                                            |
 |------------------------------------|----------------------------------------|--------------------------------------------------------------------|
 | `graylog.plugins[i].name`          | Name to identify this plugin.          | `graylog-plugin-slack`                                             |
@@ -498,13 +532,13 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.plugins[i].url`           | URL of JAR to be retrieved.            | `https://myurl/plugins/graylog-plugin-slack.jar`                   |
 | `graylog.plugins[i].checksum`      | Checksum of JAR file.                  | `13550350a8681c84c861aac2e5b440161c2b33a3e4f302ac680ca5b686de48de` |
 
-#### Graylog environment variables
+### Graylog environment variables
 | Key Path                | Descriptions                                                                                                                                                                                   | Example                                                                                                                                                          |
 |-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `graylog.custom.env`    | Simple key/value environment variables                                                                                                                                                         | `["FOO=BAR", "HELLO=123"]`                                                                                                                                       |
 | `graylog.custom.EnvVar` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables<br/>(valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:<br/>  - name: MADE_UP_PASSWORD<br/>    valueFrom:<br/>      secretKeyRef:<br/>        name: mysecret<br/>        key: password</code></pre> |
 
-### Datanode
+## Datanode
 | Key Path                                                      | Description                                     | Default           |
 |---------------------------------------------------------------|-------------------------------------------------|-------------------|
 | `datanode.enabled`                                            | Enable Graylog datanode.                        | `true`            |
@@ -528,7 +562,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `datanode.custom.service.ports.config`                        | Configuration communication port.               | `9300`            |
 
 
-### Service Account
+## Service Account
 | Key Path                      | Description                       | Default |
 | ----------------------------- | --------------------------------- | ------- |
 | `serviceAccount.create`       | Create a new service account.     | `true`  |
@@ -537,9 +571,9 @@ These values affect Graylog, DataNode, and MongoDB
 | `serviceAccount.nameOverride` | Override name of service account. | `""`    |
 
 
-### Ingress
+## Ingress
 
-#### Web Ingress
+### Web Ingress
 | Key Path                                 | Description                        | Default                  |
 |------------------------------------------|------------------------------------| ------------------------ |
 | `ingress.web.enabled`                    | Enable ingress for Graylog Web.    | `false`                  |
@@ -550,7 +584,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `ingress.web.hosts[0].paths[0].pathType` | Path matching type.                | `ImplementationSpecific` |
 | `ingress.web.tls`                        | TLS configuration.                 | `[]`                     |
 
-#### Forwarder Ingress
+### Forwarder Ingress
 | Key Path                                       | Description                           | Default                  |
 |------------------------------------------------|---------------------------------------|--------------------------|
 | `ingress.forwarder.enabled`                    | Enable ingress for Graylog Forwarder. | `false`                  |
