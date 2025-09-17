@@ -152,10 +152,27 @@ Graylog Datanode image
 {{- end }}
 
 {{/*
+Random password generator
+Usage: {{ include "graylog.randomPassword" $ }}
+*/}}
+{{- define "graylog.randomPassword" }}
+  {{- if and .generated (hasKey .generated "password") }}
+    {{- .generated.password }}
+  {{- else }}
+    {{- $gen := randAlphaNum 16 }}
+    {{- if not .generated }}
+        {{- $_ := set . "generated" (dict) -}}
+    {{- end -}}
+    {{- $_ := set .generated "password" $gen -}}
+    {{- $gen -}}
+  {{- end -}}
+{{- end -}}
+
+{{/*
 Graylog root password
 */}}
 {{- define "graylog.rootPassword" }}
-{{- .Values.graylog.config.rootPassword | default "yabbadabbadoo" }}
+{{- .Values.graylog.config.rootPassword | default (include "graylog.randomPassword" $) }}
 {{- end }}
 
 {{/*

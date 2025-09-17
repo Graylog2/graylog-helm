@@ -52,8 +52,7 @@ Welcome to Graylog!
 {{- end }}
 {{- if .Values.global.existingSecretName }}
 
-· IMPORTANT: You are using {{ .Values.global.existingSecretName | quote }} as the global secret override. As a result, all Graylog and Mongo secrets are assumed to be managed externally and not by this Helm chart.
-  Accordingly, any of the following configuration values will be ignored:
+· IMPORTANT: You are using {{ .Values.global.existingSecretName | quote }} as the global secret override. As a result, all Graylog and MongoDB secrets are assumed to be managed externally and not by this Helm chart. Accordingly, any of the following configuration values will be ignored:
 
     - graylog.config.rootUsername
     - graylog.config.rootPassword
@@ -61,7 +60,7 @@ Welcome to Graylog!
     - graylog.config.tls.keyPassword
 {{- else if empty .Values.graylog.config.rootPassword }}
 
-· WARNING: You are still using the default password {{ include "graylog.rootPassword" . | quote }}. This MUST be changed IMMEDIATELY using the following command:
+· IMPORTANT: You are currently using a randomly generated password: {{ include "graylog.rootPassword" . | quote }}, which will not persist across upgrades. Please run the following command to set a persistent password:
 
     echo "Enter your new password and press return:" && read -s pass && echo "Upgrading helm release {{ squote .Release.Name}}..." && helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 {{- end }}
