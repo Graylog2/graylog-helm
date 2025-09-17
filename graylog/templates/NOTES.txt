@@ -7,15 +7,17 @@ Welcome to Graylog!
 · Your credentials are:
 
   - username: {{ .Values.graylog.config.rootUsername | quote }}
-  - password: {{ include "graylog.rootPassword" .  | quote }}
+  - password: {{ empty .Values.global.existingSecretName | ternary (include "graylog.rootPassword" .  | quote) "[managed externally]" }}
 
 · The following workloads have been deployed to the cluster:
 
   - {{ include "graylog.replicas" . | int }} replicas of the Graylog application.
   - {{ include "datanode.replicas" . | int }} replicas of the Graylog Datanode.
+  {{- if .Values.mongodb.subchart.enabled }}
   - {{ if eq .Values.mongodb.architecture "replicaset" }}{{ .Values.mongodb.replicaCount }} replicas{{ if .Values.mongodb.arbiter.enabled }} (+ 1 arbiter){{ end }} for MongoDB, running as a replicaset in Primary-Secondary{{if .Values.mongodb.arbiter.enabled }}-Arbiter{{ end }} mode.
     {{- else }}1 replica for MongoDB running in standalone mode.
     WARNING: running mongoDB in standalone mode is NOT SUPPORTED.{{ end }}
+  {{- end }}
 
   Use the following command to list all the resources deployed with this release:
 
@@ -44,7 +46,16 @@ Welcome to Graylog!
 {{ end }}
   Make sure to complete their configuration through the Graylog UI.
 {{- end }}
-{{- if empty .Values.graylog.config.rootPassword }}
+{{- if .Values.global.existingSecretName }}
+
+· IMPORTANT: You are using {{ .Values.global.existingSecretName | quote }} as the global secret override. As a result, all Graylog and Mongo secrets are assumed to be managed externally and not by this Helm chart.
+  Accordingly, any of the following configuration values will be ignored:
+
+    - graylog.config.rootPassword
+    - graylog.config.rootUsername
+    - graylog.config.secretPepper
+    - graylog.config.tls.keyPassword
+{{- else if empty .Values.graylog.config.rootPassword }}
 
 · WARNING: You are still using the default password {{ include "graylog.rootPassword" . | quote }}. This MUST be changed IMMEDIATELY using the following command:
 
