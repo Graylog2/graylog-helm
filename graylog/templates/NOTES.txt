@@ -4,10 +4,14 @@ Welcome to Graylog!
 
 · You are running Graylog version {{ include "graylog.imageTag" . | quote | trimAll "\"" }}
 
-· Your credentials are:
+· Your credentials are
+  {{- if empty .Values.global.existingSecretName }}:
 
   - username: {{ .Values.graylog.config.rootUsername | quote }}
-  - password: {{ empty .Values.global.existingSecretName | ternary (include "graylog.rootPassword" .  | quote) "[managed externally]" }}
+  - password: {{ include "graylog.rootPassword" .  | quote }}
+  {{- else -}}
+    {{ .Values.global.existingSecretName | quote | print " managed externally using the existing secret " }}.
+  {{- end }}
 
 · The following workloads have been deployed to the cluster:
 
@@ -51,8 +55,8 @@ Welcome to Graylog!
 · IMPORTANT: You are using {{ .Values.global.existingSecretName | quote }} as the global secret override. As a result, all Graylog and Mongo secrets are assumed to be managed externally and not by this Helm chart.
   Accordingly, any of the following configuration values will be ignored:
 
-    - graylog.config.rootPassword
     - graylog.config.rootUsername
+    - graylog.config.rootPassword
     - graylog.config.secretPepper
     - graylog.config.tls.keyPassword
 {{- else if empty .Values.graylog.config.rootPassword }}
