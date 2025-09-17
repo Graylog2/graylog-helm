@@ -23,6 +23,9 @@ This chart is still under development and does not have locked in api contracts 
   * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
   * [Add inputs](#add-inputs)
   * [Enable TLS](#enable-tls)
+* [Using External Resources](#using-external-resources)
+  * [Managing Secrets Externally](#managing-secrets-externally)
+  * [Bring Your Own MongoDB](#bring-your-own-mongodb)
 * [Uninstall](#uninstall)
   * [Removing everything](#removing-everything)
 * [Debugging](#debugging)
@@ -48,8 +51,7 @@ By default, the chart exposes a Kubernetes service.
 However, we also recommend using an **Ingress Controller** for better management of external traffic.
 If you set `ingress.enabled` to `true`, the chart will provision an Ingress resource for you.
 
-> [!IMPORTANT]
-> You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's installed in your cluster beforehand.
+You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's installed in your cluster beforehand.
 
 ### cert-manager
 
