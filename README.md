@@ -119,7 +119,7 @@ helm install graylog ./graylog --namespace graylog --create-namespace
 # Post Installation
 
 ## Set Root Graylog Password
-Graylog is installed with a simple password by default. This **MUST be changed** once all pods achieve the `RUNNING` state using 
+Graylog is installed with a random password by default. We recommend setting a persistent password once all pods achieve the `RUNNING` state using 
 the following command:
 
 ```sh
