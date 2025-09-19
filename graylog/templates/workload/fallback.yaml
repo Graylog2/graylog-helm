@@ -2,16 +2,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "fallback.name" . }}
+  name: {{ include "graylog.fallback.name" . }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      graylog-app: {{ include "fallback.name" . }}
+      graylog-app: {{ include "graylog.fallback.name" . }}
   template:
     metadata:
       labels:
-        graylog-app: {{ include "fallback.name" . }}
+        graylog-app: {{ include "graylog.fallback.name" . }}
     spec:
       containers:
         - name: busybox
@@ -38,8 +38,8 @@ spec:
       volumes:
         - name: content
           configMap:
-            name: {{ include "fallback.name" . | printf "%s-content" }}
+            name: {{ include "graylog.fallback.name" . | printf "%s-content" }}
         - name: config
           configMap:
-            name: {{ include "fallback.name" . | printf "%s-config" }}
+            name: {{ include "graylog.fallback.name" . | printf "%s-config" }}
 {{- end }}

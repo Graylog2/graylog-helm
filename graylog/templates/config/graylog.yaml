@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "graylog.configmapName" . }}
+  name: {{ include "graylog.configmap.name" . }}
 data:
-  GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.custom.metrics.enabled | ternary true false | quote }}
+  GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.service.metrics.enabled | ternary true false | quote }}
   GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfSignedStartup | default true | quote }}
   GRAYLOG_IS_CLOUD: {{ .Values.graylog.config.isCloud | default false | quote }}
   GRAYLOG_SERVER_JAVA_OPTS: {{ include "graylog.javaOpts" . | quote }}

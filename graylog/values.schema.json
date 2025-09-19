@@ -2,7 +2,34 @@
   "$schema": "https://json-schema.org/schema#",
   "title": "Graylog Helm Chart Values Schema",
   "type": "object",
+  "required": [],
   "properties": {
+    "size": {
+      "type": "string",
+      "description": "Preset cluster size (optional)",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [ "xs", "small", "medium", "large", "xl", "xxl", "default", "poc", "" ]
+        },
+        { "type": "null" }
+      ]
+    },
+    "provider": {
+      "type": "string",
+      "description": "Kubernetes provider (optional)",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [ "aws", "aws-managed-sc", "azure", "gcp", "microk8s", "" ]
+        },
+        { "type": "null" }
+      ]
+    },
+    "version": {
+      "type": "string",
+      "description": "Override Graylog and Graylog Data Node version (optional)"
+    },
     "nameOverride": {
       "type": "string",
       "description": "Override the name of the chart. Affects app.kubernetes.io/name annotation"
@@ -28,9 +55,26 @@
       "properties": {
         "enabled": { "type": "boolean", "default": true },
         "enterprise": { "type": "boolean", "default": true },
-        "replicas": {
-          "type": ["integer", "null"],
-          "default": 2
+        "replicas": { "type": "integer" },
+        "service": {
+          "type": "object",
+          "properties": {
+            "nameOverride": { "type": "string" },
+            "type": { "type": "string" },
+            "ports": {
+              "type": "object",
+              "properties": {
+                "app": { "type": "integer" },
+                "metrics": { "type": "integer" }
+              }
+            },
+            "metrics": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type":  "boolean" }
+              }
+            }
+          }
         },
         "inputs": {
           "type": "array",
@@ -42,8 +86,49 @@
               "targetPort": { "type": "integer" },
               "protocol": { "type": "string" }
             },
-            "required": ["name", "port", "protocol"]
+            "required": [ "name", "port", "protocol" ]
           }
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "image": { "type": "string" },
+              "existingClaim": { "type": "string" },
+              "url": { "type": "string" },
+              "checksum": { "type": "string" }
+            },
+            "required": [ "name" ],
+            "oneOf": [
+              {
+                "required": [ "image" ],
+                "not": { "required": [ "existingClaim", "url" ] }
+              },
+              {
+                "required": [ "existingClaim" ],
+                "not": { "required": [ "image", "url" ] }
+              },
+              {
+                "required": [ "url" ],
+                "not": { "required":  [ "existingClaim", "image" ] }
+              }
+            ],
+            "allOf": [
+              {
+                "if": { "required": [ "checksum" ] },
+                "then": { "required": [ "url" ] }
+              }
+            ]
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string","number","boolean"]
+          },
+          "description": "Key/value env vars rendered as literals"
         },
         "config": {
           "type": "object",
@@ -121,152 +206,113 @@
             }
           }
         },
-        "custom": {
+        "image": {
           "type": "object",
-          "description": "Custom Kubernetes-specific configuration",
           "properties": {
-            "podAnnotations": {
-              "type": "object"
-            },
-            "nodeSelector": {
-              "type": "object"
-            },
-            "tolerations": {
-              "type": "object"
-            },
-            "affinity": {
-              "type": "object"
-            },
-            "env": {
-              "type": "object",
-              "additionalProperties": {
-                "type": ["string","number","boolean"]
-              },
-              "description": "Key/value env vars rendered as literals"
-            },
-            "extraEnv": {
-              "type": "array",
-              "items": { "type": "object" },
-              "description": "Full EnvVar objects (supports valueFrom)"
-            },
-            "inputs": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" },
+            "imagePullPolicy": { "type": "string" },
+            "imagePullSecrets": { "type": "array" }
+          }
+        },
+        "updateStrategy": {
+          "type": "object",
+          "properties": {
+            "type": { "type": ["string", "null"] },
+            "rollingUpdate": {
               "type": "object",
               "properties": {
-                "enabled": { "type": "boolean" }
-              }
-            },
-            "metrics": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" }
-              }
-            },
-            "image": {
-              "type": "object",
-              "properties": {
-                "repository": { "type": "string" },
-                "tag": { "type": "string" },
-                "imagePullPolicy": { "type": "string" },
-                "imagePullSecrets": { "type": "array" }
-              }
-            },
-            "updateStrategy": {
-              "type": "object",
-              "properties": {
-                "type": { "type": ["string", "null"] },
-                "rollingUpdate": {
-                  "type": "object",
-                  "properties": {
-                    "maxUnavailable": { "type": [ "string", "null" ] },
-                    "partition": { "type": [ "string", "null" ] }
-                  }
-                }
-              }
-            },
-            "service": {
-              "type": "object",
-              "properties": {
-                "nameOverride": { "type": "string" },
-                "type": { "type": "string" },
-                "ports": {
-                  "type": "object",
-                  "properties": {
-                    "app": { "type": "integer" },
-                    "metrics": { "type": "integer" }
-                  }
-                }
-              }
-            },
-            "resources": {
-              "type": "object",
-              "properties": {
-                "limits": {
-                  "type": "object",
-                  "properties": {
-                    "cpu": { "type": "string" },
-                    "memory": { "type": "string" }
-                  }
-                },
-                "requests": {
-                  "type": "object",
-                  "properties": {
-                    "cpu": { "type": "string" },
-                    "memory": { "type": "string" }
-                  }
-                }
-              }
-            },
-            "persistence": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "storageClass": { "type": [ "string", "null" ] },
-                "volumeNameOverride": { "type": [ "string", "null" ] },
-                "existingClaim": { "type": [ "string", "null" ] },
-                "mountPath": { "type": [ "string", "null" ] },
-                "accessModes": { "type": "array" },
-                "size": { "type": [ "string", "null" ] },
-                "annotations": {
-                  "type": "object"
-                },
-                "labels": {
-                  "type": "object"
-                },
-                "selector": {
-                  "type": "object"
-                }
-              }
-            },
-            "livenessProbe": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "initialDelaySeconds": { "type": "integer" },
-                "periodSeconds": { "type": "integer" },
-                "timeoutSeconds": { "type": "integer" },
-                "failureThreshold": { "type": "integer" },
-                "successThreshold": { "type": "integer" }
-              }
-            },
-            "readinessProbe": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "initialDelaySeconds": { "type": "integer" },
-                "periodSeconds": { "type": "integer" },
-                "timeoutSeconds": { "type": "integer" },
-                "failureThreshold": { "type": "integer" },
-                "successThreshold": { "type": "integer" }
-              }
-            },
-            "podDisruptionBudget": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "minAvailable": { "type": "integer" }
+                "maxUnavailable": { "type": [ "string", "null" ] },
+                "partition": { "type": [ "string", "null" ] }
               }
             }
           }
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "storageClass": { "type": [ "string", "null" ] },
+            "volumeNameOverride": { "type": [ "string", "null" ] },
+            "existingClaim": { "type": [ "string", "null" ] },
+            "mountPath": { "type": [ "string", "null" ] },
+            "accessModes": { "type": "array" },
+            "size": { "type": [ "string", "null" ] },
+            "annotations": {
+              "type": "object"
+            },
+            "labels": {
+              "type": "object"
+            },
+            "selector": {
+              "type": "object"
+            }
+          }
+        },
+        "livenessProbe": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialDelaySeconds": { "type": "integer" },
+            "periodSeconds": { "type": "integer" },
+            "timeoutSeconds": { "type": "integer" },
+            "failureThreshold": { "type": "integer" },
+            "successThreshold": { "type": "integer" }
+          }
+        },
+        "readinessProbe": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialDelaySeconds": { "type": "integer" },
+            "periodSeconds": { "type": "integer" },
+            "timeoutSeconds": { "type": "integer" },
+            "failureThreshold": { "type": "integer" },
+            "successThreshold": { "type": "integer" }
+          }
+        },
+        "podDisruptionBudget": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minAvailable": { "type": "integer" }
+          }
+        },
+        "podAnnotations": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "tolerations": {
+          "type": "object"
+        },
+        "affinity": {
+          "type": "object"
+        },
+        "extraEnv": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Full EnvVar objects (supports valueFrom)"
         }
       }
     },
@@ -275,9 +321,26 @@
       "description": "Graylog Datanode configuration",
       "properties": {
         "enabled": { "type": "boolean" },
-        "replicas": {
-          "type": ["integer", "null"],
-          "default": 3
+        "replicas": { "type": "integer" },
+        "service": {
+          "type": "object",
+          "properties": {
+            "ports": {
+              "type": "object",
+              "properties": {
+                "api": { "type": "integer" },
+                "data": { "type": "integer" },
+                "config": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string","number","boolean"]
+          },
+          "description": "Key/value env vars rendered as literals"
         },
         "config": {
           "type": "object",
@@ -289,167 +352,141 @@
             "nodeSearchCacheSize": { "type": "string" }
           }
         },
-        "custom": {
+        "image": {
           "type": "object",
-          "description": "Custom Kubernetes-specific configuration",
           "properties": {
-            "podAnnotations": {
-              "type": "object"
-            },
-            "nodeSelector": {
-              "type": "object"
-            },
-            "tolerations": {
-              "type": "object"
-            },
-            "affinity": {
-              "type": "object"
-            },
-            "env": {
-              "type": "object",
-              "additionalProperties": {
-                "type": ["string","number","boolean"]
-              },
-              "description": "Key/value env vars rendered as literals"
-            },
-            "extraEnv": {
-              "type": "array",
-              "items": { "type": "object" },
-              "description": "Full EnvVar objects (supports valueFrom)"
-            },
-            "image": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" },
+            "imagePullPolicy": { "type": "string" },
+            "imagePullSecrets": { "type": "array" }
+          }
+        },
+        "updateStrategy": {
+          "type": "object",
+          "properties": {
+            "type": { "type": ["string", "null"] },
+            "rollingUpdate": {
               "type": "object",
               "properties": {
-                "repository": { "type": "string" },
-                "tag": { "type": "string" },
-                "imagePullPolicy": { "type": "string" },
-                "imagePullSecrets": { "type": "array" }
-              }
-            },
-            "updateStrategy": {
-              "type": "object",
-              "properties": {
-                "type": { "type": ["string", "null"] },
-                "rollingUpdate": {
-                  "type": "object",
-                  "properties": {
-                    "maxUnavailable": { "type": [ "string", "null" ] },
-                    "partition": { "type": [ "string", "null" ] }
-                  }
-                }
-              }
-            },
-            "service": {
-              "type": "object",
-              "properties": {
-                "ports": {
-                  "type": "object",
-                  "properties": {
-                    "api": { "type": "integer" },
-                    "data": { "type": "integer" },
-                    "config": { "type": "integer" }
-                  }
-                }
-              }
-            },
-            "resources": {
-              "type": "object",
-              "properties": {
-                "limits": {
-                  "type": "object",
-                  "properties": {
-                    "cpu": { "type": "string" },
-                    "memory": { "type": "string" }
-                  }
-                },
-                "requests": {
-                  "type": "object",
-                  "properties": {
-                    "cpu": { "type": "string" },
-                    "memory": { "type": "string" }
-                  }
-                }
-              }
-            },
-            "persistence": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "data": {
-                  "type": "object",
-                  "properties": {
-                    "enabled": { "type": "boolean" },
-                    "storageClass": { "type": "string" },
-                    "existingClaim": { "type": "string" },
-                    "mountPath": { "type": "string" },
-                    "accessModes": { "type": "array" },
-                    "size": { "type": "string" },
-                    "annotations": {
-                      "type": "object"
-                    },
-                    "labels": {
-                      "type": "object"
-                    },
-                    "selector": {
-                      "type": "object"
-                    },
-                    "dataSource": {
-                      "type": "object"
-                    }
-                  }
-                },
-                "nativeLibs": {
-                  "type": "object",
-                  "properties": {
-                    "enabled": { "type": "boolean" },
-                    "storageClass": { "type": "string" },
-                    "existingClaim": { "type": "string" },
-                    "mountPath": { "type": "string" },
-                    "accessModes": { "type": "array" },
-                    "size": { "type": "string" },
-                    "annotations": {
-                      "type": "object"
-                    },
-                    "labels": {
-                      "type": "object"
-                    },
-                    "selector": {
-                      "type": "object"
-                    }
-                  }
-                }
-              }
-            },
-            "livenessProbe": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "initialDelaySeconds": { "type": "integer" },
-                "periodSeconds": { "type": "integer" },
-                "timeoutSeconds": { "type": "integer" },
-                "failureThreshold": { "type": "integer" },
-                "successThreshold": { "type": "integer" }
-              }
-            },
-            "readinessProbe": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "initialDelaySeconds": { "type": "integer" },
-                "periodSeconds": { "type": "integer" },
-                "timeoutSeconds": { "type": "integer" },
-                "failureThreshold": { "type": "integer" },
-                "successThreshold": { "type": "integer" }
-              }
-            },
-            "podDisruptionBudget": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "minAvailable": { "type": "integer" }
+                "maxUnavailable": { "type": [ "string", "null" ] },
+                "partition": { "type": [ "string", "null" ] }
               }
             }
           }
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "data": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "storageClass": { "type": "string" },
+                "existingClaim": { "type": "string" },
+                "mountPath": { "type": "string" },
+                "accessModes": { "type": "array" },
+                "size": { "type": "string" },
+                "annotations": {
+                  "type": "object"
+                },
+                "labels": {
+                  "type": "object"
+                },
+                "selector": {
+                  "type": "object"
+                },
+                "dataSource": {
+                  "type": "object"
+                }
+              }
+            },
+            "nativeLibs": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "storageClass": { "type": "string" },
+                "existingClaim": { "type": "string" },
+                "mountPath": { "type": "string" },
+                "accessModes": { "type": "array" },
+                "size": { "type": "string" },
+                "annotations": {
+                  "type": "object"
+                },
+                "labels": {
+                  "type": "object"
+                },
+                "selector": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "livenessProbe": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialDelaySeconds": { "type": "integer" },
+            "periodSeconds": { "type": "integer" },
+            "timeoutSeconds": { "type": "integer" },
+            "failureThreshold": { "type": "integer" },
+            "successThreshold": { "type": "integer" }
+          }
+        },
+        "readinessProbe": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialDelaySeconds": { "type": "integer" },
+            "periodSeconds": { "type": "integer" },
+            "timeoutSeconds": { "type": "integer" },
+            "failureThreshold": { "type": "integer" },
+            "successThreshold": { "type": "integer" }
+          }
+        },
+        "podDisruptionBudget": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minAvailable": { "type": "integer" }
+          }
+        },
+        "podAnnotations": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "tolerations": {
+          "type": "object"
+        },
+        "affinity": {
+          "type": "object"
+        },
+        "extraEnv": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Full EnvVar objects (supports valueFrom)"
         }
       }
     },

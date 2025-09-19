@@ -145,7 +145,7 @@ Alternatively, external access can be configured directly through the provided s
 pre-existing dependencies.
 
 ```sh
-helm upgrade graylog ./graylog -n graylog --set graylog.custom.service.type="LoadBalancer" --reuse-values
+helm upgrade graylog ./graylog -n graylog --set graylog.service.type="LoadBalancer" --reuse-values
 ```
 
 ### Temporary access: Port Forwarding
@@ -204,10 +204,10 @@ helm upgrade graylog ./graylog -n graylog --set graylog.config.email.enabled=tru
 # A few examples: 
 
 # expose the Graylog application with a LoadBalancer service
-helm upgrade graylog ./graylog -n graylog --set graylog.custom.service.type="LoadBalancer" --reuse-values
+helm upgrade graylog ./graylog -n graylog --set graylog.service.type="LoadBalancer" --reuse-values
 
 # modify readiness probe initial delay
-helm upgrade graylog ./graylog -n graylog --set graylog.custom.readinessProbe.initialDelaySeconds=5 --reuse-values
+helm upgrade graylog ./graylog -n graylog --set graylog.readinessProbe.initialDelaySeconds=5 --reuse-values
 
 # use a custom Storage Class for all resources (e.g. for AWS EKS)
 helm upgrade graylog ./graylog -n graylog --set global.defaultStorageClass="gp2" --reuse-values
@@ -417,10 +417,13 @@ stern statefulset/graylog-datanode -n graylog-helm-dev-1
 ---
 
 # Graylog Helm Chart Values Reference
-| Key Path           | Description                                           | Default   |
-| ------------------ |-------------------------------------------------------| --------- |
-| `nameOverride`     | Override the `app.kubernetes.io/name` label value.    | `""`      |
-| `fullnameOverride` | Override the fully qualified name of the application. | `""`      |
+| Key Path           | Description                                                      | Default   |
+|--------------------|------------------------------------------------------------------| --------- |
+| `size`             | Preset cluster size (optional).                                  | `""`      |
+| `provider`         | Kubernetes provider (optional).                                  | `""`      |
+| `version`          | Override Graylog and Graylog Data Node version (optional).       | `""`      |
+| `nameOverride`     | Override the `app.kubernetes.io/name` label value (optional).    | `""`      |
+| `fullnameOverride` | Override the fully qualified name of the application (optional). | `""`      |
 
 ## Global
 These values affect Graylog, DataNode, and MongoDB
@@ -438,8 +441,14 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.enabled`                                                     | Enable the Graylog server.                                 | `true`                          |
 | `graylog.enterprise`                                                  | Enable enterprise features.                                | `true`                          |
 | `graylog.replicas`                                                    | Number of Graylog server replicas.                         | `2`                             |
+| `graylog.service.nameOverride`                                        | Override for service name.                                 | `""`                            |
+| `graylog.service.type`                                                | Kubernetes service type.                                   | `ClusterIP`                     |
+| `graylog.service.ports.app`                                           | Graylog web UI port.                                       | `9000`                          |
+| `graylog.service.ports.metrics`                                       | Metrics endpoint port.                                     | `9833`                          |
+| `graylog.service.metrics.enabled`                                     | Enable metrics collection.                                 | `true`                          |
 | `graylog.inputs`                                                      | List of inputs to configure.                               | See below                       |
 | `graylog.plugins`                                                     | List of plugins to configure.                              | See below                       |
+| `graylog.env`                                                         | Custom environment variables                               | `[]`                            |
 | `graylog.config.rootUsername`                                         | Root admin username.                                       | `"admin"`                       |
 | `graylog.config.rootPassword`                                         | Root admin password.                                       | `""`                            |
 | `graylog.config.timezone`                                             | Timezone for the Graylog server.                           | `"UTC"`                         |
@@ -503,23 +512,50 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.config.init.assetFetch.plugins.baseUrl`                      | Base URL for plugin assets.                                | `""`                            |
 | `graylog.config.init.geolocation.enabled`                             | Enable geolocation asset fetch.                            | `"false"`                       |
 | `graylog.config.init.geolocation.baseUrl`                             | Base URL for geolocation assets.                           | `""`                            |
-| `graylog.custom.podAnnotations`                                       | Additional pod annotations.                                | `{}`                            |
-| `graylog.custom.nodeSelector`                                         | Node selector for scheduling.                              | `{}`                            |
-| `graylog.custom.env`                                                  | Custom environment variables                               | `[]`                            |
-| `graylog.custom.extraEnv`                                             | Custom EnvVar environment variables                        | `[]`                            |
-| `graylog.custom.inputs.enabled`                                       | Enable Graylog inputs.                                     | `true`                          |
-| `graylog.custom.metrics.enabled`                                      | Enable metrics collection.                                 | `true`                          |
-| `graylog.custom.image.repository`                                     | Image repository for Graylog.                              | `""`                            |
-| `graylog.custom.image.tag`                                            | Image tag for Graylog.                                     | `""`                            |
-| `graylog.custom.image.imagePullPolicy`                                | Pull policy for Graylog image.                             | `IfNotPresent`                  |
-| `graylog.custom.image.imagePullSecrets`                               | Pull secrets for image.                                    | `[]`                            |
-| `graylog.custom.updateStrategy.type`                                  | Pod update strategy for StatefulSet.                       | `"RollingUpdate"`               |
-| `graylog.custom.updateStrategy.rollingUpdate.maxUnavailable`          | Max unavailable pods during an update.                     | `1`                             |
-| `graylog.custom.updateStrategy.rollingUpdate.partition`               | Pods that will remain unaffected by the update.            | `""`                            |
-| `graylog.custom.service.nameOverride`                                 | Override for service name.                                 | `""`                            |
-| `graylog.custom.service.type`                                         | Kubernetes service type.                                   | `ClusterIP`                     |
-| `graylog.custom.service.ports.app`                                    | Graylog web UI port.                                       | `9000`                          |
-| `graylog.custom.service.ports.metrics`                                | Metrics endpoint port.                                     | `9833`                          |
+| `graylog.image.repository`                                            | Image repository for Graylog.                              | `""`                            |
+| `graylog.image.tag`                                                   | Image tag for Graylog.                                     | `""`                            |
+| `graylog.image.imagePullPolicy`                                       | Pull policy for Graylog image.                             | `IfNotPresent`                  |
+| `graylog.image.imagePullSecrets`                                      | Pull secrets for image.                                    | `[]`                            |
+| `graylog.updateStrategy.type`                                         | Pod update strategy for StatefulSet.                       | `"RollingUpdate"`               |
+| `graylog.updateStrategy.rollingUpdate.maxUnavailable`                 | Max unavailable pods during an update.                     | `1`                             |
+| `graylog.updateStrategy.rollingUpdate.partition`                      | Pods that will remain unaffected by the update.            | `""`                            |
+| `graylog.resources.limits.cpu`                                        | CPU limit for the Graylog pod.                             | `"2"`                           |
+| `graylog.resources.limits.memory`                                     | Memory limit for the Graylog pod.                          | `"2Gi"`                         |
+| `graylog.resources.requests.cpu`                                      | CPU request for the Graylog pod.                           | `"1"`                           |
+| `graylog.resources.requests.memory`                                   | Memory request for the Graylog pod.                        | `"1Gi"`                         |
+| `graylog.persistence.enabled`                                         | Enable persistent storage.                                 | `true`                          |
+| `graylog.persistence.storageClass`                                    | Storage class for the persistent volume.                   | `""`                            |
+| `graylog.persistence.volumeNameOverride`                              | Override name of the persistent volume.                    | `""`                            |
+| `graylog.persistence.existingClaim`                                   | Use an existing PVC.                                       | `""`                            |
+| `graylog.persistence.mountPath`                                       | Path where volume will be mounted.                         | `""`                            |
+| `graylog.persistence.accessModes`                                     | Access modes for the persistent volume.                    | `[]`                            |
+| `graylog.persistence.size`                                            | Size of the persistent volume.                             | `""`                            |
+| `graylog.persistence.annotations`                                     | Annotations for the persistent volume claim.               | `{}`                            |
+| `graylog.persistence.labels`                                          | Labels for the persistent volume claim.                    | `{}`                            |
+| `graylog.persistence.selector`                                        | Selector for the persistent volume.                        | `{}`                            |
+| `graylog.livenessProbe.enabled`                                       | Enable liveness probe.                                     | `true`                          |
+| `graylog.livenessProbe.initialDelaySeconds`                           | Initial delay for liveness probe.                          | `60`                            |
+| `graylog.livenessProbe.periodSeconds`                                 | Period between liveness probe checks.                      | `10`                            |
+| `graylog.livenessProbe.timeoutSeconds`                                | Timeout for the liveness probe.                            | `5`                             |
+| `graylog.livenessProbe.failureThreshold`                              | Failure threshold for the liveness probe.                  | `6`                             |
+| `graylog.livenessProbe.successThreshold`                              | Success threshold for the liveness probe.                  | `1`                             |
+| `graylog.readinessProbe.enabled`                                      | Enable readiness probe.                                    | `true`                          |
+| `graylog.readinessProbe.initialDelaySeconds`                          | Initial delay for readiness probe.                         | `30`                            |
+| `graylog.readinessProbe.periodSeconds`                                | Period between readiness probe checks.                     | `10`                            |
+| `graylog.readinessProbe.timeoutSeconds`                               | Timeout for the readiness probe.                           | `5`                             |
+| `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                 | `6`                             |
+| `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                 | `1`                             |
+| `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                | `false`                         |
+| `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                  | `1`                             |
+| `graylog.podAnnotations`                                              | Additional pod annotations.                                | `{}`                            |
+| `graylog.nodeSelector`                                                | Node selector for scheduling.                              | `{}`                            |
+| `graylog.tolerations`                                                 | Tolerations for scheduling.                                | `{}`                            |
+| `graylog.affinity`                                                    | Affinity rules for scheduling.                             | `{}`                            |
+| `graylog.extraEnv`                                                    | Custom EnvVar environment variables.                       | `[]`                            |
+| `graylog.podAnnotations`                                              | Additional pod annotations.                                | `{}`                            |
+| `graylog.nodeSelector`                                                | Node selector for scheduling.                              | `{}`                            |
+| `graylog.extraEnv`                                                    | Custom EnvVar environment variables                        | `[]`                            |
+
 
 ### Graylog inputs
 | Key Path                       | Description                       | Example            |
@@ -539,33 +575,81 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.plugins[i].checksum`      | Checksum of JAR file.                  | `13550350a8681c84c861aac2e5b440161c2b33a3e4f302ac680ca5b686de48de` |
 
 ### Graylog environment variables
-| Key Path                | Descriptions                                                                                                                                                                                   | Example                                                                                                                                                          |
-|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `graylog.custom.env`    | Simple key/value environment variables                                                                                                                                                         | `["FOO=BAR", "HELLO=123"]`                                                                                                                                       |
-| `graylog.custom.EnvVar` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables<br/>(valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:<br/>  - name: MADE_UP_PASSWORD<br/>    valueFrom:<br/>      secretKeyRef:<br/>        name: mysecret<br/>        key: password</code></pre> |
+| Key Path           | Descriptions                                                                                                                                                                                   | Example                                                                                                                                                          |
+|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `graylog.env`      | Simple key/value environment variables                                                                                                                                                         | `["FOO=BAR", "HELLO=123"]`                                                                                                                                       |
+| `graylog.extraEnv` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables<br/>(valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:<br/>  - name: MADE_UP_PASSWORD<br/>    valueFrom:<br/>      secretKeyRef:<br/>        name: mysecret<br/>        key: password</code></pre> |
 
 ## Datanode
-| Key Path                                                      | Description                                     | Default           |
-|---------------------------------------------------------------|-------------------------------------------------|-------------------|
-| `datanode.enabled`                                            | Enable Graylog datanode.                        | `true`            |
-| `datanode.replicas`                                           | Number of datanode replicas.                    | `3`               |
-| `datanode.config.nodeIdFile`                                  | Path to datanode ID file.                       | `""`              |
-| `datanode.config.opensearchHeap`                              | OpenSearch heap size.                           | `"2g"`            |
-| `datanode.config.javaOpts`                                    | Java options for datanode.                      | `"-Xms1g -Xmx1g"` |
-| `datanode.config.skipPreflightChecks`                         | Skip startup checks.                            | `"false"`         |
-| `datanode.config.nodeSearchCacheSize`                         | Size of search cache.                           | `"10gb"`          |
-| `datanode.custom.podAnnotations`                              | Additional pod annotations.                     | `{}`              |
-| `datanode.custom.nodeSelector`                                | Node selector for datanode.                     | `{}`              |
-| `datanode.custom.image.repository`                            | Datanode image repository.                      | `""`              |
-| `datanode.custom.image.tag`                                   | Datanode image tag.                             | `""`              |
-| `datanode.custom.image.imagePullPolicy`                       | Image pull policy.                              | `IfNotPresent`    |
-| `datanode.custom.image.imagePullSecrets`                      | Image pull secrets.                             | `[]`              |
-| `datanode.custom.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
-| `datanode.custom.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
-| `datanode.custom.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
-| `datanode.custom.service.ports.api`                           | API communication port.                         | `8999`            |
-| `datanode.custom.service.ports.data`                          | Data communication port.                        | `9200`            |
-| `datanode.custom.service.ports.config`                        | Configuration communication port.               | `9300`            |
+| Key Path                                               | Description                                     | Default           |
+|--------------------------------------------------------|-------------------------------------------------|-------------------|
+| `datanode.enabled`                                     | Enable Graylog datanode.                        | `true`            |
+| `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
+| `datanode.service.ports.api`                           | API communication port.                         | `8999`            |
+| `datanode.service.ports.data`                          | Data communication port.                        | `9200`            |
+| `datanode.service.ports.config`                        | Configuration communication port.               | `9300`            |
+| `datanode.env`                                         | Custom environment variables                    | `[]`              |
+| `datanode.config.nodeIdFile`                           | Path to datanode ID file.                       | `""`              |
+| `datanode.config.opensearchHeap`                       | OpenSearch heap size.                           | `"2g"`            |
+| `datanode.config.javaOpts`                             | Java options for datanode.                      | `"-Xms1g -Xmx1g"` |
+| `datanode.config.skipPreflightChecks`                  | Skip startup checks.                            | `"false"`         |
+| `datanode.config.nodeSearchCacheSize`                  | Size of search cache.                           | `"10gb"`          |
+| `datanode.config.s3ClientDefaultSecretKey`             | Default S3 client secret key.                   | `""`              |
+| `datanode.config.s3ClientDefaultAccessKey`             | Default S3 client access key.                   | `""`              |
+| `datanode.config.s3ClientDefaultEndpoint`              | Default S3 client endpoint.                     | `""`              |
+| `datanode.config.s3ClientDefaultRegion`                | Default S3 client region.                       | `"us-east-2"`     |
+| `datanode.config.s3ClientDefaultProtocol`              | Default S3 client protocol.                     | `"http"`          |
+| `datanode.config.s3ClientDefaultPathStyleAccess`       | Enable path-style access for S3 client.         | `"true"`          |
+| `datanode.image.repository`                            | Datanode image repository.                      | `""`              |
+| `datanode.image.tag`                                   | Datanode image tag.                             | `""`              |
+| `datanode.image.imagePullPolicy`                       | Image pull policy.                              | `IfNotPresent`    |
+| `datanode.image.imagePullSecrets`                      | Image pull secrets.                             | `[]`              |
+| `datanode.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
+| `datanode.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
+| `datanode.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
+| `datanode.resources.limits.cpu`                        | CPU limit for the datanode pod.                 | `"1"`             |
+| `datanode.resources.limits.memory`                     | Memory limit for the datanode pod.              | `"5Gi"`           |
+| `datanode.resources.requests.cpu`                      | CPU request for the datanode pod.               | `"500m"`          |
+| `datanode.resources.requests.memory`                   | Memory request for the datanode pod.            | `"3.5Gi"`         |
+| `datanode.persistence.enabled`                         | Enable persistence.                             | `true`            |
+| `datanode.persistence.data.enabled`                    | Enable persistent volume for data.              | `true`            |
+| `datanode.persistence.data.storageClass`               | Storage class for data PVC.                     | `""`              |
+| `datanode.persistence.data.existingClaim`              | Use existing PVC for data.                      | `""`              |
+| `datanode.persistence.data.mountPath`                  | Mount path for data volume.                     | `""`              |
+| `datanode.persistence.data.accessModes`                | Access modes for data PVC.                      | `[]`              |
+| `datanode.persistence.data.size`                       | Size of the data volume.                        | `"8Gi"`           |
+| `datanode.persistence.data.annotations`                | Annotations for data PVC.                       | `{}`              |
+| `datanode.persistence.data.labels`                     | Labels for data PVC.                            | `{}`              |
+| `datanode.persistence.data.selector`                   | Selector for data PVC.                          | `{}`              |
+| `datanode.persistence.data.dataSource`                 | Data source for data PVC.                       | `{}`              |
+| `datanode.persistence.nativeLibs.enabled`              | Enable persistence for native libraries.        | `false`           |
+| `datanode.persistence.nativeLibs.storageClass`         | Storage class for native libs PVC.              | `""`              |
+| `datanode.persistence.nativeLibs.existingClaim`        | Use existing PVC for native libs.               | `""`              |
+| `datanode.persistence.nativeLibs.mountPath`            | Mount path for native libs volume.              | `""`              |
+| `datanode.persistence.nativeLibs.accessModes`          | Access modes for native libs PVC.               | `[]`              |
+| `datanode.persistence.nativeLibs.size`                 | Size of the native libs volume.                 | `"2Gi"`           |
+| `datanode.persistence.nativeLibs.annotations`          | Annotations for native libs PVC.                | `{}`              |
+| `datanode.persistence.nativeLibs.labels`               | Labels for native libs PVC.                     | `{}`              |
+| `datanode.persistence.nativeLibs.selector`             | Selector for native libs PVC.                   | `{}`              |
+| `datanode.livenessProbe.enabled`                       | Enable liveness probe.                          | `true`            |
+| `datanode.livenessProbe.initialDelaySeconds`           | Initial delay for liveness probe.               | `30`              |
+| `datanode.livenessProbe.periodSeconds`                 | Period between liveness probe checks.           | `10`              |
+| `datanode.livenessProbe.timeoutSeconds`                | Timeout for the liveness probe.                 | `5`               |
+| `datanode.livenessProbe.failureThreshold`              | Failure threshold for the liveness probe.       | `6`               |
+| `datanode.livenessProbe.successThreshold`              | Success threshold for the liveness probe.       | `1`               |
+| `datanode.readinessProbe.enabled`                      | Enable readiness probe.                         | `true`            |
+| `datanode.readinessProbe.initialDelaySeconds`          | Initial delay for readiness probe.              | `10`              |
+| `datanode.readinessProbe.periodSeconds`                | Period between readiness probe checks.          | `10`              |
+| `datanode.readinessProbe.timeoutSeconds`               | Timeout for the readiness probe.                | `5`               |
+| `datanode.readinessProbe.failureThreshold`             | Failure threshold for the readiness probe.      | `6`               |
+| `datanode.readinessProbe.successThreshold`             | Success threshold for the readiness probe.      | `1`               |
+| `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
+| `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
+| `datanode.podAnnotations`                              | Additional pod annotations.                     | `{}`              |
+| `datanode.nodeSelector`                                | Node selector for scheduling datanode pods.     | `{}`              |
+| `datanode.tolerations`                                 | Tolerations for scheduling.                     | `{}`              |
+| `datanode.affinity`                                    | Affinity rules for scheduling.                  | `{}`              |
+| `datanode.extraEnv`                                    | Custom EnvVar environment variables.            | `[]`              |
 
 
 ## Service Account

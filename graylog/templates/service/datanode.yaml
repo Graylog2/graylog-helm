@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "graylog.datanode.serviceName" . }}
+  name: {{ include "graylog.datanode.service.name" . }}
   labels:
     {{- include "graylog.labels" . | nindent 4 }}
     app.kubernetes.io/app-name: graylog-datanode
@@ -10,11 +10,11 @@ spec:
   clusterIP: None
   ports:
     - name: api
-      port: {{ .Values.datanode.custom.service.ports.api | default 8999 | int }}
+      port: {{ .Values.datanode.service.ports.api | default 8999 | int }}
     - name: data
-      port: {{ .Values.datanode.custom.service.ports.data | default 9200 | int }}
+      port: {{ .Values.datanode.service.ports.data | default 9200 | int }}
     - name: config
-      port: {{ .Values.datanode.custom.service.ports.config | default 9300 |int }}
+      port: {{ .Values.datanode.service.ports.config | default 9300 |int }}
   selector:
     app: graylog-datanode
 {{end}}

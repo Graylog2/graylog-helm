@@ -15,7 +15,7 @@ data:
     fi
     {{ if and .Values.graylog.config.tls.enabled }}
     # check that the FDQN for all Graylog nodes is part of the certificate SANs
-    {{- $fqdn := printf "%s.%s.svc.cluster.local" (include "graylog.serviceName" .) .Release.Namespace }}
+    {{- $fqdn := printf "%s.%s.svc.cluster.local" (include "graylog.service.name" .) .Release.Namespace }}
     if ! openssl x509 -in "/mnt/tls/tls.crt" -noout -checkhost {{ printf "test.%s" $fqdn | squote }}; then
       echo "The provided certificate does not match the Graylog pod FQDN."
       echo "Please, make sure to include {{ printf "DNS:*.%s" $fqdn | quote }} as another SAN in your certificate request."

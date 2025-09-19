@@ -1,10 +1,10 @@
 # Default values for Graylog.
 
 # Preset cluster size (optional)
-size:
+size: ""
 
 # Kubernetes provider (optional)
-provider:
+provider: ""
 
 # Override Graylog and Graylog Data Node version (optional)
 version: ""
@@ -24,10 +24,16 @@ global:
 # Graylog application
 graylog:
   enabled: true
-  # Enable enterprise features (license required)
   enterprise: true
-  # Custom number of Graylog nodes (defaults to 2 if empty)
-  replicas:
+  replicas: 2
+  service:
+    nameOverride: ""
+    type: ClusterIP
+    ports:
+      app: 9000
+      metrics: 9833
+    metrics:
+      enabled: true
   inputs:
     - name: input-gelf
       port: 12201
@@ -37,7 +43,8 @@ graylog:
       port: 13301
       targetPort: 13301
       protocol: TCP
-  plugins:
+  plugins: []
+  env: {}
   # Graylog server configuration (server.conf)
   config:
     rootUsername: "admin"
@@ -127,75 +134,67 @@ graylog:
         geolocation:
           enabled: false
           baseUrl:
-  # Custom Kubernetes-specific parameters
-  custom:
-    podAnnotations: {}
-    nodeSelector: {}
-    tolerations: {}
-    affinity: {}
-    env: {}
-    extraEnv: []
-    inputs:
-      enabled: true
-    metrics:
-      enabled: true
-    image:
-      repository: ""
-      tag: ""
-      imagePullPolicy: IfNotPresent
-      imagePullSecrets: []
-    updateStrategy:
-      type:
-      rollingUpdate:
-        maxUnavailable:
-        partition:
-    service:
-      nameOverride: ""
-      type: ClusterIP
-      ports:
-        app: 9000
-        metrics: 9833
-    resources:
-      limits:
-        cpu: "2"
-        memory: "2Gi"
-      requests:
-        cpu: "1"
-        memory: "1Gi"
-    persistence:
-      enabled: true
-      storageClass:
-      volumeNameOverride:
-      existingClaim:
-      mountPath:
-      accessModes: []
-      size:
-      annotations: {}
-      labels: {}
-      selector: {}
-    livenessProbe:
-      enabled: true
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 6
-      successThreshold: 1
-    readinessProbe:
-      enabled: true
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 6
-      successThreshold: 1
-    podDisruptionBudget:
-      enabled: false
-      minAvailable: 1
+  image:
+    repository: ""
+    tag: ""
+    imagePullPolicy: IfNotPresent
+    imagePullSecrets: []
+  updateStrategy:
+    type:
+    rollingUpdate:
+      maxUnavailable:
+      partition:
+  resources:
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+  persistence:
+    enabled: true
+    storageClass:
+    volumeNameOverride:
+    existingClaim:
+    mountPath:
+    accessModes: []
+    size:
+    annotations: {}
+    labels: {}
+    selector: {}
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: {}
+  affinity: {}
+  extraEnv: []
 
 # Graylog Datanode
 datanode:
   enabled: true
-  # Custom number of Datanode nodes (defaults to 3 if empty)
-  replicas:
+  replicas: 3
+  service:
+    ports:
+      api: 8999
+      data: 9200
+      config: 9300
+  env: {}
   config:
     nodeIdFile: ""
     opensearchHeap: "2g"
@@ -208,77 +207,68 @@ datanode:
     s3ClientDefaultRegion: "us-east-2"
     s3ClientDefaultProtocol: "http"
     s3ClientDefaultPathStyleAccess: "true"
-
-  # Custom Kubernetes-specific parameters
-  custom:
-    podAnnotations: {}
-    nodeSelector: {}
-    tolerations: {}
-    affinity: {}
-    env: {}
-    extraEnv: []
-    image:
-      repository: ""
-      tag: ""
-      imagePullPolicy: IfNotPresent
-      imagePullSecrets: []
-    updateStrategy:
-      type:
-      rollingUpdate:
-        maxUnavailable:
-        partition:
-    service:
-      ports:
-        api: 8999
-        data: 9200
-        config: 9300
-    resources:
-      limits:
-        cpu: "1"
-        memory: "5Gi"
-      requests:
-        cpu: "500m"
-        memory: "3.5Gi"
-    persistence:
+  image:
+    repository: ""
+    tag: ""
+    imagePullPolicy: IfNotPresent
+    imagePullSecrets: []
+  updateStrategy:
+    type:
+    rollingUpdate:
+      maxUnavailable:
+      partition:
+  resources:
+    limits:
+      cpu: "1"
+      memory: "5Gi"
+    requests:
+      cpu: "500m"
+      memory: "3.5Gi"
+  persistence:
+    enabled: true
+    data:
       enabled: true
-      data:
-        enabled: true
-        storageClass: ""
-        existingClaim: ""
-        mountPath: ""
-        accessModes: []
-        size: "8Gi"
-        annotations: {}
-        labels: {}
-        selector: {}
-        dataSource: {}
-      nativeLibs:
-        enabled: false
-        storageClass: ""
-        existingClaim: ""
-        mountPath: ""
-        accessModes: []
-        size: "2Gi"
-        annotations: {}
-        labels: {}
-        selector: {}
-    livenessProbe:
-      enabled: true
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 6
-      successThreshold: 1
-    readinessProbe:
-      enabled: true
-      initialDelaySeconds: 10
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 6
-      successThreshold: 1
-    podDisruptionBudget:
+      storageClass: ""
+      existingClaim: ""
+      mountPath: ""
+      accessModes: []
+      size: "8Gi"
+      annotations: {}
+      labels: {}
+      selector: {}
+      dataSource: {}
+    nativeLibs:
       enabled: false
-      minAvailable: 2
+      storageClass: ""
+      existingClaim: ""
+      mountPath: ""
+      accessModes: []
+      size: "2Gi"
+      annotations: {}
+      labels: {}
+      selector: {}
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 2
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: {}
+  affinity: {}
+  extraEnv: []
 
 # Graylog service account
 serviceAccount:
