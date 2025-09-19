@@ -1,4 +1,4 @@
-{{- if and .Values.graylog.enabled .Values.graylog.custom.podDisruptionBudget.enabled }}
+{{- if and .Values.graylog.enabled .Values.graylog.podDisruptionBudget.enabled }}
 {{- if include "graylog.replicas" . | int | lt 2 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -9,7 +9,7 @@ metadata:
     app: graylog-app
     {{- include "graylog.labels" . | nindent 4 }}
 spec:
-  minAvailable: {{ .Values.graylog.custom.podDisruptionBudget.minAvailable | default 1 | int }}
+  minAvailable: {{ .Values.graylog.podDisruptionBudget.minAvailable | default 1 | int }}
   selector:
     matchLabels:
       app: graylog-app

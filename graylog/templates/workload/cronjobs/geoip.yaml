@@ -12,7 +12,7 @@ data:
   GEOIPUPDATE_ACCOUNT_ID: {{ .Values.graylog.config.geolocation.maxmindGeoIp.accountId | int | quote | trimAll "\"" | b64enc }}
   GEOIPUPDATE_LICENSE_KEY: {{ .Values.graylog.config.geolocation.maxmindGeoIp.licenseKey | quote | trimAll "\"" | b64enc }}
 {{- $cronJobName := include "graylog.fullname" . | printf "%s-geoip-update" }}
-{{- $claimName := printf "%s-%s" (include "graylog.volumeName" .) (include "graylog.fullname" .) }}
+{{- $claimName := printf "%s-%s" (include "graylog.volume.name" .) (include "graylog.fullname" .) }}
 {{- $cronSchedule := .Values.graylog.config.geolocation.maxmindGeoIp.cronSchedule | default "0 0 * * *" }}
 {{- $hookIsEnabled := .Values.graylog.config.geolocation.maxmindGeoIp.postInstallRun | default true }}
 {{- range $i := include "graylog.replicas" . | default 2 | int | until }}

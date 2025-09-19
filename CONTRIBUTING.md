@@ -116,7 +116,7 @@ helm install graylog . --dry-run --debug --create-namespace -n graylog
 ### Installing chart
 
 ```bash
-helm install graylog . -n graylog --create-namespace -n graylog --set size="xs" --set graylog.custom.service.type="LoadBalancer"
+helm install graylog . -n graylog --create-namespace -n graylog --set size="xs" --set graylog.service.type="LoadBalancer"
 ```
 
 ### Upgrading chart

@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "fallback.name" . | printf "%s-config" }}
+  name: {{ include "graylog.fallback.name" . | printf "%s-config" }}
 data:
   httpd.conf: |
     H:/var/www/html
@@ -12,7 +12,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "fallback.name" . | printf "%s-content" }}
+  name: {{ include "graylog.fallback.name" . | printf "%s-content" }}
 data:
   healthz: "ok"
   livez: "ok"

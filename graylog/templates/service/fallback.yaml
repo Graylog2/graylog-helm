@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "fallback.name" . }}
+  name: {{ include "graylog.fallback.name" . }}
 spec:
   selector:
-    graylog-app: {{ include "fallback.name" . }}
+    graylog-app: {{ include "graylog.fallback.name" . }}
   ports:
     - port: 80
       targetPort: 3000

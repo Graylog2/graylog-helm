@@ -66,9 +66,9 @@ Service account name
 
 {{/*
 Size presets
-usage: (list <size preset key> <size field to index> . | list "graylog" | include "presets.size")
+usage: (list <size preset key> <size field to index> . | list "graylog" | include "_presets.size")
 */}}
-{{- define "presets.size" }}
+{{- define "graylog._presets.size" }}
 {{- $indices := dict "replicas" 0 "cpu" 1 "memory" 2 -}}
 {{- $defaults := dict }}
 {{- $_ := list 2 1 1 | set $defaults "graylog" }}
@@ -94,17 +94,17 @@ usage: (list $key <field> . | include "graylog.presets.size")
   e.g. (list "small" "replicas" . | include "graylog.presets.size")
 */}}
 {{- define "graylog.presets.size" }}
-{{- list "graylog" . | include "presets.size" }}
+{{- list "graylog" . | include "graylog._presets.size" }}
 {{- end }}
 
 {{/*
 Datanode size presets
 Returns {replicas|cpu|memory} values for a given preset
 usage: (list $key <field> . | include "datanode.presets.size")
-  e.g. (list "small" "replicas" . | include "datanode.presets.size")
+  e.g. (list "small" "replicas" . | include "graylog.datanode.presets.size")
 */}}
-{{- define "datanode.presets.size" }}
-{{- list "datanode" . | include "presets.size" }}
+{{- define "graylog.datanode.presets.size" }}
+{{- list "datanode" . | include "graylog._presets.size" }}
 {{- end }}
 
 {{/*
@@ -117,38 +117,38 @@ Graylog replicas
 {{/*
 Datanode replicas
 */}}
-{{- define "datanode.replicas" }}
-{{- .Values.datanode.replicas | default (list .Values.size "replicas" . | include "datanode.presets.size") | default 3 }}
+{{- define "graylog.datanode.replicas" }}
+{{- .Values.datanode.replicas | default (list .Values.size "replicas" . | include "graylog.datanode.presets.size") | default 3 }}
 {{- end }}
 
 {{/*
 Graylog image tag
 */}}
-{{- define "graylog.imageTag" }}
-{{- coalesce .Values.graylog.custom.image.tag .Values.version | default .Chart.AppVersion }}
+{{- define "graylog.tag" }}
+{{- coalesce .Values.graylog.image.tag .Values.version | default .Chart.AppVersion }}
 {{- end }}
 
 {{/*
 Graylog image
 */}}
 {{- define "graylog.image" }}
-{{- $name := .Values.graylog.custom.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}
-{{- include "graylog.imageTag" . | printf "%s:%s" $name }}
+{{- $name := .Values.graylog.image.repository | default (.Values.graylog.enterprise | ternary "-enterprise" "" | printf "graylog/graylog%s" )  }}
+{{- include "graylog.tag" . | printf "%s:%s" $name }}
 {{- end }}
 
 {{/*
 Graylog Datanode image tag
 */}}
-{{- define "datanode.imageTag" }}
-{{- coalesce .Values.datanode.custom.image.tag .Values.version | default .Chart.AppVersion }}
+{{- define "graylog.datanode.tag" }}
+{{- coalesce .Values.datanode.image.tag .Values.version | default .Chart.AppVersion }}
 {{- end }}
 
 {{/*
 Graylog Datanode image
 */}}
-{{- define "datanode.image" }}
-{{- $name := .Values.datanode.custom.image.repository | default "graylog/graylog-datanode" }}
-{{- include "datanode.imageTag" . | printf "%s:%s" $name }}
+{{- define "graylog.datanode.image" }}
+{{- $name := .Values.datanode.image.repository | default "graylog/graylog-datanode" }}
+{{- include "graylog.datanode.tag" . | printf "%s:%s" $name }}
 {{- end }}
 
 {{/*
@@ -224,31 +224,31 @@ MongoDB secret name
 {{/*
 Graylog service name
 */}}
-{{- define "graylog.serviceName" -}}
+{{- define "graylog.service.name" -}}
 {{- $defaultName := include "graylog.fullname" . | printf "%s-svc" }}
-{{- .Values.graylog.custom.service.nameOverride | default $defaultName }}
+{{- .Values.graylog.service.nameOverride | default $defaultName }}
 {{- end }}
 
 {{/*
 Graylog service app port
 */}}
 {{- define "graylog.service.port.app" -}}
-{{- .Values.graylog.custom.service.ports.app | default 9000 | int }}
+{{- .Values.graylog.service.ports.app | default 9000 | int }}
 {{- end }}
 
 {{/*
 Graylog configmap name
 */}}
-{{- define "graylog.configmapName" -}}
+{{- define "graylog.configmap.name" -}}
 {{- include "graylog.fullname" . | printf "%s-config" }}
 {{- end }}
 
 {{/*
 Graylog data PVC/volume name
 */}}
-{{- define "graylog.volumeName" -}}
+{{- define "graylog.volume.name" -}}
 {{- $defaultName := include "graylog.fullname" . | printf "%s-data" }}
-{{- .Values.graylog.custom.persistence.volumeNameOverride | default $defaultName }}
+{{- .Values.graylog.persistence.volumeNameOverride | default $defaultName }}
 {{- end }}
 
 {{/*
@@ -261,7 +261,7 @@ Graylog Datanode pod prefix
 {{/*
 Graylog Datanode service name
 */}}
-{{- define "graylog.datanode.serviceName" -}}
+{{- define "graylog.datanode.service.name" -}}
 {{- include "graylog.fullname" . | printf "%s-datanode-svc" }}
 {{- end }}
 
@@ -270,8 +270,8 @@ Graylog Datanode hosts
 */}}
 {{- define "graylog.datanode.hosts" -}}
 {{- $builder := list }}
-{{- range $i := include "datanode.replicas" . | int | until }}
-{{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" (include "graylog.datanode.name" $) $i (include "graylog.datanode.serviceName" $) ($.Release.Namespace) | append $builder }}
+{{- range $i := include "graylog.datanode.replicas" . | int | until }}
+{{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" (include "graylog.datanode.name" $) $i (include "graylog.datanode.service.name" $) ($.Release.Namespace) | append $builder }}
 {{- end }}
 {{- join "," $builder | quote }}
 {{- end }}
@@ -279,21 +279,21 @@ Graylog Datanode hosts
 {{/*
 Datanode configmap name
 */}}
-{{- define "graylog.datanode.configmapName" -}}
+{{- define "graylog.datanode.configmap.name" -}}
 {{- include "graylog.fullname" . | printf "%s-datanode-config" }}
 {{- end }}
 
 {{/*
 Custom enviroment variables
-usage: {{ include "graylog.custom.env" .Values.{graylog|datanode} | indent N }}
+usage: {{ include "graylog.env" .Values.{graylog|datanode} | indent N }}
 */}}
-{{- define "graylog.custom.env" }}
+{{- define "graylog.env" }}
 {{- $explicit := list }}
-{{- range $_, $e := .custom.extraEnv }}
+{{- range $_, $e := .extraEnv }}
 {{- if $e.name }}{{ $explicit = append $explicit .name }}{{ end }}
 - {{ toYaml $e | nindent 2 | trim }}
 {{- end }}
-{{- range $k, $v := .custom.env }}
+{{- range $k, $v := .env }}
 {{- if has $k $explicit | not }}
 - name: {{ $k }}
   value: {{ $v | quote }}
@@ -305,9 +305,9 @@ usage: {{ include "graylog.custom.env" .Values.{graylog|datanode} | indent N }}
 Graylog Publish URI
 */}}
 {{- define "graylog.publishUri" }}
-{{- $port := .Values.graylog.custom.service.ports.app | default 9000 | int }}
+{{- $port := .Values.graylog.service.ports.app | default 9000 | int }}
 {{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
-{{- printf "%s://$(POD_NAME).%s.%s.svc.cluster.local:%d/" $scheme (include "graylog.serviceName" .) .Release.Namespace $port }}
+{{- printf "%s://$(POD_NAME).%s.%s.svc.cluster.local:%d/" $scheme (include "graylog.service.name" .) .Release.Namespace $port }}
 {{- end }}
 
 {{/*
@@ -317,7 +317,7 @@ Graylog External URI
 {{- $externalHost := "" }}
 {{- $scheme := "http" }}
 {{- $port := include "graylog.service.port.app" . | printf ":%s" }}
-{{- $svc := include "graylog.serviceName" . | lookup "v1" "Service" .Release.Namespace }}
+{{- $svc := include "graylog.service.name" . | lookup "v1" "Service" .Release.Namespace }}
 {{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.cn }}
   {{- $externalHost = .Values.graylog.config.tls.cn }}
   {{- $scheme = "https" }}
@@ -336,7 +336,7 @@ Graylog External URI
     {{- end }}
   {{- end }}
   {{- $port = "" }}
-{{- else if eq .Values.graylog.custom.service.type "LoadBalancer" | and $svc $svc.status.loadBalancer }}
+{{- else if eq .Values.graylog.service.type "LoadBalancer" | and $svc $svc.status.loadBalancer }}
   {{- $lbName := index $svc.status.loadBalancer.ingress 0 }}
   {{- $externalHost = coalesce $lbName.hostname $lbName.ip }}
 {{- end }}
@@ -469,14 +469,14 @@ Graylog Java Options
 {{/*
 Ingress name
 */}}
-{{- define "ingress.web.name" }}
+{{- define "graylog.ingress.web.name" }}
 {{- include "graylog.fullname" . | printf "%s-web" }}
 {{- end }}
 
 {{/*
 Cert-manager issuer name
 */}}
-{{- define "cert-manager.issuer.name" }}
+{{- define "graylog.cert-manager.issuer.name" }}
 {{- include "graylog.fullname" . | printf "%s-letsencrypt" }}
 {{- end }}
 
@@ -485,7 +485,7 @@ Cert-manager issuer checker
 Return: true if there is at least one Issuer or ClusterIssuer in the cluster.
 Usage: if (include "cert-manager.issuer.exists.any" . | eq "true") ...
 */}}
-{{- define "cert-manager.issuer.exists.any" }}
+{{- define "graylog.cert-manager.issuer.exists.any" }}
 {{- $gv := "cert-manager.io/v1" }}
 {{- $exists := false }}
 {{- if .Capabilities.APIVersions.Has $gv }}
@@ -501,6 +501,6 @@ Usage: if (include "cert-manager.issuer.exists.any" . | eq "true") ...
 {{/*
 Fallback service/deployment name
 */}}
-{{- define "fallback.name" }}
+{{- define "graylog.fallback.name" }}
 {{- include "graylog.fullname" . | printf "%s-waiting-room" }}
 {{- end }}

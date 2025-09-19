@@ -1,8 +1,8 @@
-{{- if not .Values.graylog.config.tls.enabled | and (include "cert-manager.issuer.exists.any" . | eq "false") .Values.ingress.enabled .Values.ingress.config.tls.issuer.autoissue.enabled }}
+{{- if not .Values.graylog.config.tls.enabled | and (include "graylog.cert-manager.issuer.exists.any" . | eq "false") .Values.ingress.enabled .Values.ingress.config.tls.issuer.autoissue.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: {{ include "cert-manager.issuer.name" . }}
+  name: {{ include "graylog.cert-manager.issuer.name" . }}
 spec:
   acme:
     server: {{ .Values.ingress.config.tls.issuer.autoissue.staging | ternary "-staging" "" | printf "https://acme%s-v02.api.letsencrypt.org/directory" }}
@@ -11,7 +11,7 @@ spec:
     solvers:
       - http01:
           ingress:
-            name: {{ include "ingress.web.name" . }}
+            name: {{ include "graylog.ingress.web.name" . }}
             {{- with .Values.tolerations }}
             podTemplate:
               spec:

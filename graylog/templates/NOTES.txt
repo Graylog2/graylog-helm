@@ -2,7 +2,7 @@ Welcome to Graylog!
 
 · Your helm release is named: {{ .Release.Name | quote }}.
 
-· You are running Graylog version {{ include "graylog.imageTag" . | quote | trimAll "\"" }}
+· You are running Graylog version {{ include "graylog.tag" . | quote | trimAll "\"" }}
 
 · Your credentials are
   {{- if empty .Values.global.existingSecretName }}:
@@ -16,7 +16,7 @@ Welcome to Graylog!
 · The following workloads have been deployed to the cluster:
 
   - {{ include "graylog.replicas" . | int }} replicas of the Graylog application.
-  - {{ include "datanode.replicas" . | int }} replicas of the Graylog Datanode.
+  - {{ include "graylog.datanode.replicas" . | int }} replicas of the Graylog Datanode.
   {{- if .Values.mongodb.subchart.enabled }}
   - {{ if eq .Values.mongodb.architecture "replicaset" }}{{ .Values.mongodb.replicaCount }} replicas{{ if .Values.mongodb.arbiter.enabled }} (+ 1 arbiter){{ end }} for MongoDB, running as a replicaset in Primary-Secondary{{if .Values.mongodb.arbiter.enabled }}-Arbiter{{ end }} mode.
     {{- else }}1 replica for MongoDB running in standalone mode.
@@ -27,11 +27,11 @@ Welcome to Graylog!
 
     helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}
 
-{{- if eq .Values.graylog.custom.service.type "LoadBalancer" }}
+{{- if eq .Values.graylog.service.type "LoadBalancer" }}
 
 · Get the URL of the UI for your Graylog instance by running the following command:
 
-    echo {{ .Values.graylog.config.tls.enabled | ternary "https" "http" }}://$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "graylog.serviceName" . }} --template "{{"{{ with (index .status.loadBalancer.ingress 0) }}{{ or .hostname .ip }}{{ end }}"}}"):{{ .Values.graylog.custom.service.ports.app | default 9000 | int }}/
+    echo {{ .Values.graylog.config.tls.enabled | ternary "https" "http" }}://$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "graylog.service.name" . }} --template "{{"{{ with (index .status.loadBalancer.ingress 0) }}{{ or .hostname .ip }}{{ end }}"}}"):{{ .Values.graylog.service.ports.app | default 9000 | int }}/
 
 {{- if .Release.IsInstall }}
 
@@ -40,10 +40,10 @@ Welcome to Graylog!
     2. All workloads are ready before opening the URL in your browser (~5 min).
 {{- end }}
 {{- end }}
-{{- if len .Values.graylog.inputs | lt 0 | and .Values.graylog.custom.inputs.enabled }}
+{{- with .Values.graylog.inputs }}
 
 · The following INPUTS are set with their corresponding service:
-{{ range .Values.graylog.inputs }}
+{{ range . }}
     - name: {{ .name }}
       port: {{ .port | int }}
       protocol: {{ .protocol }}
