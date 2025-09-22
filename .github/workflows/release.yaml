@@ -23,8 +23,8 @@ jobs:
         uses: azure/setup-helm@v1
         with:
           version: v3.4.0
-      - name: Update Helm dependencies
-        run: helm repo add mongodb https://charts.bitnami.com/bitnami && helm repo update && helm dependency update ./graylog
+#      - name: Update Helm dependencies
+#        run: helm repo add mongodb https://charts.bitnami.com/bitnami && helm repo update && helm dependency update ./graylog
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
         with:
