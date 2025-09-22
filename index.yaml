@@ -1,0 +1,19 @@
+apiVersion: v1
+entries:
+  graylog:
+  - apiVersion: v2
+    appVersion: "6.3"
+    created: "2025-09-22T19:07:22.658816707Z"
+    dependencies:
+    - condition: mongodb.subchart.enabled
+      name: mongodb
+      repository: https://charts.bitnami.com/bitnami
+      version: 16.5.21
+    description: Official Graylog Helm chart for Kubernetes
+    digest: 78fc725ae36f36c0e181251956815c1066f62d421b4fd83b0914c0ffe34d22be
+    name: graylog
+    type: application
+    urls:
+    - https://github.com/Graylog2/graylog-helm/releases/download/graylog-0.1.0/graylog-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-09-22T19:07:22.658822137Z"
