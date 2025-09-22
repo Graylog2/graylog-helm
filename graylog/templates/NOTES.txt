@@ -1,17 +1,10 @@
 Welcome to Graylog!
 
+SUMMARY
+
 · Your helm release is named: {{ .Release.Name | quote }}.
 
 · You are running Graylog version {{ include "graylog.tag" . | quote | trimAll "\"" }}
-
-· Your credentials are
-  {{- if empty .Values.global.existingSecretName }}:
-
-  - username: {{ .Values.graylog.config.rootUsername | quote }}
-  - password: {{ include "graylog.rootPassword" .  | quote }}
-  {{- else -}}
-    {{ .Values.global.existingSecretName | quote | print " managed externally using the existing secret " }}.
-  {{- end }}
 
 · The following workloads have been deployed to the cluster:
 
@@ -27,6 +20,17 @@ Welcome to Graylog!
 
     helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}
 
+EXTERNAL ACCESS
+
+· Your credentials are
+  {{- if empty .Values.global.existingSecretName }}:
+
+  - username: {{ .Values.graylog.config.rootUsername | quote }}
+  - password: {{ include "graylog.rootPassword" .  | quote }}
+  {{- else -}}
+    {{ .Values.global.existingSecretName | quote | print " managed externally using the existing secret " }}.
+  {{- end }}
+
 {{- if eq .Values.graylog.service.type "LoadBalancer" }}
 
 · Get the URL of the UI for your Graylog instance by running the following command:
@@ -36,8 +40,38 @@ Welcome to Graylog!
 {{- if .Release.IsInstall }}
 
   You might need to wait for a bit until:
-    1. The corresponding LB is provisioned before retrieving the URL (~2 min).
-    2. All workloads are ready before opening the URL in your browser (~5 min).
+  1. The corresponding LB is provisioned before retrieving the URL (~2 min).
+  2. All workloads are ready before opening the URL in your browser (~5 min).
+{{- end }}
+{{- else if and .Values.ingress.enabled .Values.ingress.web.enabled }}
+{{- if empty .Values.ingress.web.hosts }}
+· Your instance is exposed through Ingress but no rules have been configured for the Ingress resource. You can add a rule using the following command:
+
+    helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "ingress.web.hosts[0].paths[0].path=/"
+{{- else }}
+{{ $firstHost := index .Values.ingress.web.hosts 0 }}
+{{- if empty $firstHost.host | not }}
+· Your instance is exposed through Ingress and can be accessed using the following URL:
+
+    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://{{ $firstHost.host }}{{ (index $firstHost.paths 0).path }}
+{{- else }}
+· Your instance is exposed through Ingress but no hostnames have been configured for the Ingress resource. The Graylog UI can still be accessed using the address provided by your cluster’s ingress controller:
+
+    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://<your-ingress-controller-address>{{ (index $firstHost.paths 0).path }}
+
+  The exact address depends on your cluster setup. If you are unsure, please check with your cluster administrator or cloud provider.
+
+  Cluster administrators: you can find the external address of your ingress controller as follows (look for the EXTERNAL-IP or HOSTNAME field of the service associated with your ingress controller):
+
+    kubectl get svc -n <ingress-namespace>
+
+{{- end }}
+{{- end }}
+{{- if .Release.IsInstall }}
+
+  You might need to wait for a bit until:
+  1. The corresponding LB is provisioned for the Ingress Controller Service before retrieving your URL (~2 min).
+  2. All workloads are ready before opening the URL in your browser (~5 min).
 {{- end }}
 {{- end }}
 {{- with .Values.graylog.inputs }}
@@ -50,6 +84,8 @@ Welcome to Graylog!
 {{ end }}
   Make sure to complete their configuration through the Graylog UI.
 {{- end }}
+
+ADDITIONAL NOTES
 {{- if .Values.global.existingSecretName }}
 
 · IMPORTANT: You are using {{ .Values.global.existingSecretName | quote }} as the global secret override. As a result, all Graylog and MongoDB secrets are assumed to be managed externally and not by this Helm chart. Accordingly, any of the following configuration values will be ignored:
@@ -60,7 +96,7 @@ Welcome to Graylog!
     - graylog.config.tls.keyPassword
 {{- else if empty .Values.graylog.config.rootPassword }}
 
-· IMPORTANT: You are currently using a randomly generated password: {{ include "graylog.rootPassword" . | quote }}, which will not persist across upgrades. Please run the following command to set a persistent password:
+· IMPORTANT: You are currently using a randomly generated password: {{ include "graylog.rootPassword" . | quote }}, which will NOT persist across upgrades. Please run the following command to set a persistent password:
 
     echo "Enter your new password and press return:" && read -s pass && echo "Upgrading helm release {{ squote .Release.Name}}..." && helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 {{- end }}
@@ -69,4 +105,4 @@ Welcome to Graylog!
 
     helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
 
-This chart is currently in beta and should NOT be used in production. Please create an issue in the `graylog-helm` repo if you notice any unexpected behavior. We appreciate your feedback.
+This chart is currently in beta and should NOT be used in production. Please create an issue in the `graylog2/graylog-helm` repo if you notice any unexpected behavior. We appreciate your feedback.
