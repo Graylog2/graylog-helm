@@ -25,10 +25,14 @@ spec:
         - name: graylog-forwarder
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          # env:
+          envFrom:
+            - configMapRef:
+                name: graylog-forwarder
+            - secretRef:
+                name: graylog-forwarder
           ports:
             - name: input-fwd-conf
-              containerPort: 13302
+              containerPort: 5555
               protocol: TCP
           {{- with .Values.resources }}
           resources:
@@ -36,7 +40,7 @@ spec:
           {{- end }}
           volumeMounts:
           - name: graylog-forwarder-journal
-            mountPath: /var/lib/graylog-forwarder/data
+            mountPath: /data/graylog-forwarder/journal
   volumeClaimTemplates:
     - apiVersion: v1
       kind: PersistentVolumeClaim
