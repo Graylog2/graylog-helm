@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: graylog-forwarder-gelf
+  labels:
+    {{- include "graylog-forwarder.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: gelf
+      port: 12201
+      targetPort: 12201
+      protocol: TCP
+  selector:
+    {{- include "graylog-forwarder.selectorLabels" . | nindent 4 }}

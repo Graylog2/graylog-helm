@@ -31,6 +31,9 @@ spec:
             - secretRef:
                 name: graylog-forwarder
           ports:
+            - name: gelf
+              containerPort: 12201
+              protocol: TCP
             - name: input-fwd-conf
               containerPort: 5555
               protocol: TCP
