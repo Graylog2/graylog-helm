@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graylog-forwarder
+data:
+  GRAYLOG_MESSAGE_JOURNAL_MAX_AGE: 12h
+  GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE: 8GB

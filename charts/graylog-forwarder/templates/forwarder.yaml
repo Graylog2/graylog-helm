@@ -1,0 +1,52 @@
+## Graylog Forwarder StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "graylog-forwarder.fullname" . }}
+  labels:
+    app: graylog-forwarder
+    {{- include "graylog-forwarder.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: graylog-forwarder
+  template:
+    metadata:
+      labels:
+        app: graylog-forwarder
+    spec:
+      dnsPolicy: ClusterFirst
+      # securityContext:
+      #   runAsUser: 1100
+      #   runAsGroup: 1100
+      #   fsGroup: 1100
+      containers:
+        - name: graylog-forwarder
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # env:
+          ports:
+            - name: input-fwd-conf
+              containerPort: 13302
+              protocol: TCP
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          - name: graylog-forwarder-journal
+            mountPath: /var/lib/graylog-forwarder/data
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: graylog-forwarder-journal
+      spec:
+        storageClassName: {{ .Values.persistence.storageClass }}
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | default "8Gi" | quote }}
+
