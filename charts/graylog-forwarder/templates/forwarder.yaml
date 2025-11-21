@@ -10,11 +10,11 @@ spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: graylog-forwarder
+      {{- include "graylog-forwarder.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: graylog-forwarder
+        {{- include "graylog-forwarder.selectorLabels" . | nindent 8 }}
     spec:
       dnsPolicy: ClusterFirst
       # securityContext:
@@ -33,10 +33,8 @@ spec:
           ports:
             - name: gelf
               containerPort: 12201
-              protocol: TCP
             - name: input-fwd-conf
               containerPort: 5555
-              protocol: TCP
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

@@ -3,8 +3,9 @@ kind: ConfigMap
 metadata:
   name: graylog-forwarder
 data:
-  GRAYLOG_FORWARDER_SERVER_HOSTNAME: {{ .Values.config.GRAYLOG_FORWARDER_SERVER_HOSTNAME }}
-  # GRAYLOG_FORWARDER_GRPC_API_TOKEN: "sevret"
+  GRAYLOG_FORWARDER_SERVER_HOSTNAME: {{ .Values.config.graylogForwarderServerHostname }}
+  GRAYLOG_FORWARDER_GRPC_API_TOKEN: {{ .Values.config.graylogForwarderGrpcApiToken }}
+  GRAYLOG_FORWARDER_API_ENABLED: {{ .Values.config.graylogForwarderApiEnabled }}
   GRAYLOG_MESSAGE_JOURNAL_MAX_AGE: "12h"
   # GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE: "8GB"
   # GRAYLOG_DATA_DIR: "/data/graylog-forwarder/data"

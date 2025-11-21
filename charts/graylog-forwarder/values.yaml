@@ -18,7 +18,9 @@ nameOverride: ""
 fullnameOverride: ""
 
 config:
-  GRAYLOG_FORWARDER_SERVER_HOSTNAME: ""
+  graylogForwarderServerHostname: ""
+  graylogForwarderGrpcApiToken: ""
+  graylogForwarderApiEnabled: "false"
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
@@ -112,5 +114,6 @@ tolerations: []
 affinity: {}
 
 persistence:
+  enabled: true
   storageClass: gp3
   size: 8Gi

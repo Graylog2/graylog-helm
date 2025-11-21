@@ -10,6 +10,5 @@ spec:
     - name: gelf
       port: 12201
       targetPort: 12201
-      protocol: TCP
   selector:
     {{- include "graylog-forwarder.selectorLabels" . | nindent 4 }}
