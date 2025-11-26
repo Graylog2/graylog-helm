@@ -39,7 +39,7 @@ EXTERNAL ACCESS
 
 {{- if .Release.IsInstall }}
 
-  You might need to wait for a bit until:
+  You might need to wait for a few minutes until:
   1. The corresponding LB is provisioned before retrieving the URL (~2 min).
   2. All workloads are ready before opening the URL in your browser (~5 min).
 {{- end }}
@@ -50,14 +50,22 @@ EXTERNAL ACCESS
     helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "ingress.web.hosts[0].paths[0].path=/"
 {{- else }}
 {{ $firstHost := index .Values.ingress.web.hosts 0 }}
+{{ $firstHostPath := include "graylog.ingress.defaultPath" . }}
+{{- with $firstHost.paths }}
+    {{ $firstHostPath = (index . 0).path | default $firstHostPath }}
+{{- end }}
 {{- if empty $firstHost.host | not }}
 · Your instance is exposed through Ingress and can be accessed using the following URL:
 
-    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://{{ $firstHost.host }}{{ (index $firstHost.paths 0).path }}
+    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://{{ $firstHost.host }}{{ $firstHostPath }}
 {{- else }}
-· Your instance is exposed through Ingress but no hostnames have been configured for the Ingress resource. The Graylog UI can still be accessed using the address provided by your cluster’s ingress controller:
+· Your instance is exposed through Ingress but no hostnames have been configured for the Ingress resource. A new host can be configured using the following command:
 
-    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://<your-ingress-controller-address>{{ (index $firstHost.paths 0).path }}
+    helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "ingress.web.hosts[0].host=<your-host>"
+
+  Meanwhile, the Graylog UI can still be accessed using the address provided by your cluster’s ingress controller:
+
+    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://<your-ingress-controller-address>{{ $firstHostPath }}
 
   The exact address depends on your cluster setup. If you are unsure, please check with your cluster administrator or cloud provider.
 
@@ -69,7 +77,7 @@ EXTERNAL ACCESS
 {{- end }}
 {{- if .Release.IsInstall }}
 
-  You might need to wait for a bit until:
+  You might need to wait for a few minutes until:
   1. The corresponding LB is provisioned for the Ingress Controller Service before retrieving your URL (~2 min).
   2. All workloads are ready before opening the URL in your browser (~5 min).
 {{- end }}
