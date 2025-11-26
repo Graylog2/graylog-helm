@@ -1,4 +1,9 @@
-{{- if and .Values.graylog.enabled .Values.ingress.web.enabled -}}
+{{- if and .Values.graylog.enabled .Values.ingress.web.enabled }}
+{{- $defaultPath := include "graylog.ingress.defaultPath" . | dict "path" }}
+{{- $_ := include "graylog.ingress.defaultPathType" . | set $defaultPath "pathType" }}
+{{- $defaultBackendService := include "graylog.service.name" . | dict "name" }}
+{{- $_ = dict "number" .Values.graylog.service.ports.app | set $defaultBackendService "port" }}
+{{- $_ = dict "service" $defaultBackendService | set $defaultPath "backend" }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -43,28 +48,18 @@ spec:
   {{- end }}
   rules:
     {{- range .Values.ingress.web.hosts }}
-    - host: {{ .host | quote }}
-      http:
+    - http:
         paths:
-          {{- if not .paths }}
-          - path: "/"
-            pathType: ImplementationSpecific
+          {{- range .paths | default (list $defaultPath) }}
+          - path: {{ .path | default $defaultPath.path }}
+            pathType: {{ .pathType | default $defaultPath.pathType }}
+            {{- with .backend | default $defaultPath.backend }}
             backend:
-              service:
-                name: {{ include "graylog.service.name" $ }}
-                port:
-                  number: {{ $.Values.graylog.service.ports.app }}
-          {{- end }}
-          {{- range .paths }}
-          - path: {{ .path }}
-            {{- with .pathType }}
-            pathType: {{ . }}
+              {{- toYaml . | nindent 14 }}
             {{- end }}
-            backend:
-              service:
-                name: {{ include "graylog.service.name" $ }}
-                port:
-                  number: {{ $.Values.graylog.service.ports.app }}
           {{- end }}
+      {{ with .host -}}
+      host: {{ . | quote }}
+      {{- end }}
     {{- end }}
 {{- end }}

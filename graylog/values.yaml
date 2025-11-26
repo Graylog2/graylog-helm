@@ -297,8 +297,7 @@ ingress:
     className: ""
     annotations: {}
     hosts:
-      - host: chart-example.local
-        paths:
+      - paths:
           - path: /
             pathType: ImplementationSpecific
     tls: []

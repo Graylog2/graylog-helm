@@ -504,3 +504,17 @@ Fallback service/deployment name
 {{- define "graylog.fallback.name" }}
 {{- include "graylog.fullname" . | printf "%s-waiting-room" }}
 {{- end }}
+
+{{/*
+Default ingress path
+*/}}
+{{- define "graylog.ingress.defaultPath" }}
+{{- print "/" }}
+{{- end }}
+
+{{/*
+Default ingress pathType
+*/}}
+{{- define "graylog.ingress.defaultPathType" }}
+{{- print "ImplementationSpecific" }}
+{{- end }}
