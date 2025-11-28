@@ -76,60 +76,17 @@ MongoDB service account name
 {{- end }}
 
 {{/*
-Size presets
-usage: (list <size preset key> <size field to index> . | list "graylog" | include "_presets.size")
-*/}}
-{{- define "graylog._presets.size" }}
-{{- $indices := dict "replicas" 0 "cpu" 1 "memory" 2 -}}
-{{- $defaults := dict }}
-{{- $_ := list 2 1 1 | set $defaults "graylog" }}
-{{- $_  = list 3 0.5 3.5 | set $defaults "datanode" }}
-{{- $dictName  := index . 0 }}
-{{- $args := index . 1 | initial }}
-{{- $ctx := index . 1 | last }}
-{{- $sizeKey   := index $args 0 | default "default" }}
-{{- $fieldToIndex := index $args 1 | required "please request a valid size field: replicas, cpu, memory" }}
-{{- if hasKey $defaults $dictName | not }}
-  {{- fail "presets are only available for 'graylog' and 'datanode'" }}
-{{- end }}
-{{- $default := index $defaults $dictName }}
-{{- $presets := $ctx.Files.Get "files/presets.yaml" | fromYaml | default dict }}
-{{- $values := dig "size" $sizeKey $dictName $default $presets }}
-{{- index $indices $fieldToIndex | index $values }}
-{{- end }}
-
-{{/*
-Graylog size presets
-Returns {replicas|cpu|memory} values for a given preset
-usage: (list $key <field> . | include "graylog.presets.size")
-  e.g. (list "small" "replicas" . | include "graylog.presets.size")
-*/}}
-{{- define "graylog.presets.size" }}
-{{- list "graylog" . | include "graylog._presets.size" }}
-{{- end }}
-
-{{/*
-Datanode size presets
-Returns {replicas|cpu|memory} values for a given preset
-usage: (list $key <field> . | include "datanode.presets.size")
-  e.g. (list "small" "replicas" . | include "graylog.datanode.presets.size")
-*/}}
-{{- define "graylog.datanode.presets.size" }}
-{{- list "datanode" . | include "graylog._presets.size" }}
-{{- end }}
-
-{{/*
 Graylog replicas
 */}}
 {{- define "graylog.replicas" }}
-{{- .Values.graylog.replicas | default (list .Values.size "replicas" . | include "graylog.presets.size") | default 2 }}
+{{- .Values.graylog.replicas | default 2 | int }}
 {{- end }}
 
 {{/*
 Datanode replicas
 */}}
 {{- define "graylog.datanode.replicas" }}
-{{- .Values.datanode.replicas | default (list .Values.size "replicas" . | include "graylog.datanode.presets.size") | default 3 }}
+{{- .Values.datanode.replicas | default 3 | int }}
 {{- end }}
 
 {{/*
