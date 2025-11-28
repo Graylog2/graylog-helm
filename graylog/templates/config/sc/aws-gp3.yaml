@@ -1,12 +1,11 @@
 {{- $provider := .Values.provider | default "" }}
-{{- $isAWS := hasPrefix "aws" $provider }}
-{{- if empty .Values.global.defaultStorageClass | and $isAWS }}
+{{- if and (empty .Values.global.defaultStorageClass) (hasPrefix "aws" $provider) }}
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: {{ include "graylog.fullname" . | printf "%s-gp3" }}
   annotations:
-    {{- if hasSuffix "-managed-sc" $provider | and $isAWS }}
+    {{- if hasSuffix "-managed-sc" $provider }}
     storageclass.kubernetes.io/is-default-class: "true"
     {{- end }}
 provisioner: ebs.csi.aws.com

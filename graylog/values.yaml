@@ -1,8 +1,5 @@
 # Default values for Graylog.
 
-# Preset cluster size (optional)
-size: ""
-
 # Kubernetes provider (optional)
 provider: ""
 
