@@ -51,6 +51,23 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
+      initContainers:
+        - name: mongo-auth-check
+          image: {{ .Values.mongodb.version | default "7.0" | printf "mongodb/mongodb-community-server:%s-ubi8" }}
+          command: [ "sh", "-c" ]
+          args:
+            - |
+              echo "Waiting for MongoDB..."
+              until mongosh \
+                "$GRAYLOG_MONGODB_URI" \
+                --eval 'db.runCommand({ ping: 1 })' >/dev/null 2>&1; do
+                  echo "MongoDB not ready for authenticated connections, retrying in 5s..."
+                  sleep 5
+              done
+              echo "MongoDB is ready. We're good to go!";
+          envFrom:
+            - secretRef:
+                name: {{ include "graylog.secretsName" . }}
       containers:
         - name: graylog-datanode
           image: {{ include "graylog.datanode.image" . }}

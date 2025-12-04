@@ -1,0 +1,72 @@
+{{- if .Values.mongodb.communityResource.enabled }}
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: {{ include "graylog.mongodb.crName" . }}
+spec:
+  {{- $replicas := .Values.mongodb.replicas | default 2 | int }}
+  {{- $arbiters := .Values.mongodb.arbiters | default 0 | int }}
+  {{- if ge $arbiters $replicas }}
+  {{- printf "Number of MongoDB arbiters must be less than the number of replicas (replicas=%d, arbiters=%d)." $replicas $arbiters | fail }}
+  {{- end }}
+  members: {{ $replicas }}
+  {{- if gt $arbiters 0 }}
+  arbiters: {{ $arbiters }}
+  {{- end }}
+  type: ReplicaSet
+  version: {{ .Values.mongodb.version | default "7.0" | quote }}
+  security:
+    authentication:
+      modes: ["SCRAM"]
+      ignoreUnknownUsers: true
+  users:
+    - name: admin
+      db: admin
+      passwordSecretRef:
+        name: {{ include "graylog.backupSecretName" . }}
+        key: "mongodb-root-password"
+      roles:
+        - name: clusterAdmin
+          db: admin
+        - name: userAdminAnyDatabase
+          db: admin
+      scramCredentialsSecretName: {{ include "graylog.mongodb.crName" . | printf "%s-admin" }}
+    - name: {{ include "graylog.mongodb.crUsername" . }}
+      db: {{ include "graylog.mongodb.crDatabase" . }}
+      passwordSecretRef:
+        name: {{ include "graylog.backupSecretName" . }}
+        key: "mongodb-db-password"
+      roles:
+        - name: readWrite
+          db: {{ include "graylog.mongodb.crDatabase" . }}
+      scramCredentialsSecretName: {{ printf "%s-%s" (include "graylog.mongodb.crName" .) (include "graylog.mongodb.crUsername" .) }}
+    {{- with .Values.mongodb.users }}
+      {{- . | toYaml | nindent 4 }}
+    {{- end }}
+  statefulSet:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "graylog.serviceAccountName" . }}
+      volumeClaimTemplates:
+        - metadata:
+            name: mongodb-data-vol
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            {{- with .Values.mongodb.persistence.storageClass }}
+            storageClassName: {{ . | quote }}
+            {{- end }}
+            resources:
+              requests:
+                storage: {{ .Values.mongodb.persistence.size.data | default "10G" | quote }}
+        - metadata:
+            name: mongodb-logs-vol
+          spec:
+            accessModes: [ "ReadWriteOnce" ]
+            {{- with .Values.mongodb.persistence.storageClass }}
+            storageClassName: {{ . | quote }}
+            {{- end }}
+            resources:
+              requests:
+                storage: {{ .Values.mongodb.persistence.size.data | default "2G" | quote }}
+{{- end }}

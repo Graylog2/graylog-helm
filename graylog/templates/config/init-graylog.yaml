@@ -21,7 +21,7 @@ data:
       echo "Please, make sure to include {{ printf "DNS:*.%s" $fqdn | quote }} as another SAN in your certificate request."
       exit 1
     else
-    {{- if .Values.graylog.config.tls.updateKeyStore}}
+    {{- if .Values.graylog.config.tls.updateKeyStore }}
       # check if root CA is in cert file
       openssl crl2pkcs7 -nocrl -certfile "/mnt/tls/tls.crt" | openssl pkcs7 -print_certs -outform PEM | awk -v out="cert" '
       /-----BEGIN CERTIFICATE-----/ {n++; f=sprintf("%s-%03d.pem", out, n); writing=1}
