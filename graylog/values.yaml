@@ -276,7 +276,17 @@ serviceAccount:
   automount: true
   annotations: {}
   nameOverride: ""
-
+  role:
+    create: false
+    rules:
+      - apiGroups: [ "" ]
+        resources: [ "secrets" ]
+        resourceNames: []
+        verbs: [ "get" ]
+      - apiGroups: [ "" ]
+        resources: [ "pods" ]
+        resourceNames: []
+        verbs: [ "get", "patch", "delete" ]
 # Ingress configuration
 # more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -316,24 +326,20 @@ ingress:
             pathType: ImplementationSpecific
     tls: []
 
-# MongoDB Bitnami Chart configuration
-# more information can be found here: https://artifacthub.io/packages/helm/bitnami/mongodb
+# MongoDB Community Resource configuration
+# Requires MongoDB Kubernetes Operator: https://github.com/mongodb/mongodb-kubernetes-operator/tree/master/docs
 mongodb:
-  subchart:
+  communityResource:
     enabled: true
-  image:
-    tag: "7.0"
+  version: "7.0.25"
   architecture: "replicaset"
-  arbiter:
-    enabled: true
-  replicaCount: 2
+  replicas: 2
+  arbiters: 1
   persistence:
     storageClass: ""
-  auth:
-    username: "graylog"
-    database: "graylog"
-    existingSecret: "graylog-mongodb-secret"
-  passwordUpdateJob:
-    enabled: true
-    previousPasswords:
-      existingSecret: "graylog-backup-secret"
+    size:
+      data: "10G"
+      logs: "2G"
+  security:
+    tls:
+      enabled: false

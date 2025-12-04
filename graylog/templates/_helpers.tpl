@@ -209,16 +209,38 @@ Graylog Datanode secret name
 Graylog backup-secret name
 */}}
 {{- define "graylog.backupSecretName" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-backup-secret" }}
-{{- .Values.mongodb.passwordUpdateJob.previousPasswords.existingSecret | default $defaultName }}
+{{- include "graylog.fullname" . | printf "%s-backup-secret" }}
 {{- end }}
 
 {{/*
-MongoDB secret name
+MongoDB Community Resource name
 */}}
-{{- define "graylog.mongodb.secretName" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-mongo-secret" }}
-{{- .Values.mongodb.auth.existingSecret | default $defaultName }}
+{{- define "graylog.mongodb.crName" -}}
+{{- include "graylog.fullname" . | printf "%s-mongo-rs" }}
+{{- end }}
+
+{{/*
+MongoDB Community Resource main username
+*/}}
+{{- define "graylog.mongodb.crUsername" -}}
+{{- print "graylog" }}
+{{- end }}
+
+{{/*
+MongoDB Community Resource main database
+*/}}
+{{- define "graylog.mongodb.crDatabase" -}}
+{{- print "graylog" }}
+{{- end }}
+
+{{/*
+MongoDB Community Resource Secret name
+*/}}
+{{- define "graylog.mongodb.crSecretName" -}}
+{{- $crName := include "graylog.mongodb.crName" . }}
+{{- $userName := include "graylog.mongodb.crUsername" . }}
+{{- $dbName := include "graylog.mongodb.crDatabase" . }}
+{{- printf "%s-%s-%s" $crName $userName $dbName }}
 {{- end }}
 
 {{/*

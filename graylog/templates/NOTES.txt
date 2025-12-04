@@ -10,10 +10,13 @@ SUMMARY
 
   - {{ include "graylog.replicas" . | int }} replicas of the Graylog application.
   - {{ include "graylog.datanode.replicas" . | int }} replicas of the Graylog Datanode.
-  {{- if .Values.mongodb.subchart.enabled }}
-  - {{ if eq .Values.mongodb.architecture "replicaset" }}{{ .Values.mongodb.replicaCount }} replicas{{ if .Values.mongodb.arbiter.enabled }} (+ 1 arbiter){{ end }} for MongoDB, running as a replicaset in Primary-Secondary{{if .Values.mongodb.arbiter.enabled }}-Arbiter{{ end }} mode.
-    {{- else }}1 replica for MongoDB running in standalone mode.
-    WARNING: running mongoDB in standalone mode is NOT SUPPORTED.{{ end }}
+  {{- if .Values.mongodb.communityResource.enabled }}
+  {{- $mongoReplicaCount := .Values.mongodb.replicas | int }}
+  {{- $mongoArbiterCount := .Values.mongodb.arbiters | int }}
+  - {{ $mongoReplicaCount }} replicas{{ if $mongoArbiterCount }} (+ {{ $mongoArbiterCount }} arbiter){{ end }} for MongoDB, running as a replicaset in Primary-Secondary{{ if $mongoArbiterCount }}-Arbiter{{ end }} mode.
+  {{ if mod (add $mongoArbiterCount $mongoReplicaCount | int) 2 | eq 0 }}
+  WARNING: An odd number of workers (replicas + arbiters) is preferred for MongoDB Replica Sets.
+  {{- end }}
   {{- end }}
 
   Use the following command to list all the resources deployed with this release:
@@ -98,7 +101,7 @@ ADDITIONAL NOTES
 
 · IMPORTANT: You are currently using a randomly generated password: {{ include "graylog.rootPassword" . | quote }}, which will NOT persist across upgrades. Please run the following command to set a persistent password:
 
-    echo "Enter your new password and press return:" && read -s pass && echo "Upgrading helm release {{ squote .Release.Name}}..." && helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
+    echo "Enter your new password and press return:" && read -s pass && echo "Upgrading helm release {{ squote .Release.Name }}..." && helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 {{- end }}
 
 · Use the following command to print this status page again:
