@@ -53,7 +53,7 @@ spec:
             name: mongodb-data-vol
           spec:
             accessModes: ["ReadWriteOnce"]
-            {{- with .Values.mongodb.persistence.storageClass }}
+            {{- with .Values.mongodb.persistence.storageClass | default .Values.global.defaultStorageClass }}
             storageClassName: {{ . | quote }}
             {{- end }}
             resources:
@@ -63,7 +63,7 @@ spec:
             name: mongodb-logs-vol
           spec:
             accessModes: [ "ReadWriteOnce" ]
-            {{- with .Values.mongodb.persistence.storageClass }}
+            {{- with .Values.mongodb.persistence.storageClass | default .Values.global.defaultStorageClass }}
             storageClassName: {{ . | quote }}
             {{- end }}
             resources:
