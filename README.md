@@ -10,7 +10,7 @@ This chart is still under development and does not have locked in api contracts 
 
 ## Table of Contents
 * [Requirements](#requirements)
-  * [Optional Dependencies](#optional-dependencies)
+  * [External Dependencies](#optional-dependencies)
 * [Installation](#installation)
 * [Post-installation](#post-installation)
   * [Set root Graylog password](#set-root-graylog-password)
@@ -33,17 +33,28 @@ This chart is still under development and does not have locked in api contracts 
 * [Graylog Helm Chart Values Reference](#graylog-helm-chart-values-reference)
 
 # Requirements
-- Kubernetes v1.32
+- Kubernetes >= 1.32
+- Helm >= 3.0
 
-## Optional Dependencies
+## External Dependencies
 
 This Helm chart is designed as a turnkey solution for quick demos and proofs of concept,
-as well as streamlined production-grade setups through optional dependencies.
+as well as streamlined production-grade setups through external dependencies.
 These dependencies are not bundled with the chart and must be installed separately.
 
 > [!WARNING]
 > We do not provide support for any of these optional dependencies.
 > Please refer to their respective documentation for installation, usage, and troubleshooting.
+
+### MongoDB Operator
+
+The official [MongoDB Controllers for Kubernetes (MCK) Operator](https://www.mongodb.com/docs/kubernetes/current/)
+is the recommended method for provisioning the MongoDB replica sets required for running Graylog in production. 
+This decoupled approach provides greater flexibility, improved lifecycle management, operational consistency, and 
+overall production readiness.
+
+You may also choose to [bring your own MongoDB](#bring-your-own-mongodb), but for ease of deployment as well as
+improved reliability the MCK Operator remains the preferred way to deploy MongoDB and is therefore enabled by default.
 
 ### Ingress Controller
 
@@ -67,23 +78,6 @@ For convenience, this chart also provides an optional built-in feature to automa
 for `cert-manager`. This feature is disabled by default, since issuers are typically managed directly by cluster
 administrators. However, if you don't want to manage the issuer yourself, just set `managed.issuer=true` and
 we'll provision one automatically for you.
--->
-<!--
-#### MongoDB Operator
-
-By default, this chart includes the Bitnami MongoDB sub-chart for simplicity and ease of use as it provides a
-zero-config, self-contained database setup. However, note that:
-
-- Bitnami’s free MongoDB containers are being deprecated.
-- The official MongoDB team recommends using the MongoDB Kubernetes Operator for production environments
-
-Thus, our chart also works with the **MongoDB Operator**, via a custom resource template rendered when the mongo
-subchart is disabled by setting `mongo.enabled = false`.
-
-> [!IMPORTANT]
-> The MongoDB operator must be installed and running in your cluster before disabling the subchart.
-
-This decoupled approach provides greater flexibility, lifecycle control, and production-readiness.
 -->
 
 <!--
@@ -109,7 +103,14 @@ git clone git@github.com:Graylog2/graylog-helm.git
 cd graylog-helm
 ```
 
-## Install local chart
+## Install the official MongoDB Kubernetes Operator using Helm
+```sh
+helm upgrade --install mongodb-kubernetes-operator mongodb/mongodb-kubernetes \
+  --set operator.watchNamespace="*" --reuse-values \
+  --namespace operators --create-namespace
+```
+
+## Install the official Graylog Helm chart
 ```sh
 helm install graylog ./graylog --namespace graylog --create-namespace
 ```
@@ -174,8 +175,8 @@ helm upgrade graylog ./graylog -n graylog --set datanode.replicas=5 --reuse-valu
 
 ## Scale MongoDB
 ```sh
-# scaling out: add more MongoDB nodes to your replicaset
-helm upgrade graylog ./graylog -n graylog --set mongodb.replicaCount=4 --reuse-values
+# scaling out: add more MongoDB nodes to your replica set
+helm upgrade graylog ./graylog -n graylog --set mongodb.replicas=4 --reuse-values
 ```
 
 ## Modify Graylog `server.conf` parameters
@@ -368,12 +369,16 @@ helm upgrade -i graylog ./graylog -n graylog --reuse-values --set global.existin
 
 ## Bring Your Own MongoDB
 
-By default, this chart deploys a MongoDB replicaset using [the Bitnami MongoDB chart](https://artifacthub.io/packages/helm/bitnami/mongodb) as a dependency.
-If you prefer to use your own MongoDB instance, you can disable the bundled MongoDB and configure the chart to connect to your external database:
+By default, this chart deploys a MongoDB replica set using a custom resource template, which is rendered when 
+`mongodb.communityResource.enabled` is set to `true` (the default setting).The
+[MongoDB Controllers for Kubernetes Operator](https://github.com/mongodb/mongodb-kubernetes) then manages the
+corresponding pods.
 
+If you prefer to use your own MongoDB instance, you can disable the custom MongoDB resource and configure the chart to
+connect to your external database:
 ```sh
 helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
-  --set mongodb.subchart.enabled=false \
+  --set mongodb.communityResource.enabled=false \
   --set graylog.config.mongodb.customUri="mongodb[+srv]://<username>:<password>@<hostname>:<port>[,<i-th hostname>:<i-th port>]/<db name>"
 ```
 
@@ -381,7 +386,7 @@ helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
 
 ```sh
 helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
-  --set mongodb.subchart.enabled=false \
+  --set mongodb.communityResource.enabled=false \
   --set global.existingSecretName="<your secret name>"
 ```
 
@@ -684,3 +689,18 @@ These values affect Graylog, DataNode, and MongoDB
 | `ingress.forwarder.hosts[0].paths[0].path`     | Path for routing.                     | `/`                      |
 | `ingress.forwarder.hosts[0].paths[0].pathType` | Path matching type.                   | `ImplementationSpecific` |
 | `ingress.forwarder.tls`                        | TLS configuration.                    | `[]`                     |
+
+## MongoDB
+MongoDB Community Resource configuration.
+Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
+
+| Key Path                            | Description                                                 | Default    |
+| ----------------------------------- | ----------------------------------------------------------- |------------|
+| `mongodb.communityResource.enabled` | Enables creation of the `MongoDBCommunity` custom resource. | `true`     |
+| `mongodb.version`                   | MongoDB server version for the replica set.                 | `"7.0.25"` |
+| `mongodb.replicas`                  | Number of data-bearing replica set members.                 | `2`        |
+| `mongodb.arbiters`                  | Number of arbiter nodes to deploy.                          | `1`        |
+| `mongodb.persistence.storageClass`  | StorageClass to use for persistent volumes.                 | `""`       |
+| `mongodb.persistence.size.data`     | Persistent volume size for data storage.                    | `"10G"`    |
+| `mongodb.persistence.size.logs`     | Persistent volume size for MongoDB logs.                    | `"2G"`     |
+| `mongodb.security.tls.enabled`      | Enables TLS/SSL for MongoDB communication.                  | `false`    |

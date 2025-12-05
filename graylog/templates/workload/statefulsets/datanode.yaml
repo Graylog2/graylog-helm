@@ -57,6 +57,12 @@ spec:
           command: [ "sh", "-c" ]
           args:
             - |
+              term_handler() {
+                echo "Received SIGTERM, exiting init container."
+                exit 0
+              }
+              trap term_handler TERM INT
+
               echo "Waiting for MongoDB..."
               until mongosh \
                 "$GRAYLOG_MONGODB_URI" \
