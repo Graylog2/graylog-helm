@@ -327,12 +327,11 @@ ingress:
     tls: []
 
 # MongoDB Community Resource configuration
-# Requires MongoDB Kubernetes Operator: https://github.com/mongodb/mongodb-kubernetes-operator/tree/master/docs
+# Requires MongoDB Kubernetes Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
 mongodb:
   communityResource:
     enabled: true
   version: "7.0.25"
-  architecture: "replicaset"
   replicas: 2
   arbiters: 1
   persistence:
