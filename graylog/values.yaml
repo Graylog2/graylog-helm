@@ -1,13 +1,13 @@
 # Default values for Graylog.
 
-# Preset cluster size (optional)
-size: ""
-
 # Kubernetes provider (optional)
 provider: ""
 
 # Override Graylog and Graylog Data Node version (optional)
 version: ""
+
+# Override the preset cluster size (optional)
+sizeOverride: ""
 
 # Override the chart name (optional)
 nameOverride: ""

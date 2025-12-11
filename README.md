@@ -417,13 +417,13 @@ stern statefulset/graylog-datanode -n graylog-helm-dev-1
 ---
 
 # Graylog Helm Chart Values Reference
-| Key Path           | Description                                                      | Default   |
-|--------------------|------------------------------------------------------------------| --------- |
-| `size`             | Preset cluster size (optional).                                  | `""`      |
-| `provider`         | Kubernetes provider (optional).                                  | `""`      |
-| `version`          | Override Graylog and Graylog Data Node version (optional).       | `""`      |
-| `nameOverride`     | Override the `app.kubernetes.io/name` label value (optional).    | `""`      |
-| `fullnameOverride` | Override the fully qualified name of the application (optional). | `""`      |
+| Key Path           | Description                                                                                      | Default   |
+|--------------------|--------------------------------------------------------------------------------------------------| --------- |
+| `provider`         | Kubernetes provider (optional).                                                                  | `""`      |
+| `version`          | Override Graylog and Graylog Data Node version (optional).                                       | `""`      |
+| `sizeOverride`     | Override Graylog and Graylog Data Node replicas and resource requests using a preset (optional). | `""`      |
+| `nameOverride`     | Override the `app.kubernetes.io/name` label value (optional).                                    | `""`      |
+| `fullnameOverride` | Override the fully qualified name of the application (optional).                                 | `""`      |
 
 ## Global
 These values affect Graylog, DataNode, and MongoDB

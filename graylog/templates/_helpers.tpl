@@ -76,7 +76,10 @@ usage: (list <size preset key> <size field to index> . | list "graylog" | includ
 {{- $dictName  := index . 0 }}
 {{- $args := index . 1 | initial }}
 {{- $ctx := index . 1 | last }}
-{{- $sizeKey   := index $args 0 | default "default" }}
+{{- $sizeKey   := index $args 0 }}
+{{- if empty $sizeKey }}
+{{- int 0 }}
+{{- else }}
 {{- $fieldToIndex := index $args 1 | required "please request a valid size field: replicas, cpu, memory" }}
 {{- if hasKey $defaults $dictName | not }}
   {{- fail "presets are only available for 'graylog' and 'datanode'" }}
@@ -85,6 +88,7 @@ usage: (list <size preset key> <size field to index> . | list "graylog" | includ
 {{- $presets := $ctx.Files.Get "files/presets.yaml" | fromYaml | default dict }}
 {{- $values := dig "size" $sizeKey $dictName $default $presets }}
 {{- index $indices $fieldToIndex | index $values }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -111,14 +115,14 @@ usage: (list $key <field> . | include "datanode.presets.size")
 Graylog replicas
 */}}
 {{- define "graylog.replicas" }}
-{{- .Values.graylog.replicas | default (list .Values.size "replicas" . | include "graylog.presets.size") | default 2 }}
+{{- coalesce (list .Values.sizeOverride "replicas" . | include "graylog.presets.size" | int) .Values.graylog.replicas | default 2 | int }}
 {{- end }}
 
 {{/*
 Datanode replicas
 */}}
 {{- define "graylog.datanode.replicas" }}
-{{- .Values.datanode.replicas | default (list .Values.size "replicas" . | include "graylog.datanode.presets.size") | default 3 }}
+{{- coalesce (list .Values.sizeOverride "replicas" . | include "graylog.datanode.presets.size" | int) .Values.datanode.replicas | default 3 | int }}
 {{- end }}
 
 {{/*
