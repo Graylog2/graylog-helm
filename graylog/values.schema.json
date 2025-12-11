@@ -4,17 +4,6 @@
   "type": "object",
   "required": [],
   "properties": {
-    "size": {
-      "type": "string",
-      "description": "Preset cluster size (optional)",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [ "xs", "small", "medium", "large", "xl", "xxl", "default", "poc", "" ]
-        },
-        { "type": "null" }
-      ]
-    },
     "provider": {
       "type": "string",
       "description": "Kubernetes provider (optional)",
@@ -29,6 +18,17 @@
     "version": {
       "type": "string",
       "description": "Override Graylog and Graylog Data Node version (optional)"
+    },
+    "sizeOverride": {
+      "type": "string",
+      "description": "Override the preset cluster size (optional)",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [ "xs", "small", "medium", "large", "xl", "xxl", "default", "poc", "" ]
+        },
+        { "type": "null" }
+      ]
     },
     "nameOverride": {
       "type": "string",
