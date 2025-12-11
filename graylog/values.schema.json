@@ -4,17 +4,6 @@
   "type": "object",
   "required": [],
   "properties": {
-    "size": {
-      "type": "string",
-      "description": "Preset cluster size (optional)",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [ "xs", "small", "medium", "large", "xl", "xxl", "default", "poc", "" ]
-        },
-        { "type": "null" }
-      ]
-    },
     "provider": {
       "type": "string",
       "description": "Kubernetes provider (optional)",
@@ -139,12 +128,27 @@
             "timezone": { "type": "string" },
             "selfSignedStartup": { "type": "string" },
             "serverJavaOpts": { "type": "string" },
+            "extraServerJavaOpts": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
             "leaderElectionMode": { "type": "string" },
             "contentPacksAutoInstall": { "type": "string" },
             "isCloud": { "type": "string" },
+            "tls": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "secretName": { "type": "string" },
+                "keyPassword": { "type": "string" },
+                "updateKeyStore": { "type": "boolean" },
+                "keyStorePass": { "type": "string" }
+              }
+            },
             "mongodb": {
               "type": "object",
               "properties": {
+                "customUri": { "type": "string" },
                 "maxConnections": { "type": "string" },
                 "versionProbeAttempts": { "type": "string" }
               }
@@ -168,7 +172,8 @@
                 "enableGzip": { "type": "string" },
                 "maxHeaderSize": { "type": "string" },
                 "readTimeout": { "type": "string" },
-                "threadPoolSize": { "type": "string" }
+                "threadPoolSize": { "type": "string" },
+                "externalUri": { "type": "string" }
               }
             },
             "performance": {
@@ -202,6 +207,74 @@
                 "useSsl": { "type": "string" },
                 "useTls": { "type": "string" },
                 "webInterfaceUrl": { "type": "string" }
+              }
+            },
+            "plugins": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" }
+              }
+            },
+            "geolocation": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "maxmindGeoIp": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "accountId": { "type": ["string", "null"] },
+                    "licenseKey": { "type": ["string", "null"] },
+                    "cronSchedule": { "type": "string" },
+                    "postInstallRun": { "type": "boolean" }
+                  }
+                },
+                "mmdbSources": {
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "object",
+                      "properties": {
+                        "url": { "type": ["string", "null"] },
+                        "checksum": { "type": ["string", "null"] }
+                      }
+                    },
+                    "asn": {
+                      "type": "object",
+                      "properties": {
+                        "url": { "type": ["string", "null"] },
+                        "checksum": { "type": ["string", "null"] }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "init": {
+              "type": "object",
+              "properties": {
+                "assetFetch": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "skipChecksum": { "type": "boolean" },
+                    "allowHttp": { "type": "boolean" },
+                    "plugins": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": { "type": "boolean" },
+                        "baseUrl": { "type": ["string", "null"] }
+                      }
+                    },
+                    "geolocation": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": { "type": "boolean" },
+                        "baseUrl": { "type": ["string", "null"] }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -349,7 +422,13 @@
             "opensearchHeap": { "type": "string" },
             "javaOpts": { "type": "string" },
             "skipPreflightChecks": { "type": "string" },
-            "nodeSearchCacheSize": { "type": "string" }
+            "nodeSearchCacheSize": { "type": "string" },
+            "s3ClientDefaultSecretKey": { "type": "string" },
+            "s3ClientDefaultAccessKey": { "type": "string" },
+            "s3ClientDefaultEndpoint": { "type": "string" },
+            "s3ClientDefaultRegion": { "type": "string" },
+            "s3ClientDefaultProtocol": { "type": "string" },
+            "s3ClientDefaultPathStyleAccess": { "type": "string" }
           }
         },
         "image": {
@@ -502,7 +581,71 @@
     "ingress": {
       "type": "object",
       "properties": {
+        "enabled": { "type": "boolean" },
+        "config": {
+          "type": "object",
+          "properties": {
+            "defaultBackend": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" }
+              }
+            },
+            "tls": {
+              "type": "object",
+              "properties": {
+                "clusterIssuer": {
+                  "type": "object",
+                  "properties": {
+                    "existingName": { "type": ["string", "null"] }
+                  }
+                },
+                "issuer": {
+                  "type": "object",
+                  "properties": {
+                    "existingName": { "type": ["string", "null"] },
+                    "autoissue": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": { "type": "boolean" },
+                        "staging": { "type": "boolean" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "web": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "className": { "type": "string" },
+            "annotations": { "type": "object" },
+            "hosts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "host": { "type": "string" },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": { "type": "string" },
+                        "pathType": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "tls": { "type": "array" }
+          }
+        },
+        "forwarder": {
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
