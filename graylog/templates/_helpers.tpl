@@ -65,6 +65,17 @@ Service account name
 {{- end }}
 
 {{/*
+MongoDB service account name
+*/}}
+{{- define "graylog.mongodb.serviceAccountName" -}}
+{{ $defaultName := "default" }}
+{{- if .Values.mongodb.serviceAccount.create }}
+{{- $defaultName = include "graylog.fullname" . | printf "%s-mongo-sa" }}
+{{- end }}
+{{- .Values.mongodb.serviceAccount.nameOverride | default $defaultName }}
+{{- end }}
+
+{{/*
 Size presets
 usage: (list <size preset key> <size field to index> . | list "graylog" | include "_presets.size")
 */}}
