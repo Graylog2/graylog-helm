@@ -278,15 +278,11 @@ serviceAccount:
   nameOverride: ""
   role:
     create: false
-    rules:
-      - apiGroups: [ "" ]
-        resources: [ "secrets" ]
-        resourceNames: []
-        verbs: [ "get" ]
-      - apiGroups: [ "" ]
-        resources: [ "pods" ]
-        resourceNames: []
-        verbs: [ "get", "patch", "delete" ]
+    rules: []
+#      - apiGroups: [ "" ]
+#        resources: [ "pods" ]
+#        resourceNames: []
+#        verbs: [ "get" ]
 # Ingress configuration
 # more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -338,6 +334,22 @@ mongodb:
     size:
       data: "10G"
       logs: "2G"
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+    nameOverride: ""
+    role:
+      create: true
+      rules:
+        - apiGroups: [ "" ]
+          resources: [ "secrets" ]
+          resourceNames: [ ]
+          verbs: [ "get" ]
+        - apiGroups: [ "" ]
+          resources: [ "pods" ]
+          resourceNames: [ ]
+          verbs: [ "get", "patch", "delete" ]
   security:
     tls:
       enabled: false

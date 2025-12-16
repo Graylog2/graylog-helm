@@ -658,12 +658,14 @@ These values affect Graylog, DataNode, and MongoDB
 
 
 ## Service Account
-| Key Path                      | Description                       | Default |
-| ----------------------------- | --------------------------------- | ------- |
-| `serviceAccount.create`       | Create a new service account.     | `true`  |
-| `serviceAccount.automount`    | Automount service account token.  | `true`  |
-| `serviceAccount.annotations`  | Annotations for service account.  | `{}`    |
-| `serviceAccount.nameOverride` | Override name of service account. | `""`    |
+| Key Path                      | Description                                             | Default |
+|-------------------------------|---------------------------------------------------------|--------|
+| `serviceAccount.create`       | Create a new service account.                           | `true` |
+| `serviceAccount.automount`    | Automount service account token.                        | `true` |
+| `serviceAccount.annotations`  | Annotations for service account.                        | `{}`   |
+| `serviceAccount.nameOverride` | Override name of service account.                       | `""`   |
+| `serviceAccount.role.create`  | Create a new role to bind to this service account.      | `false` |
+| `serviceAccount.role.rules`   | Rules for the new role to bind to this service account. | `[]`   |
 
 
 ## Ingress
@@ -694,13 +696,19 @@ These values affect Graylog, DataNode, and MongoDB
 MongoDB Community Resource configuration.
 Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
 
-| Key Path                            | Description                                                 | Default    |
-| ----------------------------------- | ----------------------------------------------------------- |------------|
-| `mongodb.communityResource.enabled` | Enables creation of the `MongoDBCommunity` custom resource. | `true`     |
-| `mongodb.version`                   | MongoDB server version for the replica set.                 | `"7.0.25"` |
-| `mongodb.replicas`                  | Number of data-bearing replica set members.                 | `2`        |
-| `mongodb.arbiters`                  | Number of arbiter nodes to deploy.                          | `1`        |
-| `mongodb.persistence.storageClass`  | StorageClass to use for persistent volumes.                 | `""`       |
-| `mongodb.persistence.size.data`     | Persistent volume size for data storage.                    | `"10G"`    |
-| `mongodb.persistence.size.logs`     | Persistent volume size for MongoDB logs.                    | `"2G"`     |
-| `mongodb.security.tls.enabled`      | Enables TLS/SSL for MongoDB communication.                  | `false`    |
+| Key Path                              | Description                                                 | Default                                                                                                                                                                                                                |
+|---------------------------------------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `mongodb.communityResource.enabled`   | Enables creation of the `MongoDBCommunity` custom resource. | `true`                                                                                                                                                                                                                 |
+| `mongodb.version`                     | MongoDB server version for the replica set.                 | `"7.0.25"`                                                                                                                                                                                                             |
+| `mongodb.replicas`                    | Number of data-bearing replica set members.                 | `2`                                                                                                                                                                                                                    |
+| `mongodb.arbiters`                    | Number of arbiter nodes to deploy.                          | `1`                                                                                                                                                                                                                    |
+| `mongodb.persistence.storageClass`    | StorageClass to use for persistent volumes.                 | `""`                                                                                                                                                                                                                   |
+| `mongodb.persistence.size.data`       | Persistent volume size for data storage.                    | `"10G"`                                                                                                                                                                                                                |
+| `mongodb.persistence.size.logs`       | Persistent volume size for MongoDB logs.                    | `"2G"`                                                                                                                                                                                                                 |
+| `mongodb.security.tls.enabled`        | Enables TLS/SSL for MongoDB communication.                  | `false`                                                                                                                                                                                                                |
+| `mongodb.serviceAccount.create`       | Create a new service account for MongoDB workloads.         | `true`                                                                                                                                                                                                                 |
+| `mongodb.serviceAccount.automount`    | Automount service account token.                            | `true`                                                                                                                                                                                                                 |
+| `mongodb.serviceAccount.annotations`  | Annotations for service account.                            | `{}`                                                                                                                                                                                                                   |
+| `mongodb.serviceAccount.nameOverride` | Override name of service account.                           | `""`                                                                                                                                                                                                                   |
+| `mongodb.serviceAccount.role.create`  | Create a new role to bind to this service account.          | `true`                                                                                                                                                                                                                 |
+| `mongodb.serviceAccount.role.rules`   | Rules for the new role to bind to this service account.     | <pre><code>rules:<br/>  - apiGroups: [ "" ]<br/>    resources: [ "secrets" ]<br/>    verbs: [ "get" ]<br/>  - apiGroups: [ "" ]<br/>    resources: [ "pods" ]<br/>    verbs: [ "get", "patch", "delete" ]</code></pre> |
