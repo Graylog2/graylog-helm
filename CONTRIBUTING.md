@@ -102,21 +102,61 @@ multipass exec microk8s-vm -- sudo sysctl -w vm.max_map_count=262144
 ### Validating chart
 
 ```bash
+# lint the chart for syntax
+helm lint graylog
+
 # check template rendering
 helm template graylog . --debug | less
 
 # do a dry run with a small configuration
-helm install graylog . --dry-run --debug --create-namespace -n graylog --set size="xs"
+helm install graylog . --dry-run --debug --create-namespace -n graylog --set graylog.replicas=1 --set datanode.replicas=1 --set mongodb.replicas=1 --set mongodb.arbiters=0
 
 # do a dry run with the default configuration
 helm install graylog . --dry-run --debug --create-namespace -n graylog
 
+# validate against the JSON schema
+helm template graylog . --validate
 ```
 
 ### Installing chart
 
 ```bash
-helm install graylog . -n graylog --create-namespace -n graylog --set size="xs" --set graylog.service.type="LoadBalancer"
+# install the MongoDB Kubernetes Operator (required dependency)
+helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes --repo https://mongodb.github.io/helm-charts \
+  --set operator.watchNamespace="*" --reuse-values \
+  --namespace operators --create-namespace
+
+# install the Graylog Helm chart
+helm install graylog . -n graylog --set graylog.service.type="LoadBalancer" \
+  --set graylog.replicas=1 --set datanode.replicas=1 \
+  --namespace graylog --create-namespace
+
+# watch pods come up
+kubectl get pods -n graylog -w
+
+# verify all resources
+helm get all graylog -n graylog
+```
+
+### Verify different configurations
+
+Verify that:
+- All pods reach Running state (Graylog, DataNode, MongoDB)
+- MongoDB replica set initializes properly
+- Graylog UI is accessible and login works
+- DataNodes register with Graylog (visible in System > Nodes)
+- Inputs can be configured and receive data
+- Persistence survives pod restarts
+
+```sh
+# scaling
+helm upgrade graylog . -n graylog --set graylog.replicas=3 --reuse-values
+
+# using a LoadBalancer service
+helm upgrade graylog . -n graylog --set graylog.service.type=LoadBalancer --reuse-values
+
+# with ingress enabled
+helm upgrade graylog . -n graylog --set ingress.web.enabled=true --reuse-values
 ```
 
 ### Upgrading chart
