@@ -125,6 +125,7 @@
           "properties": {
             "rootUsername": { "type": "string" },
             "rootPassword": { "type": "string" },
+            "customSecretPepper": { "type": "string" },
             "timezone": { "type": "string" },
             "selfSignedStartup": { "type": "string" },
             "serverJavaOpts": { "type": "string" },
@@ -295,7 +296,7 @@
             "rollingUpdate": {
               "type": "object",
               "properties": {
-                "maxUnavailable": { "type": [ "string", "null" ] },
+                "maxUnavailable": { "type": [ "string", "integer", "null" ] },
                 "partition": { "type": [ "string", "null" ] }
               }
             }
@@ -377,7 +378,8 @@
           "type": "object"
         },
         "tolerations": {
-          "type": "object"
+          "type": "array",
+          "items": { "type": "object" }
         },
         "affinity": {
           "type": "object"
@@ -447,7 +449,7 @@
             "rollingUpdate": {
               "type": "object",
               "properties": {
-                "maxUnavailable": { "type": [ "string", "null" ] },
+                "maxUnavailable": { "type": [ "string", "integer", "null" ] },
                 "partition": { "type": [ "string", "null" ] }
               }
             }
@@ -557,7 +559,8 @@
           "type": "object"
         },
         "tolerations": {
-          "type": "object"
+          "type": "array",
+          "items": { "type": "object" }
         },
         "affinity": {
           "type": "object"
@@ -575,7 +578,14 @@
         "create": { "type": "boolean" },
         "automount": { "type": "boolean" },
         "annotations": { "type": "object" },
-        "nameOverride": { "type": "string" }
+        "nameOverride": { "type": "string" },
+        "role": {
+          "type": "object",
+          "properties": {
+            "create": { "type": "boolean" },
+            "rules": { "type": "array" }
+          }
+        }
       }
     },
     "ingress": {
@@ -677,50 +687,53 @@
     },
     "mongodb": {
       "type": "object",
-      "description": "MongoDB subchart values. Modifying these values is not advised.",
+      "description": "MongoDB Community Resource configuration. Requires the MCK Operator.",
       "properties": {
-        "subchart": {
+        "communityResource": {
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" }
           }
         },
-        "image": {
-          "type": "object",
-          "properties": {
-            "tag": { "type": "string" }
-          }
-        },
-        "architecture": { "type": "string" },
-        "arbiter": {
-          "type": "object",
-          "properties": {
-            "enabled": { "type": "boolean" }
-          }
-        },
-        "replicaCount": { "type": "integer" },
+        "version": { "type": "string" },
+        "replicas": { "type": "integer" },
+        "arbiters": { "type": "integer" },
         "persistence": {
           "type": "object",
           "properties": {
-            "storageClass": { "type": "string" }
-          }
-        },
-        "auth": {
-          "type": "object",
-          "properties": {
-            "username": { "type": "string" },
-            "database": { "type": "string" },
-            "existingSecret": { "type": "string" }
-          }
-        },
-        "passwordUpdateJob": {
-          "type": "object",
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "previousPasswords": {
+            "storageClass": { "type": "string" },
+            "size": {
               "type": "object",
               "properties": {
-                "existingSecret": { "type": "string" }
+                "data": { "type": "string" },
+                "logs": { "type": "string" }
+              }
+            }
+          }
+        },
+        "serviceAccount": {
+          "type": "object",
+          "properties": {
+            "create": { "type": "boolean" },
+            "automount": { "type": "boolean" },
+            "annotations": { "type": "object" },
+            "nameOverride": { "type": "string" },
+            "role": {
+              "type": "object",
+              "properties": {
+                "create": { "type": "boolean" },
+                "rules": { "type": "array" }
+              }
+            }
+          }
+        },
+        "security": {
+          "type": "object",
+          "properties": {
+            "tls": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" }
               }
             }
           }
