@@ -47,7 +47,7 @@ spec:
     spec:
       template:
         spec:
-          serviceAccountName: {{ include "graylog.serviceAccountName" . }}
+          serviceAccountName: {{ include "graylog.mongodb.serviceAccountName" . }}
       volumeClaimTemplates:
         - metadata:
             name: mongodb-data-vol

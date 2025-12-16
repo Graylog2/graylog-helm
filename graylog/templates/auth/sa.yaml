@@ -9,8 +9,8 @@ metadata:
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
-{{- if empty .Values.serviceAccount.role.rules | and .Values.serviceAccount.role.create }}
+automountServiceAccountToken: {{ .Values.serviceAccount.automount | default true }}
+{{- if empty .Values.serviceAccount.role.rules | not | and .Values.serviceAccount.role.create }}
 {{- $roleName := include "graylog.serviceAccountName" . | printf "%s-role" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
