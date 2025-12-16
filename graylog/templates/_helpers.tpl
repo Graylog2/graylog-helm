@@ -147,7 +147,7 @@ Graylog root password
 Graylog secret pepper
 */}}
 {{- define "graylog.secretPepper" }}
-{{- $pepper := .Values.graylog.config.secretPepper | default (randAlphaNum 96) }}
+{{- $pepper := .Values.graylog.config.customSecretPepper | default (randAlphaNum 96) }}
 {{- if len $pepper | ge 64 }}
 {{- fail "Use at least 64 characters when setting a secret to pepper the stored user data." }}
 {{- else }}

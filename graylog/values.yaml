@@ -46,6 +46,7 @@ graylog:
   config:
     rootUsername: "admin"
     rootPassword: ""
+    customSecretPepper: ""
     timezone: "UTC"
     selfSignedStartup: "true"
     serverJavaOpts: "-Xms1g -Xmx1g"
@@ -137,9 +138,9 @@ graylog:
     imagePullPolicy: IfNotPresent
     imagePullSecrets: []
   updateStrategy:
-    type:
+    type: RollingUpdate
     rollingUpdate:
-      maxUnavailable:
+      maxUnavailable: 1
       partition:
   resources:
     limits:
@@ -178,7 +179,7 @@ graylog:
     minAvailable: 1
   podAnnotations: {}
   nodeSelector: {}
-  tolerations: {}
+  tolerations: []
   affinity: {}
   extraEnv: []
 
@@ -210,9 +211,9 @@ datanode:
     imagePullPolicy: IfNotPresent
     imagePullSecrets: []
   updateStrategy:
-    type:
+    type: RollingUpdate
     rollingUpdate:
-      maxUnavailable:
+      maxUnavailable: 1
       partition:
   resources:
     limits:
@@ -263,7 +264,7 @@ datanode:
     minAvailable: 2
   podAnnotations: {}
   nodeSelector: {}
-  tolerations: {}
+  tolerations: []
   affinity: {}
   extraEnv: []
 

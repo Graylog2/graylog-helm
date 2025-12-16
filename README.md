@@ -4,7 +4,7 @@
 Official helm chart for Graylog.
 
 ## Not For External Use
-This chart is still in development. We should not distribute this chart or any part of this repository externally until we've cleaned up the git history and recieved approval for external distribution.
+This chart is still in development. We should not distribute this chart or any part of this repository externally until we've cleaned up the git history and received approval for external distribution.
 This chart is still under development and does not have locked in api contracts yet.
 
 
@@ -366,7 +366,7 @@ helm upgrade -i graylog ./graylog -n graylog --reuse-values --set global.existin
 > Accordingly, any of the following configuration values will be ignored:
 > - `graylog.config.rootPassword`
 > - `graylog.config.rootUsername`
-> - `graylog.config.secretPepper`
+> - `graylog.config.customSecretPepper`
 > - `graylog.config.tls.keyPassword`
 
 ## Bring Your Own MongoDB
@@ -454,15 +454,23 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.service.metrics.enabled`                                     | Enable metrics collection.                                 | `true`                          |
 | `graylog.inputs`                                                      | List of inputs to configure.                               | See below                       |
 | `graylog.plugins`                                                     | List of plugins to configure.                              | See below                       |
-| `graylog.env`                                                         | Custom environment variables                               | `[]`                            |
+| `graylog.env`                                                         | Custom environment variables                               | `{}`                            |
 | `graylog.config.rootUsername`                                         | Root admin username.                                       | `"admin"`                       |
 | `graylog.config.rootPassword`                                         | Root admin password.                                       | `""`                            |
+| `graylog.config.customSecretPepper`                                   | Internal hashing pepper (randomized when empty).           | `""`                            |
 | `graylog.config.timezone`                                             | Timezone for the Graylog server.                           | `"UTC"`                         |
 | `graylog.config.selfSignedStartup`                                    | Use self-signed certs on startup.                          | `"true"`                        |
 | `graylog.config.serverJavaOpts`                                       | Java options for server.                                   | `"-Xms1g -Xmx1g"`               |
+| `graylog.config.extraServerJavaOpts`                                  | Additional Java options for server.                        | `[]`                            |
 | `graylog.config.leaderElectionMode`                                   | Mode for leader election.                                  | `"automatic"`                   |
 | `graylog.config.contentPacksAutoInstall`                              | Auto-install content packs.                                | `"true"`                        |
 | `graylog.config.isCloud`                                              | Indicates if deployment is on cloud.                       | `"false"`                       |
+| `graylog.config.tls.enabled`                                          | Enable TLS for Graylog.                                    | `false`                         |
+| `graylog.config.tls.secretName`                                       | Name of the TLS secret.                                    | `""`                            |
+| `graylog.config.tls.keyPassword`                                      | Password for the TLS key.                                  | `""`                            |
+| `graylog.config.tls.updateKeyStore`                                   | Update Java keystore with TLS cert.                        | `true`                          |
+| `graylog.config.tls.keyStorePass`                                     | Password for the Java keystore.                            | `"changeit"`                    |
+| `graylog.config.mongodb.customUri`                                    | Custom MongoDB connection URI.                             | `""`                            |
 | `graylog.config.mongodb.maxConnections`                               | Max MongoDB connections.                                   | `"1000"`                        |
 | `graylog.config.mongodb.versionProbeAttempts`                         | MongoDB version probe attempts.                            | `"0"`                           |
 | `graylog.config.messageJournal.enabled`                               | Enable message journal.                                    | `"true"`                        |
@@ -477,6 +485,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.config.network.maxHeaderSize`                                | Max header size.                                           | `"8192"`                        |
 | `graylog.config.network.readTimeout`                                  | Network read timeout.                                      | `"10s"`                         |
 | `graylog.config.network.threadPoolSize`                               | Network thread pool size.                                  | `"64"`                          |
+| `graylog.config.network.externalUri`                                  | External URI for Graylog web interface.                    | `""`                            |
 | `graylog.config.performance.asyncEventbusProcessors`                  | Async event bus processors.                                | `"2"`                           |
 | `graylog.config.performance.autoRestartInputs`                        | Automatically restart inputs.                              | `"false"`                       |
 | `graylog.config.performance.inputBufferProcessors`                    | Input buffer processors.                                   | `"2"`                           |
@@ -500,24 +509,24 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.config.email.useSsl`                                         | Use SSL for SMTP.                                          | `"false"`                       |
 | `graylog.config.email.useTls`                                         | Use TLS for SMTP.                                          | `"true"`                        |
 | `graylog.config.email.webInterfaceUrl`                                | Web interface URL for email links.                         | `"https://graylog.example.com"` |
-| `graylog.config.plugins.enabled`                                      | Enable Graylog plugin system.                              | `"false"`                       |
-| `graylog.geoloction.enabled`                                          | Enable the Geolocation Processor                           | `false`                         |
-| `graylog.geoloction.maxmindGeoIp.enabled`                             | Enable the MaxMind GeoIP update CronJob                    | `true`                          |
-| `graylog.geoloction.maxmindGeoIp.accountId`                           | MaxMind Account ID                                         |                                 |
-| `graylog.geoloction.maxmindGeoIp.licenseKey`                          | MaxMind License Key                                        |                                 |
-| `graylog.geoloction.maxmindGeoIp.cronSchedule`                        | Cron schedule expression                                   | `"0 0 * * *"`                   |    
-| `graylog.geoloction.maxmindGeoIp.postInstallRun`                      | Enable post-installation helm hook Job                     | `true`                          |
-| `graylog.geoloction.mmdbSources.city.url`                             | GeoLite2-City.mmdb URL (only for initial asset fetch)      |                                 |         
-| `graylog.geoloction.mmdbSources.city.checksum`                        | GeoLite2-City.mmdb checksum (only for initial asset fetch) |                                 |         
-| `graylog.geoloction.mmdbSources.asn.url`                              | GeoLite2-ASN.mmdb URL (only for initial asset fetch)       |                                 |         
-| `graylog.geoloction.mmdbSources.asn.checksum`                         | GeoLite2-ASN.mmdb checksum (only for initial asset fetch)  |                                 |
-| `graylog.config.init.assetFetch.enabled`                              | Enable asset fetch init.                                   | `"false"`                       |
-| `graylog.config.init.assetFetch.skipChecksum`                         | Skip checksum validation for assets.                       | `"false"`                       |
-| `graylog.config.init.assetFetch.allowHttp`                            | Allow HTTP fetch for assets.                               | `"false"`                       |
-| `graylog.config.init.assetFetch.plugins.enabled`                      | Enable plugin asset fetch.                                 | `"false"`                       |
+| `graylog.config.plugins.enabled`                                      | Enable Graylog plugin system.                              | `false`                         |
+| `graylog.config.geolocation.enabled`                                  | Enable the Geolocation Processor                           | `false`                         |
+| `graylog.config.geolocation.maxmindGeoIp.enabled`                     | Enable the MaxMind GeoIP update CronJob                    | `true`                          |
+| `graylog.config.geolocation.maxmindGeoIp.accountId`                   | MaxMind Account ID                                         |                                 |
+| `graylog.config.geolocation.maxmindGeoIp.licenseKey`                  | MaxMind License Key                                        |                                 |
+| `graylog.config.geolocation.maxmindGeoIp.cronSchedule`                | Cron schedule expression                                   | `"0 0 * * *"`                   |
+| `graylog.config.geolocation.maxmindGeoIp.postInstallRun`              | Enable post-installation helm hook Job                     | `true`                          |
+| `graylog.config.geolocation.mmdbSources.city.url`                     | GeoLite2-City.mmdb URL (only for initial asset fetch)      |                                 |
+| `graylog.config.geolocation.mmdbSources.city.checksum`                | GeoLite2-City.mmdb checksum (only for initial asset fetch) |                                 |
+| `graylog.config.geolocation.mmdbSources.asn.url`                      | GeoLite2-ASN.mmdb URL (only for initial asset fetch)       |                                 |
+| `graylog.config.geolocation.mmdbSources.asn.checksum`                 | GeoLite2-ASN.mmdb checksum (only for initial asset fetch)  |                                 |
+| `graylog.config.init.assetFetch.enabled`                              | Enable asset fetch init.                                   | `false`                         |
+| `graylog.config.init.assetFetch.skipChecksum`                         | Skip checksum validation for assets.                       | `false`                         |
+| `graylog.config.init.assetFetch.allowHttp`                            | Allow HTTP fetch for assets.                               | `false`                         |
+| `graylog.config.init.assetFetch.plugins.enabled`                      | Enable plugin asset fetch.                                 | `false`                         |
 | `graylog.config.init.assetFetch.plugins.baseUrl`                      | Base URL for plugin assets.                                | `""`                            |
-| `graylog.config.init.geolocation.enabled`                             | Enable geolocation asset fetch.                            | `"false"`                       |
-| `graylog.config.init.geolocation.baseUrl`                             | Base URL for geolocation assets.                           | `""`                            |
+| `graylog.config.init.assetFetch.geolocation.enabled`                  | Enable geolocation asset fetch.                            | `false`                         |
+| `graylog.config.init.assetFetch.geolocation.baseUrl`                  | Base URL for geolocation assets.                           | `""`                            |
 | `graylog.image.repository`                                            | Image repository for Graylog.                              | `""`                            |
 | `graylog.image.tag`                                                   | Image tag for Graylog.                                     | `""`                            |
 | `graylog.image.imagePullPolicy`                                       | Pull policy for Graylog image.                             | `IfNotPresent`                  |
@@ -555,12 +564,9 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                  | `1`                             |
 | `graylog.podAnnotations`                                              | Additional pod annotations.                                | `{}`                            |
 | `graylog.nodeSelector`                                                | Node selector for scheduling.                              | `{}`                            |
-| `graylog.tolerations`                                                 | Tolerations for scheduling.                                | `{}`                            |
+| `graylog.tolerations`                                                 | Tolerations for scheduling.                                | `[]`                            |
 | `graylog.affinity`                                                    | Affinity rules for scheduling.                             | `{}`                            |
 | `graylog.extraEnv`                                                    | Custom EnvVar environment variables.                       | `[]`                            |
-| `graylog.podAnnotations`                                              | Additional pod annotations.                                | `{}`                            |
-| `graylog.nodeSelector`                                                | Node selector for scheduling.                              | `{}`                            |
-| `graylog.extraEnv`                                                    | Custom EnvVar environment variables                        | `[]`                            |
 
 
 ### Graylog inputs
@@ -581,9 +587,9 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.plugins[i].checksum`      | Checksum of JAR file.                  | `13550350a8681c84c861aac2e5b440161c2b33a3e4f302ac680ca5b686de48de` |
 
 ### Graylog environment variables
-| Key Path           | Descriptions                                                                                                                                                                                   | Example                                                                                                                                                          |
-|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `graylog.env`      | Simple key/value environment variables                                                                                                                                                         | `["FOO=BAR", "HELLO=123"]`                                                                                                                                       |
+| Key Path           | Descriptions                                                                                                                                                                                   | Example                                                                                                                                                    |
+|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `graylog.env`      | Simple key/value environment variables                                                                                                                                                         | `graylog.env.FOO=BAR`, `graylog.env.HELLO=123`                                                                                                              |
 | `graylog.extraEnv` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables<br/>(valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:<br/>  - name: MADE_UP_PASSWORD<br/>    valueFrom:<br/>      secretKeyRef:<br/>        name: mysecret<br/>        key: password</code></pre> |
 
 ## Datanode
@@ -594,7 +600,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `datanode.service.ports.api`                           | API communication port.                         | `8999`            |
 | `datanode.service.ports.data`                          | Data communication port.                        | `9200`            |
 | `datanode.service.ports.config`                        | Configuration communication port.               | `9300`            |
-| `datanode.env`                                         | Custom environment variables                    | `[]`              |
+| `datanode.env`                                         | Custom environment variables                    | `{}`              |
 | `datanode.config.nodeIdFile`                           | Path to datanode ID file.                       | `""`              |
 | `datanode.config.opensearchHeap`                       | OpenSearch heap size.                           | `"2g"`            |
 | `datanode.config.javaOpts`                             | Java options for datanode.                      | `"-Xms1g -Xmx1g"` |
@@ -653,7 +659,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
 | `datanode.podAnnotations`                              | Additional pod annotations.                     | `{}`              |
 | `datanode.nodeSelector`                                | Node selector for scheduling datanode pods.     | `{}`              |
-| `datanode.tolerations`                                 | Tolerations for scheduling.                     | `{}`              |
+| `datanode.tolerations`                                 | Tolerations for scheduling.                     | `[]`              |
 | `datanode.affinity`                                    | Affinity rules for scheduling.                  | `{}`              |
 | `datanode.extraEnv`                                    | Custom EnvVar environment variables.            | `[]`              |
 
@@ -671,13 +677,22 @@ These values affect Graylog, DataNode, and MongoDB
 
 ## Ingress
 
+| Key Path                                      | Description                                        | Default |
+|-----------------------------------------------|----------------------------------------------------|---------|
+| `ingress.enabled`                             | Enable ingress resources.                          | `false` |
+| `ingress.config.defaultBackend.enabled`       | Enable default backend for ingress.                | `true`  |
+| `ingress.config.tls.clusterIssuer.existingName` | Name of existing ClusterIssuer for TLS.          | `""`    |
+| `ingress.config.tls.issuer.existingName`      | Name of existing Issuer for TLS.                   | `""`    |
+| `ingress.config.tls.issuer.autoissue.enabled` | Enable auto-issuing of TLS certificates.           | `false` |
+| `ingress.config.tls.issuer.autoissue.staging` | Use staging environment for auto-issued certs.     | `true`  |
+
 ### Web Ingress
 | Key Path                                 | Description                        | Default                  |
 |------------------------------------------|------------------------------------| ------------------------ |
 | `ingress.web.enabled`                    | Enable ingress for Graylog Web.    | `false`                  |
 | `ingress.web.className`                  | Ingress class name.                | `""`                     |
 | `ingress.web.annotations`                | Annotations for ingress resource.  | `{}`                     |
-| `ingress.web.hosts[0].host`              | Hostname for ingress.              | `chart-example.local`    |
+| `ingress.web.hosts[0].host`              | Hostname for ingress (optional).   | `""`                     |
 | `ingress.web.hosts[0].paths[0].path`     | Path for routing.                  | `/`                      |
 | `ingress.web.hosts[0].paths[0].pathType` | Path matching type.                | `ImplementationSpecific` |
 | `ingress.web.tls`                        | TLS configuration.                 | `[]`                     |
