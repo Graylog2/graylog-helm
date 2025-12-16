@@ -102,6 +102,17 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
+      {{- if .Values.global.mongodbInitCheck }}
+        - name: mongo-check
+          image: {{ .Values.mongodb.version | default "7.0" | printf "quay.io/mongodb/mongodb-community-server:%s-ubi8" }}
+          command: [ "/bin/sh", "/scripts/mongo-check.sh" ]
+          envFrom:
+            - secretRef:
+                name: {{ include "graylog.secretsName" . }}
+          volumeMounts:
+            - name: init-script-mongo
+              mountPath: /scripts
+      {{- end }}
       containers:
         - name: graylog-app
           image: {{ include "graylog.image" . }}
@@ -184,6 +195,12 @@ spec:
         configMap:
           name: init-script-cm
           defaultMode: 0755
+      {{- if .Values.global.mongodbInitCheck }}
+      - name: init-script-mongo
+        configMap:
+          name: init-script-mongo-cm
+          defaultMode: 0755
+      {{- end }}
       {{- if .Values.graylog.config.tls.enabled }}
       - name: tls-creds
         secret:

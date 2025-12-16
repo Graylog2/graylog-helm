@@ -51,6 +51,18 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
+      {{- if .Values.global.mongodbInitCheck }}
+      initContainers:
+        - name: mongo-auth-check
+          image: {{ .Values.mongodb.version | default "7.0" | printf "quay.io/mongodb/mongodb-community-server:%s-ubi8" }}
+          command: [ "/bin/sh", "/scripts/mongo-check.sh" ]
+          envFrom:
+            - secretRef:
+                name: {{ include "graylog.secretsName" . }}
+          volumeMounts:
+            - name: init-script-mongo
+              mountPath: /scripts
+      {{- end }}
       containers:
         - name: graylog-datanode
           image: {{ include "graylog.datanode.image" . }}
@@ -127,8 +139,14 @@ spec:
       {{- with .Values.datanode.affinity }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if and .Values.datanode.persistence.data.enabled .Values.datanode.persistence.nativeLibs.enabled | not }}
+      {{- if and .Values.datanode.persistence.data.enabled .Values.datanode.persistence.nativeLibs.enabled | not | or .Values.global.mongodbInitCheck }}
       volumes:
+        {{- if .Values.global.mongodbInitCheck }}
+        - name: init-script-mongo
+          configMap:
+            name: init-script-mongo-cm
+            defaultMode: 0755
+        {{- end }}
         {{- if not .Values.datanode.persistence.nativeLibs.enabled }}
         - name: native-libs
           emptyDir: {}

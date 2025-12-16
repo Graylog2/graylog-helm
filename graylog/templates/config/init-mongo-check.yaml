@@ -1,0 +1,23 @@
+{{- if .Values.global.mongodbInitCheck }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: init-script-mongo-cm
+data:
+  mongo-check.sh: |
+    #!bin/sh
+    term_handler() {
+      echo "Received SIGTERM, exiting init container."
+      exit 0
+    }
+    trap term_handler TERM INT
+
+    echo "Waiting for MongoDB..."
+    until mongosh \
+      "$GRAYLOG_MONGODB_URI" \
+      --eval 'db.runCommand({ ping: 1 })' >/dev/null 2>&1; do
+        echo "MongoDB not ready for authenticated connections, retrying in 5s..."
+        sleep 5
+    done
+    echo "MongoDB is ready. We're good to go!";
+{{- end }}
