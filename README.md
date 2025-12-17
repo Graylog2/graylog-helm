@@ -10,7 +10,7 @@ This chart is still under development and does not have locked in api contracts 
 
 ## Table of Contents
 * [Requirements](#requirements)
-  * [External Dependencies](#optional-dependencies)
+  * [External Dependencies](#external-dependencies)
 * [Installation](#installation)
 * [Post-installation](#post-installation)
   * [Set root Graylog password](#set-root-graylog-password)
@@ -33,8 +33,9 @@ This chart is still under development and does not have locked in api contracts 
 * [Graylog Helm Chart Values Reference](#graylog-helm-chart-values-reference)
 
 # Requirements
-- Kubernetes >= 1.32
-- Helm >= 3.0
+- Kubernetes >= v1.32
+- Helm >= v3.0
+- MongoDB Controllers for Kubernetes (MCK) Operator v1.6.1 (required unless a [user-provided MongoDB](#bring-your-own-mongodb) is used)
 
 ## External Dependencies
 
@@ -105,7 +106,8 @@ cd graylog-helm
 
 ## Install the official MongoDB Kubernetes Operator using Helm
 ```sh
-helm upgrade --install mongodb-kubernetes-operator mongodb/mongodb-kubernetes \
+helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
+  --repo https://mongodb.github.io/helm-charts --version "1.6.1" \
   --set operator.watchNamespace="*" --reuse-values \
   --namespace operators --create-namespace
 ```
