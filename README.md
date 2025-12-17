@@ -12,6 +12,7 @@ This chart is still under development and does not have locked in api contracts 
 * [Requirements](#requirements)
   * [External Dependencies](#external-dependencies)
 * [Installation](#installation)
+  * [Installing on AWS EKS](#installing-on-aws-eks)
 * [Post-installation](#post-installation)
   * [Set root Graylog password](#set-root-graylog-password)
   * [Set external access](#set-external-access)
@@ -33,9 +34,9 @@ This chart is still under development and does not have locked in api contracts 
 * [Graylog Helm Chart Values Reference](#graylog-helm-chart-values-reference)
 
 # Requirements
-- Kubernetes >= v1.32
-- Helm >= v3.0
-- MongoDB Controllers for Kubernetes (MCK) Operator v1.6.1 (required unless a [user-provided MongoDB](#bring-your-own-mongodb) is used)
+- Kubernetes **v1.32+**
+- Helm **v3.0+**
+- MongoDB Controllers for Kubernetes (MCK) Operator **v1.6.1** (required unless a [user-provided MongoDB](#bring-your-own-mongodb) is used)
 
 ## External Dependencies
 
@@ -95,7 +96,9 @@ helm upgrade graylog graylog/graylog -n graylog --reuse-values
 
 # Installation
 
-## Clone this repo
+## Installing on Kubernetes
+
+### Clone this repo
 ```sh
 # clone repo
 git clone git@github.com:Graylog2/graylog-helm.git
@@ -104,7 +107,7 @@ git clone git@github.com:Graylog2/graylog-helm.git
 cd graylog-helm
 ```
 
-## Install the official MongoDB Kubernetes Operator using Helm
+### Install the official MongoDB Kubernetes Operator using Helm
 ```sh
 helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
   --repo https://mongodb.github.io/helm-charts --version "1.6.1" \
@@ -112,12 +115,62 @@ helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
   --namespace operators --create-namespace
 ```
 
-## Install the official Graylog Helm chart
+### Install the official Graylog Helm chart
 ```sh
 helm install graylog ./graylog --namespace graylog --create-namespace
 ```
 
-🏁 That's it!
+That's it!
+
+## Installing on AWS EKS
+
+When installing this chart on an existing Amazon Elastic Kubernetes Service (EKS) cluster on AWS, you must enable the
+[Amazon EBS CSI Driver add-on](https://docs.aws.amazon.com/eks/latest/userguide/managing-ebs-csi.html#adding-ebs-csi-eks-add-on)
+in your cluster to provision persistent volumes. The Amazon EBS CSI plugin requires Identity and Access Management (IAM) 
+permissions to make calls to AWS APIs on your behalf, so be sure to
+[create the corresponding IAM role](https://docs.aws.amazon.com/eks/latest/userguide/csi-iam-role.html), or attach the
+`AmazonEBSCSIDriverPolicy` to your existing role.
+
+### Clone this repo
+```sh
+# clone repo
+git clone git@github.com:Graylog2/graylog-helm.git
+
+# cd into the newly created graylog-helm directory
+cd graylog-helm
+```
+
+### Install the official MongoDB Kubernetes Operator using Helm
+```sh
+helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
+  --repo https://mongodb.github.io/helm-charts --version "1.6.1" \
+  --set operator.watchNamespace="*" --reuse-values \
+  --namespace operators --create-namespace
+```
+
+When deploying to Amazon EKS, use the `--set provider=aws` option to enable AWS-specific configurations:
+
+```sh
+helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws
+```
+
+The AWS-specific configurations include a custom gp3 StorageClass optimized for EBS volumes.
+
+### Troubleshooting: PVCs stuck in Pending
+
+If your PersistentVolumeClaims remain in `Pending` state after installation, it may be because the custom gp3 StorageClass is not set as the default. You have two options:
+
+**Option 1:** Use an existing StorageClass (e.g., `gp2`) if one is already available in your cluster:
+```sh
+helm install graylog ./graylog --namespace graylog --create-namespace --set global.defaultStorageClass=gp2
+```
+
+**Option 2:** Set the custom gp3 StorageClass as the cluster default:
+```sh
+helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws-managed-sc
+```
+
+This option creates a gp3 StorageClass and marks it as the default for your cluster.
 
 # Post Installation
 
@@ -404,7 +457,7 @@ helm uninstall graylog -n graylog
 ## Removing Everything
 ```sh
 # CAUTION: this will delete ALL your data!
-kubectl delete $(kubectl get pvc -o name -n graylog; kubectl get secret -o name -n graylog) -n graylog
+kubectl delete pvc,secret -n graylog --all
 ```
 
 # Debugging

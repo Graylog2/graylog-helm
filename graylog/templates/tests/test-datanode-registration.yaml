@@ -1,0 +1,69 @@
+{{- if and .Values.graylog.enabled .Values.datanode.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "graylog.fullname" . }}-test-datanode-registration
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: test-datanode-registration
+      image: alpine:3.23
+      command:
+        - /bin/sh
+        - -c
+        - |
+          apk add --no-cache jq >/dev/null 2>&1
+          echo "Testing DataNode registration with Graylog..."
+          SCHEME={{ .Values.graylog.config.tls.enabled | ternary "https" "http" | quote }}
+          HOST={{ include "graylog.service.name" . | quote }}
+          PORT={{ include "graylog.service.port.app" . | quote }}
+          EXPECTED_DATANODES={{ include "graylog.datanode.replicas" . }}
+
+          RESPONSE=$(wget -q -O - \
+            --timeout=30 \
+            --tries=3 \
+            --header="Authorization: Basic $(echo -n "${GRAYLOG_ROOT_USERNAME}:${GRAYLOG_ROOT_PASSWORD}" | base64)" \
+            "${SCHEME}://${HOST}:${PORT}/api/system/cluster/datanodes" 2>&1) || {
+            echo "Failed to query DataNodes API"
+            echo "$RESPONSE"
+            exit 1
+          }
+
+          # Count registered DataNodes from elements array
+          REGISTERED_COUNT=$(echo "$RESPONSE" | jq '.elements | length')
+
+          if [ -z "$REGISTERED_COUNT" ] || [ "$REGISTERED_COUNT" = "null" ]; then
+            echo "Failed to parse DataNodes response"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "Expected DataNodes: $EXPECTED_DATANODES"
+          echo "Registered DataNodes: $REGISTERED_COUNT"
+          echo "DataNodes response:"
+          echo "$RESPONSE" | jq .
+
+          if [ "$REGISTERED_COUNT" -ge "$EXPECTED_DATANODES" ]; then
+            echo "DataNode registration check passed"
+            exit 0
+          else
+            echo "DataNode registration check failed: expected at least $EXPECTED_DATANODES, got $REGISTERED_COUNT"
+            exit 1
+          fi
+      env:
+        - name: GRAYLOG_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graylog.fullname" . }}-test-credentials
+              key: GRAYLOG_ROOT_USERNAME
+        - name: GRAYLOG_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graylog.fullname" . }}-test-credentials
+              key: GRAYLOG_ROOT_PASSWORD
+  restartPolicy: Never
+{{- end }}
