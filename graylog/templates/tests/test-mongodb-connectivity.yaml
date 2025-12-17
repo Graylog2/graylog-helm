@@ -1,0 +1,68 @@
+{{- if .Values.graylog.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "graylog.fullname" . }}-test-mongodb
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: test-mongodb
+      image: {{ .Values.mongodb.version | default "7.0.25" | print "mongo:" }}
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing MongoDB connectivity..."
+
+          URI_NO_AUTH=${MONGODB_URI#*@}
+          HOST_AND_OPTS=${URI_NO_AUTH#*/}
+          OPTS="?${URI_NO_AUTH#*\?}"
+
+          # Test connection and replica set status
+          RESULT=$(mongosh "mongodb://admin:${MONGODB_ROOT_AUTH}@${URI_NO_AUTH%%/*}/admin${OPTS}" --quiet --eval "
+            try {
+              const status = rs.status();
+              const members = status.members || [];
+              const primaryCount = members.filter(m => m.stateStr === 'PRIMARY').length;
+              const secondaryCount = members.filter(m => m.stateStr === 'SECONDARY').length;
+              const arbiterCount = members.filter(m => m.stateStr === 'ARBITER').length;
+
+              print('Replica Set: ' + status.set);
+              print('Primary nodes: ' + primaryCount);
+              print('Secondary nodes: ' + secondaryCount);
+              print('Arbiter nodes: ' + arbiterCount);
+              print('Total members: ' + members.length);
+
+              if (primaryCount >= 1) {
+                print('MongoDB replica set is healthy');
+                quit(0);
+              } else {
+                print('ERROR: No primary node found');
+                quit(1);
+              }
+            } catch (e) {
+              print('ERROR: ' + e.message);
+              quit(1);
+            }
+          " 2>&1)
+
+          EXIT_CODE=$?
+          echo "$RESULT"
+          exit $EXIT_CODE
+      env:
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graylog.secretsName" . }}
+              key: GRAYLOG_MONGODB_URI
+        - name: MONGODB_ROOT_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graylog.backupSecretName" . }}
+              key: "mongodb-root-password"
+  restartPolicy: Never
+{{- end }}

@@ -1,4 +1,4 @@
-{{- if and .Values.graylog.enabled .Values.ingress.web.enabled }}
+{{- if and .Values.graylog.enabled .Values.ingress.enabled .Values.ingress.web.enabled }}
 {{- $defaultPath := include "graylog.ingress.defaultPath" . | dict "path" }}
 {{- $_ := include "graylog.ingress.defaultPathType" . | set $defaultPath "pathType" }}
 {{- $defaultBackendService := include "graylog.service.name" . | dict "name" }}

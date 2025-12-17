@@ -1,0 +1,56 @@
+{{- if .Values.graylog.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "graylog.fullname" . }}-test-cluster-status
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: test-cluster-status
+      image: curlimages/curl:8.17.0
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing Graylog cluster status and authentication..."
+          SCHEME={{ .Values.graylog.config.tls.enabled | ternary "https" "http" | quote }}
+          HOST={{ include "graylog.service.name" . | quote }}
+          PORT={{ include "graylog.service.port.app" . | quote }}
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            --max-time 30 \
+            --retry 3 \
+            --retry-delay 5 \
+            -u "${GRAYLOG_ROOT_USERNAME}:${GRAYLOG_ROOT_PASSWORD}" \
+            "${SCHEME}://${HOST}:${PORT}/api/system/cluster/nodes")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "Graylog cluster authentication successful (HTTP $HTTP_CODE)"
+            echo "Cluster nodes response:"
+            echo "$BODY"
+            exit 0
+          else
+            echo "Graylog cluster status check failed (HTTP $HTTP_CODE)"
+            echo "$BODY"
+            exit 1
+          fi
+      env:
+        - name: GRAYLOG_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graylog.fullname" . }}-test-credentials
+              key: GRAYLOG_ROOT_USERNAME
+        - name: GRAYLOG_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graylog.fullname" . }}-test-credentials
+              key: GRAYLOG_ROOT_PASSWORD
+  restartPolicy: Never
+{{- end }}
