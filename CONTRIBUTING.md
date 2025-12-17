@@ -138,27 +138,6 @@ kubectl get pods -n graylog -w
 helm get all graylog -n graylog
 ```
 
-### Verify different configurations
-
-Verify that:
-- All pods reach Running state (Graylog, DataNode, MongoDB)
-- MongoDB replica set initializes properly
-- Graylog UI is accessible and login works
-- DataNodes register with Graylog (visible in System > Nodes)
-- Inputs can be configured and receive data
-- Persistence survives pod restarts
-
-```sh
-# scaling
-helm upgrade graylog . -n graylog --set graylog.replicas=3 --reuse-values
-
-# using a LoadBalancer service
-helm upgrade graylog . -n graylog --set graylog.service.type=LoadBalancer --reuse-values
-
-# with ingress enabled
-helm upgrade graylog . -n graylog --set ingress.web.enabled=true --reuse-values
-```
-
 ### Upgrading chart
 
 > [!NOTE]
@@ -181,4 +160,48 @@ helm upgrade graylog . -n graylog --set ingress.web.enabled=true --reuse-values
 ```bash
 # keeps previously set values and overrides current "version"
 helm upgrade graylog . -n graylog --reuse-values --set version="6.3"
+```
+
+### Verifying different configurations
+
+Verify that:
+- All pods reach Running state (Graylog, DataNode, MongoDB)
+- MongoDB replica set initializes properly
+- Graylog UI is accessible and login works
+- DataNodes register with Graylog (visible in System > Nodes)
+- Inputs can be configured and receive data
+- Persistence survives pod restarts
+
+```sh
+# scaling
+helm upgrade graylog . -n graylog --set graylog.replicas=3 --reuse-values
+
+# using a LoadBalancer service
+helm upgrade graylog . -n graylog --set graylog.service.type=LoadBalancer --reuse-values
+
+# with ingress enabled
+helm upgrade graylog . -n graylog --set ingress.web.enabled=true --reuse-values
+```
+
+### Running the Helm test suite
+
+This chart includes a test suite that can be run on a given Helm release, with the following tests:
+
+| File                             | Test Name                          | Purpose                                                       |
+|----------------------------------|------------------------------------|---------------------------------------------------------------|
+| test-graylog-api-health.yaml     | graylog-test-api-health            | Basic smoke test - checks /api/system/lbstatus returns 200    |
+| test-graylog-cluster-status.yaml | graylog-test-cluster-status        | Validates authentication and queries cluster nodes API        |
+| test-datanode-registration.yaml  | graylog-test-datanode-registration | Verifies expected number of DataNodes registered with Graylog |
+| test-mongodb-connectivity.yaml   | graylog-test-mongodb               | Tests MongoDB replica set connectivity and health             |
+
+First install the chart if you haven't done so already:
+
+```sh
+helm upgrade -i graylog . -n graylog --create-namespace --reset-values
+```
+
+Then, run the test suite:
+
+```sh
+helm test graylog -n graylog --logs
 ```
