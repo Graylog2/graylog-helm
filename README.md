@@ -35,7 +35,7 @@ This chart is still under development and does not have locked in api contracts 
 # Requirements
 - Kubernetes **v1.32+**
 - Helm **v3.0+**
-- MongoDB Controllers for Kubernetes (MCK) Operator **v1.6.1** (required unless a [user-provided MongoDB](#bring-your-own-mongodb) is used)
+- MongoDB Controllers for Kubernetes Operator **v1.6.1** (required unless a [user-provided MongoDB](#bring-your-own-mongodb) is supplied)
 
 ## External Dependencies
 
