@@ -50,7 +50,7 @@ spec:
           serviceAccountName: {{ include "graylog.mongodb.serviceAccountName" . }}
       volumeClaimTemplates:
         - metadata:
-            name: mongodb-data-vol
+            name: data-volume
           spec:
             accessModes: ["ReadWriteOnce"]
             {{- with (include "graylog.mongodb.storageClassName" .) }}
@@ -60,7 +60,7 @@ spec:
               requests:
                 storage: {{ .Values.mongodb.persistence.size.data | default "10G" | quote }}
         - metadata:
-            name: mongodb-logs-vol
+            name: logs-volume
           spec:
             accessModes: [ "ReadWriteOnce" ]
             {{- with (include "graylog.mongodb.storageClassName" .) }}
@@ -68,5 +68,5 @@ spec:
             {{- end }}
             resources:
               requests:
-                storage: {{ .Values.mongodb.persistence.size.data | default "2G" | quote }}
+                storage: {{ .Values.mongodb.persistence.size.logs | default "2G" | quote }}
 {{- end }}
