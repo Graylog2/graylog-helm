@@ -7,7 +7,6 @@ Official helm chart for Graylog.
 This chart is still in development. We should not distribute this chart or any part of this repository externally until we've cleaned up the git history and received approval for external distribution.
 This chart is still under development and does not have locked in api contracts yet.
 
-
 ## Table of Contents
 * [Requirements](#requirements)
   * [External Dependencies](#external-dependencies)
@@ -171,9 +170,9 @@ helm install graylog ./graylog --namespace graylog --create-namespace --set prov
 > The `gp3` volume type is recommended for most Amazon EBS workloads because it offers better performance and 
 > cost efficiency than gp2, as well as independent scaling of IOPS and throughput, and higher performance limits.
 
-# Post Installation
+# Post-Installation
 
-## Set Root Graylog Password
+## Set root Graylog password
 Graylog is installed with a random password by default. We recommend setting a persistent password once all pods achieve the `RUNNING` state using 
 the following command:
 
@@ -182,11 +181,11 @@ echo "Enter your new password and press return:" && read -s pass
 helm upgrade graylog ./graylog --namespace graylog --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 ```
 
-## Set External Access
+## Set external access
 
 There are a number of ways to enable external access to the Graylog application. We recommend using an 
 [Ingress Controller](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/) 
-to provide external access both the Graylog UI and the Graylog API, as well as any configured inputs.
+to provide external access both to the Graylog UI and the Graylog API, as well as any configured inputs.
 
 Once an Ingress Controller has been installed and configured, run the following command to provision the appropriate
 [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) resource:
@@ -297,7 +296,7 @@ The inputs should now be exposed. Make sure to complete their configuration thro
 ## Enable TLS
 
 Before you can enable TLS, you must associate a DNS name with your Graylog installation.
-More specifically, your domain should point to the IP address/hostname associated the service used for [External Acess](#set-external-access).
+More specifically, your domain should point to the IP address/hostname associated with the service used for [External Access](#set-external-access).
 You may retrieve this information like this:
 
 ```sh
@@ -349,7 +348,7 @@ helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yam
 > TLS certificates issued by cert-manager are to be used in conjunction with Ingress.
 > Please make sure you already have an Ingress Controller running in your cluster before proceeding.
 
-This option allows you to enable TLS for your Graylog installation from well known CAs,
+This option allows you to enable TLS for your Graylog installation from well-known CAs,
 without having to provision a TLS certificate yourself.
 
 ```yaml
@@ -386,7 +385,7 @@ kubectl create secret tls my-cert --cert=public.pem --key=private.key -n graylog
 
 Enable TLS for your Graylog nodes, referencing the Kubernetes secret:
 ```sh
-helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.enabled=true --set  graylog.config.tls.secretName="my-cert" --set graylog.config.tls.updateKeyStore=true
+helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.enabled=true --set graylog.config.tls.secretName="my-cert" --set graylog.config.tls.updateKeyStore=true
 ```
 The default set of trusted Certificate Authorities bundled in the Java Runtime for Java 17 is aligned with major,
 well-known public root CAs. Make sure to set `graylog.config.tls.updateKeyStore` to `true` if you are using a
@@ -424,7 +423,7 @@ helm upgrade -i graylog ./graylog -n graylog --reuse-values --set global.existin
 ## Bring Your Own MongoDB
 
 By default, this chart deploys a MongoDB replica set using a custom resource template, which is rendered when 
-`mongodb.communityResource.enabled` is set to `true` (the default setting).The
+`mongodb.communityResource.enabled` is set to `true` (the default setting). The
 [MongoDB Controllers for Kubernetes Operator](https://github.com/mongodb/mongodb-kubernetes) then manages the
 corresponding pods.
 
@@ -462,29 +461,29 @@ kubectl delete pvc,secret -n graylog --all
 # Debugging
 Get a YAML output of the values being submitted.
 ```bash
-helm template graylog graylog -f graylog/values-glc.yaml | yq
+helm template graylog graylog -f your-custom-values.yaml | yq
 ```
 
 # Logging
-```
+```sh
 # Graylog app logs
-stern statefulset/graylog-app -n graylog-helm-dev-1
+stern statefulset/graylog-app -n graylog
 # DataNode logs
-stern statefulset/graylog-datanode -n graylog-helm-dev-1
+stern statefulset/graylog-datanode -n graylog
 ```
 
 ---
 
 # Graylog Helm Chart Values Reference
-| Key Path           | Description                                                      | Default   |
-|--------------------|------------------------------------------------------------------| --------- |
-| `provider`         | Kubernetes provider (optional).                                  | `""`      |
-| `version`          | Override Graylog and Graylog Data Node version (optional).       | `""`      |
-| `nameOverride`     | Override the `app.kubernetes.io/name` label value (optional).    | `""`      |
-| `fullnameOverride` | Override the fully qualified name of the application (optional). | `""`      |
+| Key Path           | Description                                                      | Default |
+|--------------------|------------------------------------------------------------------|---------|
+| `provider`         | Kubernetes provider (optional).                                  | `""`    |
+| `version`          | Override Graylog and Graylog Data Node version (optional).       | `""`    |
+| `nameOverride`     | Override the `app.kubernetes.io/name` label value (optional).    | `""`    |
+| `fullnameOverride` | Override the fully qualified name of the application (optional). | `""`    |
 
 ## Global
-These values affect Graylog, DataNode, and MongoDB
+These values affect Graylog, DataNode, and MongoDB.
 
 | Key Path                    | Description                                 | Default |
 |-----------------------------|---------------------------------------------|---------|
@@ -494,131 +493,131 @@ These values affect Graylog, DataNode, and MongoDB
 
 
 ## Graylog application
-| Key Path                                                              | Description                                                | Default                         |
-|-----------------------------------------------------------------------|------------------------------------------------------------|---------------------------------|
-| `graylog.enabled`                                                     | Enable the Graylog server.                                 | `true`                          |
-| `graylog.enterprise`                                                  | Enable enterprise features.                                | `true`                          |
-| `graylog.replicas`                                                    | Number of Graylog server replicas.                         | `2`                             |
-| `graylog.service.nameOverride`                                        | Override for service name.                                 | `""`                            |
-| `graylog.service.type`                                                | Kubernetes service type.                                   | `ClusterIP`                     |
-| `graylog.service.ports.app`                                           | Graylog web UI port.                                       | `9000`                          |
-| `graylog.service.ports.metrics`                                       | Metrics endpoint port.                                     | `9833`                          |
-| `graylog.service.metrics.enabled`                                     | Enable metrics collection.                                 | `true`                          |
-| `graylog.inputs`                                                      | List of inputs to configure.                               | See below                       |
-| `graylog.plugins`                                                     | List of plugins to configure.                              | See below                       |
-| `graylog.env`                                                         | Custom environment variables                               | `{}`                            |
-| `graylog.config.rootUsername`                                         | Root admin username.                                       | `"admin"`                       |
-| `graylog.config.rootPassword`                                         | Root admin password.                                       | `""`                            |
-| `graylog.config.customSecretPepper`                                   | Internal hashing pepper (randomized when empty).           | `""`                            |
-| `graylog.config.timezone`                                             | Timezone for the Graylog server.                           | `"UTC"`                         |
-| `graylog.config.selfSignedStartup`                                    | Use self-signed certs on startup.                          | `"true"`                        |
-| `graylog.config.serverJavaOpts`                                       | Java options for server.                                   | `"-Xms1g -Xmx1g"`               |
-| `graylog.config.extraServerJavaOpts`                                  | Additional Java options for server.                        | `[]`                            |
-| `graylog.config.leaderElectionMode`                                   | Mode for leader election.                                  | `"automatic"`                   |
-| `graylog.config.contentPacksAutoInstall`                              | Auto-install content packs.                                | `"true"`                        |
-| `graylog.config.isCloud`                                              | Indicates if deployment is on cloud.                       | `"false"`                       |
-| `graylog.config.tls.enabled`                                          | Enable TLS for Graylog.                                    | `false`                         |
-| `graylog.config.tls.secretName`                                       | Name of the TLS secret.                                    | `""`                            |
-| `graylog.config.tls.keyPassword`                                      | Password for the TLS key.                                  | `""`                            |
-| `graylog.config.tls.updateKeyStore`                                   | Update Java keystore with TLS cert.                        | `true`                          |
-| `graylog.config.tls.keyStorePass`                                     | Password for the Java keystore.                            | `"changeit"`                    |
-| `graylog.config.mongodb.customUri`                                    | Custom MongoDB connection URI.                             | `""`                            |
-| `graylog.config.mongodb.maxConnections`                               | Max MongoDB connections.                                   | `"1000"`                        |
-| `graylog.config.mongodb.versionProbeAttempts`                         | MongoDB version probe attempts.                            | `"0"`                           |
-| `graylog.config.messageJournal.enabled`                               | Enable message journal.                                    | `"true"`                        |
-| `graylog.config.messageJournal.flushAge`                              | Journal flush age.                                         | `"1m"`                          |
-| `graylog.config.messageJournal.flushInterval`                         | Journal flush interval.                                    | `"1000000"`                     |
-| `graylog.config.messageJournal.maxAge`                                | Max journal age.                                           | `"12h"`                         |
-| `graylog.config.messageJournal.segmentAge`                            | Journal segment age.                                       | `"1h"`                          |
-| `graylog.config.messageJournal.segmentSize`                           | Journal segment size.                                      | `"100mb"`                       |
-| `graylog.config.network.connectTimeout`                               | Network connect timeout.                                   | `"5s"`                          |
-| `graylog.config.network.enableCors`                                   | Enable CORS.                                               | `"false"`                       |
-| `graylog.config.network.enableGzip`                                   | Enable Gzip compression.                                   | `"true"`                        |
-| `graylog.config.network.maxHeaderSize`                                | Max header size.                                           | `"8192"`                        |
-| `graylog.config.network.readTimeout`                                  | Network read timeout.                                      | `"10s"`                         |
-| `graylog.config.network.threadPoolSize`                               | Network thread pool size.                                  | `"64"`                          |
-| `graylog.config.network.externalUri`                                  | External URI for Graylog web interface.                    | `""`                            |
-| `graylog.config.performance.asyncEventbusProcessors`                  | Async event bus processors.                                | `"2"`                           |
-| `graylog.config.performance.autoRestartInputs`                        | Automatically restart inputs.                              | `"false"`                       |
-| `graylog.config.performance.inputBufferProcessors`                    | Input buffer processors.                                   | `"2"`                           |
-| `graylog.config.performance.inputBufferRingSize`                      | Input buffer ring size.                                    | `"65536"`                       |
-| `graylog.config.performance.inputBufferWaitStrategy`                  | Input buffer wait strategy.                                | `"blocking"`                    |
-| `graylog.config.performance.jobSchedulerConcurrencyLimits`            | Scheduler concurrency limits.                              | `""`                            |
-| `graylog.config.performance.outputBatchSize`                          | Output batch size.                                         | `"500"`                         |
-| `graylog.config.performance.outputFaultCountThreshold`                | Output fault threshold.                                    | `"5"`                           |
-| `graylog.config.performance.outputFaultPenaltySeconds`                | Output fault penalty seconds.                              | `"30"`                          |
-| `graylog.config.performance.outputFlushInterval`                      | Output flush interval.                                     | `"1"`                           |
-| `graylog.config.performance.outputBufferProcessorThreadsCorePoolSize` | Output processor thread pool size.                         | `"3"`                           |
-| `graylog.config.performance.outputBufferProcessors`                   | Output buffer processors.                                  | `""`                            |
-| `graylog.config.performance.processBufferProcessors`                  | Process buffer processors.                                 | `""`                            |
-| `graylog.config.email.enabled`                                        | Enable email notifications.                                | `"false"`                       |
-| `graylog.config.email.senderAddress`                                  | Email sender address.                                      | `"graylog@example.com"`         |
-| `graylog.config.email.hostname`                                       | SMTP hostname.                                             | `"mail.example.com"`            |
-| `graylog.config.email.port`                                           | SMTP port.                                                 | `"587"`                         |
-| `graylog.config.email.socketConnectionTimeout`                        | SMTP socket connect timeout.                               | `"10s"`                         |
-| `graylog.config.email.socketTimeout`                                  | SMTP socket timeout.                                       | `"10s"`                         |
-| `graylog.config.email.useAuth`                                        | Use SMTP authentication.                                   | `"true"`                        |
-| `graylog.config.email.useSsl`                                         | Use SSL for SMTP.                                          | `"false"`                       |
-| `graylog.config.email.useTls`                                         | Use TLS for SMTP.                                          | `"true"`                        |
-| `graylog.config.email.webInterfaceUrl`                                | Web interface URL for email links.                         | `"https://graylog.example.com"` |
-| `graylog.config.plugins.enabled`                                      | Enable Graylog plugin system.                              | `false`                         |
-| `graylog.config.geolocation.enabled`                                  | Enable the Geolocation Processor                           | `false`                         |
-| `graylog.config.geolocation.maxmindGeoIp.enabled`                     | Enable the MaxMind GeoIP update CronJob                    | `true`                          |
-| `graylog.config.geolocation.maxmindGeoIp.accountId`                   | MaxMind Account ID                                         |                                 |
-| `graylog.config.geolocation.maxmindGeoIp.licenseKey`                  | MaxMind License Key                                        |                                 |
-| `graylog.config.geolocation.maxmindGeoIp.cronSchedule`                | Cron schedule expression                                   | `"0 0 * * *"`                   |
-| `graylog.config.geolocation.maxmindGeoIp.postInstallRun`              | Enable post-installation helm hook Job                     | `true`                          |
-| `graylog.config.geolocation.mmdbSources.city.url`                     | GeoLite2-City.mmdb URL (only for initial asset fetch)      |                                 |
-| `graylog.config.geolocation.mmdbSources.city.checksum`                | GeoLite2-City.mmdb checksum (only for initial asset fetch) |                                 |
-| `graylog.config.geolocation.mmdbSources.asn.url`                      | GeoLite2-ASN.mmdb URL (only for initial asset fetch)       |                                 |
-| `graylog.config.geolocation.mmdbSources.asn.checksum`                 | GeoLite2-ASN.mmdb checksum (only for initial asset fetch)  |                                 |
-| `graylog.config.init.assetFetch.enabled`                              | Enable asset fetch init.                                   | `false`                         |
-| `graylog.config.init.assetFetch.skipChecksum`                         | Skip checksum validation for assets.                       | `false`                         |
-| `graylog.config.init.assetFetch.allowHttp`                            | Allow HTTP fetch for assets.                               | `false`                         |
-| `graylog.config.init.assetFetch.plugins.enabled`                      | Enable plugin asset fetch.                                 | `false`                         |
-| `graylog.config.init.assetFetch.plugins.baseUrl`                      | Base URL for plugin assets.                                | `""`                            |
-| `graylog.config.init.assetFetch.geolocation.enabled`                  | Enable geolocation asset fetch.                            | `false`                         |
-| `graylog.config.init.assetFetch.geolocation.baseUrl`                  | Base URL for geolocation assets.                           | `""`                            |
-| `graylog.image.repository`                                            | Image repository for Graylog.                              | `""`                            |
-| `graylog.image.tag`                                                   | Image tag for Graylog.                                     | `""`                            |
-| `graylog.image.imagePullPolicy`                                       | Pull policy for Graylog image.                             | `IfNotPresent`                  |
-| `graylog.image.imagePullSecrets`                                      | Pull secrets for image.                                    | `[]`                            |
-| `graylog.updateStrategy.type`                                         | Pod update strategy for StatefulSet.                       | `"RollingUpdate"`               |
-| `graylog.updateStrategy.rollingUpdate.maxUnavailable`                 | Max unavailable pods during an update.                     | `1`                             |
-| `graylog.updateStrategy.rollingUpdate.partition`                      | Pods that will remain unaffected by the update.            | `""`                            |
-| `graylog.resources.limits.cpu`                                        | CPU limit for the Graylog pod.                             | `"2"`                           |
-| `graylog.resources.limits.memory`                                     | Memory limit for the Graylog pod.                          | `"2Gi"`                         |
-| `graylog.resources.requests.cpu`                                      | CPU request for the Graylog pod.                           | `"1"`                           |
-| `graylog.resources.requests.memory`                                   | Memory request for the Graylog pod.                        | `"1Gi"`                         |
-| `graylog.persistence.enabled`                                         | Enable persistent storage.                                 | `true`                          |
-| `graylog.persistence.storageClass`                                    | Storage class for the persistent volume.                   | `""`                            |
-| `graylog.persistence.volumeNameOverride`                              | Override name of the persistent volume.                    | `""`                            |
-| `graylog.persistence.existingClaim`                                   | Use an existing PVC.                                       | `""`                            |
-| `graylog.persistence.mountPath`                                       | Path where volume will be mounted.                         | `""`                            |
-| `graylog.persistence.accessModes`                                     | Access modes for the persistent volume.                    | `[]`                            |
-| `graylog.persistence.size`                                            | Size of the persistent volume.                             | `""`                            |
-| `graylog.persistence.annotations`                                     | Annotations for the persistent volume claim.               | `{}`                            |
-| `graylog.persistence.labels`                                          | Labels for the persistent volume claim.                    | `{}`                            |
-| `graylog.persistence.selector`                                        | Selector for the persistent volume.                        | `{}`                            |
-| `graylog.livenessProbe.enabled`                                       | Enable liveness probe.                                     | `true`                          |
-| `graylog.livenessProbe.initialDelaySeconds`                           | Initial delay for liveness probe.                          | `60`                            |
-| `graylog.livenessProbe.periodSeconds`                                 | Period between liveness probe checks.                      | `10`                            |
-| `graylog.livenessProbe.timeoutSeconds`                                | Timeout for the liveness probe.                            | `5`                             |
-| `graylog.livenessProbe.failureThreshold`                              | Failure threshold for the liveness probe.                  | `6`                             |
-| `graylog.livenessProbe.successThreshold`                              | Success threshold for the liveness probe.                  | `1`                             |
-| `graylog.readinessProbe.enabled`                                      | Enable readiness probe.                                    | `true`                          |
-| `graylog.readinessProbe.initialDelaySeconds`                          | Initial delay for readiness probe.                         | `30`                            |
-| `graylog.readinessProbe.periodSeconds`                                | Period between readiness probe checks.                     | `10`                            |
-| `graylog.readinessProbe.timeoutSeconds`                               | Timeout for the readiness probe.                           | `5`                             |
-| `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                 | `6`                             |
-| `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                 | `1`                             |
-| `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                | `false`                         |
-| `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                  | `1`                             |
-| `graylog.podAnnotations`                                              | Additional pod annotations.                                | `{}`                            |
-| `graylog.nodeSelector`                                                | Node selector for scheduling.                              | `{}`                            |
-| `graylog.tolerations`                                                 | Tolerations for scheduling.                                | `[]`                            |
-| `graylog.affinity`                                                    | Affinity rules for scheduling.                             | `{}`                            |
-| `graylog.extraEnv`                                                    | Custom EnvVar environment variables.                       | `[]`                            |
+| Key Path                                                              | Description                                                 | Default                         |
+|-----------------------------------------------------------------------|-------------------------------------------------------------|---------------------------------|
+| `graylog.enabled`                                                     | Enable the Graylog server.                                  | `true`                          |
+| `graylog.enterprise`                                                  | Enable enterprise features.                                 | `true`                          |
+| `graylog.replicas`                                                    | Number of Graylog server replicas.                          | `2`                             |
+| `graylog.service.nameOverride`                                        | Override for service name.                                  | `""`                            |
+| `graylog.service.type`                                                | Kubernetes service type.                                    | `ClusterIP`                     |
+| `graylog.service.ports.app`                                           | Graylog web UI port.                                        | `9000`                          |
+| `graylog.service.ports.metrics`                                       | Metrics endpoint port.                                      | `9833`                          |
+| `graylog.service.metrics.enabled`                                     | Enable metrics collection.                                  | `true`                          |
+| `graylog.inputs`                                                      | List of inputs to configure.                                | See below                       |
+| `graylog.plugins`                                                     | List of plugins to configure.                               | See below                       |
+| `graylog.env`                                                         | Custom environment variables.                               | `{}`                            |
+| `graylog.config.rootUsername`                                         | Root admin username.                                        | `"admin"`                       |
+| `graylog.config.rootPassword`                                         | Root admin password.                                        | `""`                            |
+| `graylog.config.customSecretPepper`                                   | Internal hashing pepper (randomized when empty).            | `""`                            |
+| `graylog.config.timezone`                                             | Timezone for the Graylog server.                            | `"UTC"`                         |
+| `graylog.config.selfSignedStartup`                                    | Use self-signed certs on startup.                           | `"true"`                        |
+| `graylog.config.serverJavaOpts`                                       | Java options for server.                                    | `"-Xms1g -Xmx1g"`               |
+| `graylog.config.extraServerJavaOpts`                                  | Additional Java options for server.                         | `[]`                            |
+| `graylog.config.leaderElectionMode`                                   | Mode for leader election.                                   | `"automatic"`                   |
+| `graylog.config.contentPacksAutoInstall`                              | Auto-install content packs.                                 | `"true"`                        |
+| `graylog.config.isCloud`                                              | Indicates if deployment is on cloud.                        | `"false"`                       |
+| `graylog.config.tls.enabled`                                          | Enable TLS for Graylog.                                     | `false`                         |
+| `graylog.config.tls.secretName`                                       | Name of the TLS secret.                                     | `""`                            |
+| `graylog.config.tls.keyPassword`                                      | Password for the TLS key.                                   | `""`                            |
+| `graylog.config.tls.updateKeyStore`                                   | Update Java keystore with TLS cert.                         | `true`                          |
+| `graylog.config.tls.keyStorePass`                                     | Password for the Java keystore.                             | `"changeit"`                    |
+| `graylog.config.mongodb.customUri`                                    | Custom MongoDB connection URI.                              | `""`                            |
+| `graylog.config.mongodb.maxConnections`                               | Max MongoDB connections.                                    | `"1000"`                        |
+| `graylog.config.mongodb.versionProbeAttempts`                         | MongoDB version probe attempts.                             | `"0"`                           |
+| `graylog.config.messageJournal.enabled`                               | Enable message journal.                                     | `"true"`                        |
+| `graylog.config.messageJournal.flushAge`                              | Journal flush age.                                          | `"1m"`                          |
+| `graylog.config.messageJournal.flushInterval`                         | Journal flush interval.                                     | `"1000000"`                     |
+| `graylog.config.messageJournal.maxAge`                                | Max journal age.                                            | `"12h"`                         |
+| `graylog.config.messageJournal.segmentAge`                            | Journal segment age.                                        | `"1h"`                          |
+| `graylog.config.messageJournal.segmentSize`                           | Journal segment size.                                       | `"100mb"`                       |
+| `graylog.config.network.connectTimeout`                               | Network connect timeout.                                    | `"5s"`                          |
+| `graylog.config.network.enableCors`                                   | Enable CORS.                                                | `"false"`                       |
+| `graylog.config.network.enableGzip`                                   | Enable Gzip compression.                                    | `"true"`                        |
+| `graylog.config.network.maxHeaderSize`                                | Max header size.                                            | `"8192"`                        |
+| `graylog.config.network.readTimeout`                                  | Network read timeout.                                       | `"10s"`                         |
+| `graylog.config.network.threadPoolSize`                               | Network thread pool size.                                   | `"64"`                          |
+| `graylog.config.network.externalUri`                                  | External URI for Graylog web interface.                     | `""`                            |
+| `graylog.config.performance.asyncEventbusProcessors`                  | Async event bus processors.                                 | `"2"`                           |
+| `graylog.config.performance.autoRestartInputs`                        | Automatically restart inputs.                               | `"false"`                       |
+| `graylog.config.performance.inputBufferProcessors`                    | Input buffer processors.                                    | `"2"`                           |
+| `graylog.config.performance.inputBufferRingSize`                      | Input buffer ring size.                                     | `"65536"`                       |
+| `graylog.config.performance.inputBufferWaitStrategy`                  | Input buffer wait strategy.                                 | `"blocking"`                    |
+| `graylog.config.performance.jobSchedulerConcurrencyLimits`            | Scheduler concurrency limits.                               | `""`                            |
+| `graylog.config.performance.outputBatchSize`                          | Output batch size.                                          | `"500"`                         |
+| `graylog.config.performance.outputFaultCountThreshold`                | Output fault threshold.                                     | `"5"`                           |
+| `graylog.config.performance.outputFaultPenaltySeconds`                | Output fault penalty seconds.                               | `"30"`                          |
+| `graylog.config.performance.outputFlushInterval`                      | Output flush interval.                                      | `"1"`                           |
+| `graylog.config.performance.outputBufferProcessorThreadsCorePoolSize` | Output processor thread pool size.                          | `"3"`                           |
+| `graylog.config.performance.outputBufferProcessors`                   | Output buffer processors.                                   | `""`                            |
+| `graylog.config.performance.processBufferProcessors`                  | Process buffer processors.                                  | `""`                            |
+| `graylog.config.email.enabled`                                        | Enable email notifications.                                 | `"false"`                       |
+| `graylog.config.email.senderAddress`                                  | Email sender address.                                       | `"graylog@example.com"`         |
+| `graylog.config.email.hostname`                                       | SMTP hostname.                                              | `"mail.example.com"`            |
+| `graylog.config.email.port`                                           | SMTP port.                                                  | `"587"`                         |
+| `graylog.config.email.socketConnectionTimeout`                        | SMTP socket connect timeout.                                | `"10s"`                         |
+| `graylog.config.email.socketTimeout`                                  | SMTP socket timeout.                                        | `"10s"`                         |
+| `graylog.config.email.useAuth`                                        | Use SMTP authentication.                                    | `"true"`                        |
+| `graylog.config.email.useSsl`                                         | Use SSL for SMTP.                                           | `"false"`                       |
+| `graylog.config.email.useTls`                                         | Use TLS for SMTP.                                           | `"true"`                        |
+| `graylog.config.email.webInterfaceUrl`                                | Web interface URL for email links.                          | `"https://graylog.example.com"` |
+| `graylog.config.plugins.enabled`                                      | Enable Graylog plugin system.                               | `false`                         |
+| `graylog.config.geolocation.enabled`                                  | Enable the Geolocation Processor.                           | `false`                         |
+| `graylog.config.geolocation.maxmindGeoIp.enabled`                     | Enable the MaxMind GeoIP update CronJob.                    | `true`                          |
+| `graylog.config.geolocation.maxmindGeoIp.accountId`                   | MaxMind Account ID.                                         |                                 |
+| `graylog.config.geolocation.maxmindGeoIp.licenseKey`                  | MaxMind License Key.                                        |                                 |
+| `graylog.config.geolocation.maxmindGeoIp.cronSchedule`                | Cron schedule expression.                                   | `"0 0 * * *"`                   |
+| `graylog.config.geolocation.maxmindGeoIp.postInstallRun`              | Enable post-installation helm hook Job.                     | `true`                          |
+| `graylog.config.geolocation.mmdbSources.city.url`                     | GeoLite2-City.mmdb URL (only for initial asset fetch).      |                                 |
+| `graylog.config.geolocation.mmdbSources.city.checksum`                | GeoLite2-City.mmdb checksum (only for initial asset fetch). |                                 |
+| `graylog.config.geolocation.mmdbSources.asn.url`                      | GeoLite2-ASN.mmdb URL (only for initial asset fetch).       |                                 |
+| `graylog.config.geolocation.mmdbSources.asn.checksum`                 | GeoLite2-ASN.mmdb checksum (only for initial asset fetch).  |                                 |
+| `graylog.config.init.assetFetch.enabled`                              | Enable asset fetch init.                                    | `false`                         |
+| `graylog.config.init.assetFetch.skipChecksum`                         | Skip checksum validation for assets.                        | `false`                         |
+| `graylog.config.init.assetFetch.allowHttp`                            | Allow HTTP fetch for assets.                                | `false`                         |
+| `graylog.config.init.assetFetch.plugins.enabled`                      | Enable plugin asset fetch.                                  | `false`                         |
+| `graylog.config.init.assetFetch.plugins.baseUrl`                      | Base URL for plugin assets.                                 | `""`                            |
+| `graylog.config.init.assetFetch.geolocation.enabled`                  | Enable geolocation asset fetch.                             | `false`                         |
+| `graylog.config.init.assetFetch.geolocation.baseUrl`                  | Base URL for geolocation assets.                            | `""`                            |
+| `graylog.image.repository`                                            | Image repository for Graylog.                               | `""`                            |
+| `graylog.image.tag`                                                   | Image tag for Graylog.                                      | `""`                            |
+| `graylog.image.imagePullPolicy`                                       | Pull policy for Graylog image.                              | `IfNotPresent`                  |
+| `graylog.image.imagePullSecrets`                                      | Pull secrets for image.                                     | `[]`                            |
+| `graylog.updateStrategy.type`                                         | Pod update strategy for StatefulSet.                        | `"RollingUpdate"`               |
+| `graylog.updateStrategy.rollingUpdate.maxUnavailable`                 | Max unavailable pods during an update.                      | `1`                             |
+| `graylog.updateStrategy.rollingUpdate.partition`                      | Pods that will remain unaffected by the update.             | `""`                            |
+| `graylog.resources.limits.cpu`                                        | CPU limit for the Graylog pod.                              | `"2"`                           |
+| `graylog.resources.limits.memory`                                     | Memory limit for the Graylog pod.                           | `"2Gi"`                         |
+| `graylog.resources.requests.cpu`                                      | CPU request for the Graylog pod.                            | `"1"`                           |
+| `graylog.resources.requests.memory`                                   | Memory request for the Graylog pod.                         | `"1Gi"`                         |
+| `graylog.persistence.enabled`                                         | Enable persistent storage.                                  | `true`                          |
+| `graylog.persistence.storageClass`                                    | Storage class for the persistent volume.                    | `""`                            |
+| `graylog.persistence.volumeNameOverride`                              | Override name of the persistent volume.                     | `""`                            |
+| `graylog.persistence.existingClaim`                                   | Use an existing PVC.                                        | `""`                            |
+| `graylog.persistence.mountPath`                                       | Path where volume will be mounted.                          | `""`                            |
+| `graylog.persistence.accessModes`                                     | Access modes for the persistent volume.                     | `[]`                            |
+| `graylog.persistence.size`                                            | Size of the persistent volume.                              | `""`                            |
+| `graylog.persistence.annotations`                                     | Annotations for the persistent volume claim.                | `{}`                            |
+| `graylog.persistence.labels`                                          | Labels for the persistent volume claim.                     | `{}`                            |
+| `graylog.persistence.selector`                                        | Selector for the persistent volume.                         | `{}`                            |
+| `graylog.livenessProbe.enabled`                                       | Enable liveness probe.                                      | `true`                          |
+| `graylog.livenessProbe.initialDelaySeconds`                           | Initial delay for liveness probe.                           | `60`                            |
+| `graylog.livenessProbe.periodSeconds`                                 | Period between liveness probe checks.                       | `10`                            |
+| `graylog.livenessProbe.timeoutSeconds`                                | Timeout for the liveness probe.                             | `5`                             |
+| `graylog.livenessProbe.failureThreshold`                              | Failure threshold for the liveness probe.                   | `6`                             |
+| `graylog.livenessProbe.successThreshold`                              | Success threshold for the liveness probe.                   | `1`                             |
+| `graylog.readinessProbe.enabled`                                      | Enable readiness probe.                                     | `true`                          |
+| `graylog.readinessProbe.initialDelaySeconds`                          | Initial delay for readiness probe.                          | `30`                            |
+| `graylog.readinessProbe.periodSeconds`                                | Period between readiness probe checks.                      | `10`                            |
+| `graylog.readinessProbe.timeoutSeconds`                               | Timeout for the readiness probe.                            | `5`                             |
+| `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                  | `6`                             |
+| `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                  | `1`                             |
+| `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
+| `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                   | `1`                             |
+| `graylog.podAnnotations`                                              | Additional pod annotations.                                 | `{}`                            |
+| `graylog.nodeSelector`                                                | Node selector for scheduling.                               | `{}`                            |
+| `graylog.tolerations`                                                 | Tolerations for scheduling.                                 | `[]`                            |
+| `graylog.affinity`                                                    | Affinity rules for scheduling.                              | `{}`                            |
+| `graylog.extraEnv`                                                    | Custom EnvVar environment variables.                        | `[]`                            |
 
 
 ### Graylog inputs
@@ -639,7 +638,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `graylog.plugins[i].checksum`      | Checksum of JAR file.                  | `13550350a8681c84c861aac2e5b440161c2b33a3e4f302ac680ca5b686de48de` |
 
 ### Graylog environment variables
-| Key Path           | Descriptions                                                                                                                                                                                   | Example                                                                                                                                                    |
+| Key Path           | Description                                                                                                                                                                                    | Example                                                                                                                                                    |
 |--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `graylog.env`      | Simple key/value environment variables                                                                                                                                                         | `graylog.env.FOO=BAR`, `graylog.env.HELLO=123`                                                                                                              |
 | `graylog.extraEnv` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables<br/>(valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:&#10;  - name: MADE_UP_PASSWORD&#10;    valueFrom:&#10;      secretKeyRef:&#10;        name: mysecret&#10;        key: password</code></pre> |
@@ -652,7 +651,7 @@ These values affect Graylog, DataNode, and MongoDB
 | `datanode.service.ports.api`                           | API communication port.                         | `8999`            |
 | `datanode.service.ports.data`                          | Data communication port.                        | `9200`            |
 | `datanode.service.ports.config`                        | Configuration communication port.               | `9300`            |
-| `datanode.env`                                         | Custom environment variables                    | `{}`              |
+| `datanode.env`                                         | Custom environment variables.                   | `{}`              |
 | `datanode.config.nodeIdFile`                           | Path to datanode ID file.                       | `""`              |
 | `datanode.config.opensearchHeap`                       | OpenSearch heap size.                           | `"2g"`            |
 | `datanode.config.javaOpts`                             | Java options for datanode.                      | `"-Xms1g -Xmx1g"` |
@@ -718,13 +717,13 @@ These values affect Graylog, DataNode, and MongoDB
 
 ## Service Account
 | Key Path                      | Description                                             | Default |
-|-------------------------------|---------------------------------------------------------|--------|
-| `serviceAccount.create`       | Create a new service account.                           | `true` |
-| `serviceAccount.automount`    | Automount service account token.                        | `true` |
-| `serviceAccount.annotations`  | Annotations for service account.                        | `{}`   |
-| `serviceAccount.nameOverride` | Override name of service account.                       | `""`   |
+|-------------------------------|---------------------------------------------------------|---------|
+| `serviceAccount.create`       | Create a new service account.                           | `true`  |
+| `serviceAccount.automount`    | Automount service account token.                        | `true`  |
+| `serviceAccount.annotations`  | Annotations for service account.                        | `{}`    |
+| `serviceAccount.nameOverride` | Override name of service account.                       | `""`    |
 | `serviceAccount.role.create`  | Create a new role to bind to this service account.      | `false` |
-| `serviceAccount.role.rules`   | Rules for the new role to bind to this service account. | `[]`   |
+| `serviceAccount.role.rules`   | Rules for the new role to bind to this service account. | `[]`    |
 
 
 ## Ingress
@@ -740,7 +739,7 @@ These values affect Graylog, DataNode, and MongoDB
 
 ### Web Ingress
 | Key Path                                 | Description                        | Default                  |
-|------------------------------------------|------------------------------------| ------------------------ |
+|------------------------------------------|------------------------------------|--------------------------|
 | `ingress.web.enabled`                    | Enable ingress for Graylog Web.    | `false`                  |
 | `ingress.web.className`                  | Ingress class name.                | `""`                     |
 | `ingress.web.annotations`                | Annotations for ingress resource.  | `{}`                     |
