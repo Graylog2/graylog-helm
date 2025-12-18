@@ -153,22 +153,22 @@ When deploying to Amazon EKS, use the `--set provider=aws` option to enable AWS-
 helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws
 ```
 
-When this option is set, the chart configures a custom **gp3** `StorageClass` optimized for Amazon EBS volumes, 
+When this option is set, the chart configures a custom `gp3` StorageClass optimized for Amazon EBS volumes, 
 and applies it to all PVCs managed by this chart.
 
-Alternatively, you may also specify another existing StorageClass (e.g., **gp2**), if available in your cluster:
+Alternatively, you may also specify another existing StorageClass (e.g., `gp2`), if available in your cluster:
 
 ```sh
 helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws --set global.storageClass=gp2
 ```
 
 > [!NOTE]
-> For EKS clusters version 1.30 and later, Amazon EKS no longer includes the "default" annotation on the gp2 
+> For EKS clusters version 1.30 and later, Amazon EKS no longer includes the "default" annotation on the `gp2` 
 > StorageClass resource for newly created clusters. It may still be present in the cluster, but it's not marked as 
 > the default storage class anymore.
 > 
 > The `gp3` volume type is recommended for most Amazon EBS workloads because it offers better performance and 
-> cost efficiency than gp2, as well as independent scaling of IOPS and throughput, and higher performance limits.
+> cost efficiency than `gp2`, as well as independent scaling of IOPS and throughput, and higher performance limits.
 
 # Post-Installation
 
