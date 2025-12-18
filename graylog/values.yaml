@@ -15,8 +15,8 @@ fullnameOverride: ""
 # Overrides values for Graylog, Datanode, and MongoDB
 global:
   imagePullSecrets: []
-  defaultStorageClass: ""
   existingSecretName: ""
+  storageClass: ""
 
 # Graylog application
 graylog:

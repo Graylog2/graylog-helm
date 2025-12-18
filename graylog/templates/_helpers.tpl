@@ -274,6 +274,44 @@ Datanode configmap name
 {{- end }}
 
 {{/*
+Provider-defined Storage Class name
+*/}}
+{{- define "graylog.provider.storageClassName" }}
+{{- $names := dict }}
+{{- $_ := include "graylog.fullname" . | printf "%s-gp3" | set $names "aws"}}
+{{-/*add more entries here*/}}
+{{- .Values.provider | default "" | quote | get $names }}
+{{- end }}
+
+{{/*
+Graylog Storage Class name
+*/}}
+{{- define "graylog.storageClassName" }}
+{{- include "graylog.provider.storageClassName" . | coalesce .Values.graylog.persistence.storageClass .Values.global.storageClass | default "" }}
+{{- end }}
+
+{{/*
+Datanode data Storage Class name
+*/}}
+{{- define "graylog.datanode.data.storageClassName" }}
+{{- include "graylog.provider.storageClassName" . | coalesce .Values.datanode.persistence.data.storageClass .Values.global.storageClass | default "" }}
+{{- end }}
+
+{{/*
+Datanode native libs Storage Class name
+*/}}
+{{- define "graylog.datanode.nativeLibs.storageClassName" }}
+{{- include "graylog.provider.storageClassName" . | coalesce .Values.datanode.persistence.nativeLibs.storageClass .Values.global.storageClass | default "" }}
+{{- end }}
+
+{{/*
+MongoDB Storage Class name
+*/}}
+{{- define "graylog.mongodb.storageClassName" }}
+{{- include "graylog.provider.storageClassName" . | coalesce .Values.mongodb.persistence.storageClass .Values.global.storageClass | default "" }}
+{{- end }}
+
+{{/*
 Custom enviroment variables
 usage: {{ include "graylog.env" .Values.{graylog|datanode} | indent N }}
 */}}

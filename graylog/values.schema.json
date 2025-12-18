@@ -34,7 +34,7 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "defaultStorageClass": { "type": "string" },
+        "storageClass": { "type": "string" },
         "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" }
       }
     },
