@@ -278,8 +278,8 @@ Provider-defined Storage Class name
 */}}
 {{- define "graylog.provider.storageClassName" }}
 {{- $names := dict }}
-{{- $_ := include "graylog.fullname" . | printf "%s-gp3" | set $names "aws"}}
-{{-/*add more entries here*/}}
+{{- $_ := include "graylog.fullname" . | printf "%s-gp3" | set $names "aws" -}}
+{{/* add more entries here */}}
 {{- .Values.provider | default "" | quote | get $names }}
 {{- end }}
 
