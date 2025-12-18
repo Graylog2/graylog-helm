@@ -224,8 +224,8 @@ spec:
           {{- toYaml . | nindent 8 }}
         {{- end }}
       spec:
-        {{- if or .Values.graylog.persistence.storageClass .Values.global.defaultStorageClass }}
-        storageClassName: {{ .Values.graylog.persistence.storageClass | default .Values.global.defaultStorageClass }}
+        {{- with (include "graylog.storageClassName" .) }}
+        storageClassName: {{ . | quote }}
         {{- end }}
         accessModes:
         {{- if .Values.graylog.persistence.accessModes }}

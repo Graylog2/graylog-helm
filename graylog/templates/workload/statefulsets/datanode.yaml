@@ -152,8 +152,8 @@ spec:
         {{- else }}
           - "ReadWriteOnce"
         {{- end }}
-        {{- if or .Values.datanode.persistence.data.storageClass .Values.global.defaultStorageClass }}
-        storageClassName: {{ .Values.datanode.persistence.data.storageClass | default .Values.global.defaultStorageClass }}
+        {{- with (include "graylog.datanode.data.storageClassName" . ) }}
+        storageClassName: {{ . | quote }}
         {{- end }}
         resources:
           requests:
@@ -171,9 +171,9 @@ spec:
         {{- else }}
           - "ReadWriteOnce"
         {{- end }}
-        {{- if or .Values.datanode.persistence.nativeLibs.storageClass .Values.global.defaultStorageClass }}
-        storageClassName: {{ .Values.datanode.persistence.nativeLibs.storageClass | default .Values.global.defaultStorageClass }}
-              {{- end }}
+        {{- with (include "graylog.datanode.nativeLibs.storageClassName" . ) }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.datanode.persistence.nativeLibs.size | default "8Gi" | quote }}

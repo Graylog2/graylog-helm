@@ -154,23 +154,22 @@ When deploying to Amazon EKS, use the `--set provider=aws` option to enable AWS-
 helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws
 ```
 
-The AWS-specific configurations include a custom gp3 StorageClass optimized for EBS volumes.
+When this option is set, the chart configures a custom **gp3** `StorageClass` optimized for Amazon EBS volumes, 
+and applies it to all PVCs managed by this chart.
 
-### Troubleshooting: PVCs stuck in Pending
+Alternatively, you may also specify another existing StorageClass (e.g., **gp2**), if available in your cluster:
 
-If your PersistentVolumeClaims remain in `Pending` state after installation, it may be because the custom gp3 StorageClass is not set as the default. You have two options:
-
-**Option 1:** Use an existing StorageClass (e.g., `gp2`) if one is already available in your cluster:
 ```sh
-helm install graylog ./graylog --namespace graylog --create-namespace --set global.defaultStorageClass=gp2
+helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws --set global.storageClass=gp2
 ```
 
-**Option 2:** Set the custom gp3 StorageClass as the cluster default:
-```sh
-helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws-managed-sc
-```
-
-This option creates a gp3 StorageClass and marks it as the default for your cluster.
+> [!NOTE]
+> For EKS clusters version 1.30 and later, Amazon EKS no longer includes the "default" annotation on the gp2 
+> StorageClass resource for newly created clusters. It may still be present in the cluster, but it's not marked as 
+> the default storage class anymore.
+> 
+> The `gp3` volume type is recommended for most Amazon EBS workloads because it offers better performance and 
+> cost efficiency than gp2, as well as independent scaling of IOPS and throughput, and higher performance limits.
 
 # Post Installation
 
@@ -266,7 +265,7 @@ helm upgrade graylog ./graylog -n graylog --set graylog.service.type="LoadBalanc
 helm upgrade graylog ./graylog -n graylog --set graylog.readinessProbe.initialDelaySeconds=5 --reuse-values
 
 # use a custom Storage Class for all resources (e.g. for AWS EKS)
-helm upgrade graylog ./graylog -n graylog --set global.defaultStorageClass="gp2" --reuse-values
+helm upgrade graylog ./graylog -n graylog --set global.storageClass="gp2" --reuse-values
 ```
 
 ## Add inputs
@@ -487,11 +486,11 @@ stern statefulset/graylog-datanode -n graylog-helm-dev-1
 ## Global
 These values affect Graylog, DataNode, and MongoDB
 
-| Key Path                     | Description                                 | Default |
-|------------------------------|---------------------------------------------|---------|
-| `global.existingSecretName`  | Reference to an existing Kubernetes secret. | `""`    |
-| `global.imagePullSecrets`    | Image pull secrets for private registries.  | `[]`    |
-| `global.defaultStorageClass` | Default storage class for PVCs.             | `""`    |
+| Key Path                    | Description                                 | Default |
+|-----------------------------|---------------------------------------------|---------|
+| `global.existingSecretName` | Reference to an existing Kubernetes secret. | `""`    |
+| `global.imagePullSecrets`   | Image pull secrets for private registries.  | `[]`    |
+| `global.storageClass`       | Storage class to use for PVCs.              | `""`    |
 
 
 ## Graylog application
