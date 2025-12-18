@@ -11,6 +11,7 @@ This chart is still under development and does not have locked in api contracts 
 * [Requirements](#requirements)
   * [External Dependencies](#external-dependencies)
 * [Installation](#installation)
+  * [Installing on Kubernetes](#installing-on-kubernetes) 
   * [Installing on AWS EKS](#installing-on-aws-eks)
 * [Post-installation](#post-installation)
   * [Set root Graylog password](#set-root-graylog-password)
