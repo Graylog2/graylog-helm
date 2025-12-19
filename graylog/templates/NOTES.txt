@@ -13,7 +13,7 @@ SUMMARY
   {{- if .Values.mongodb.communityResource.enabled }}
   {{- $mongoReplicaCount := .Values.mongodb.replicas | int }}
   {{- $mongoArbiterCount := .Values.mongodb.arbiters | int }}
-  - {{ $mongoReplicaCount }} replicas{{ if $mongoArbiterCount }} (+ {{ $mongoArbiterCount }} arbiter){{ end }} for MongoDB, running as a replicaset in Primary-Secondary{{ if $mongoArbiterCount }}-Arbiter{{ end }} mode.
+  - {{ $mongoReplicaCount }} replicas{{ if $mongoArbiterCount }} (+ {{ $mongoArbiterCount }} arbiter){{ end }} for MongoDB, running as a replica set in Primary{{ if gt 1 $mongoReplicaCount }}-Secondary{{ end }}{{ if $mongoArbiterCount }}-Arbiter{{ end }} mode.
   {{ if mod (add $mongoArbiterCount $mongoReplicaCount | int) 2 | eq 0 }}
   WARNING: An odd number of workers (replicas + arbiters) is preferred for MongoDB Replica Sets.
   {{- end }}

@@ -19,7 +19,7 @@ spec:
     type: {{ .Values.datanode.updateStrategy.type | default "RollingUpdate" | quote }}
     {{- if .Values.datanode.updateStrategy.type | default "RollingUpdate" | eq "RollingUpdate" }}
     rollingUpdate:
-      maxUnavailable: {{ .Values.datanode.updateStrategy.rollingUpdate.maxUnavailable | default "1" | quote }}
+      maxUnavailable: {{ .Values.datanode.updateStrategy.rollingUpdate.maxUnavailable | default 1 }}
       {{- with .Values.datanode.updateStrategy.rollingUpdate.partition }}
       partition: {{ int . }}
       {{- end }}

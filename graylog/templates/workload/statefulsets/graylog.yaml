@@ -20,7 +20,7 @@ spec:
     type: {{ .Values.graylog.updateStrategy.type | default "RollingUpdate" | quote }}
     {{- if .Values.graylog.updateStrategy.type | default "RollingUpdate" | eq "RollingUpdate" }}
     rollingUpdate:
-      maxUnavailable: {{ .Values.graylog.updateStrategy.rollingUpdate.maxUnavailable | default "1" | quote }}
+      maxUnavailable: {{ .Values.graylog.updateStrategy.rollingUpdate.maxUnavailable | default 1 }}
       {{- with .Values.graylog.updateStrategy.rollingUpdate.partition }}
       partition: {{ int . }}
       {{- end }}
