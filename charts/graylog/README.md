@@ -71,30 +71,9 @@ Make sure you have [Ingress Controller](#ingress-controller) installed, and that
 Then, configure `ingress.web.tls` and `ingress.config.issuer` with the name of an existing Issuer resource,
 and let `cert-manager` do the rest!
 
-<!--
-### Install
-```sh
-helm install graylog graylog/graylog -n graylog --create-namespace
-```
-
-### Upgrades
-```sh
-helm upgrade graylog graylog/graylog -n graylog --reuse-values
-```
--->
-
 # Installation
 
 ## Installing on Kubernetes
-
-### Clone this repo
-```sh
-# clone repo
-git clone git@github.com:Graylog2/graylog-helm.git
-
-# cd into the newly created graylog-helm directory
-cd graylog-helm
-```
 
 ### Install the official MongoDB Kubernetes Operator using Helm
 ```sh
@@ -106,7 +85,14 @@ helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
 
 ### Install the official Graylog Helm chart
 ```sh
-helm install graylog ./graylog --namespace graylog --create-namespace
+# add the repo
+helm repo add graylog https://graylog2.github.io/graylog-helm
+helm repo update
+```
+
+```sh
+# install the chart
+helm install graylog graylog/graylog -n graylog --create-namespace
 ```
 
 That's it!
@@ -120,15 +106,6 @@ permissions to make calls to AWS APIs on your behalf, so be sure to
 [create the corresponding IAM role](https://docs.aws.amazon.com/eks/latest/userguide/csi-iam-role.html), or attach the
 `AmazonEBSCSIDriverPolicy` to your existing role.
 
-### Clone this repo
-```sh
-# clone repo
-git clone git@github.com:Graylog2/graylog-helm.git
-
-# cd into the newly created graylog-helm directory
-cd graylog-helm
-```
-
 ### Install the official MongoDB Kubernetes Operator using Helm
 ```sh
 helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
@@ -137,10 +114,19 @@ helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
   --namespace operators --create-namespace
 ```
 
+### Install the official Graylog Helm chart
+
+```sh
+# add the repo
+helm repo add graylog https://graylog2.github.io/graylog-helm
+helm repo update
+```
+
 When deploying to Amazon EKS, use the `--set provider=aws` option to enable AWS-specific configurations:
 
 ```sh
-helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws
+# install the chart
+helm install graylog graylog/graylog --namespace graylog --create-namespace --set provider=aws
 ```
 
 When this option is set, the chart configures a custom `gp3` StorageClass optimized for Amazon EBS volumes, 
@@ -149,7 +135,7 @@ and applies it to all PVCs managed by this chart.
 Alternatively, you may also specify another existing StorageClass (e.g., `gp2`), if available in your cluster:
 
 ```sh
-helm install graylog ./graylog --namespace graylog --create-namespace --set provider=aws --set global.storageClass=gp2
+helm install graylog graylog/graylog --namespace graylog --create-namespace --set provider=aws --set global.storageClass=gp2
 ```
 
 > [!NOTE]
@@ -168,7 +154,7 @@ the following command:
 
 ```sh
 echo "Enter your new password and press return:" && read -s pass
-helm upgrade graylog ./graylog --namespace graylog --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
+helm upgrade graylog graylog/graylog --namespace graylog --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 ```
 
 ## Set external access
@@ -181,7 +167,7 @@ Once an Ingress Controller has been installed and configured, run the following 
 [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) resource:
 
 ```sh
-helm upgrade graylog ./graylog -n graylog --set ingress.web.enabled="true" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set ingress.web.enabled="true" --reuse-values
 ```
 
 ### Alternative: LoadBalancer Service
@@ -189,7 +175,7 @@ Alternatively, external access can be configured directly through the provided s
 pre-existing dependencies.
 
 ```sh
-helm upgrade graylog ./graylog -n graylog --set graylog.service.type="LoadBalancer" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.service.type="LoadBalancer" --reuse-values
 ```
 
 ### Temporary access: Port Forwarding
@@ -204,22 +190,22 @@ kubectl port-forward service/graylog-svc 9000:9000 -n graylog
 ## Scale Graylog
 ```sh
 # scaling out: add more Graylog nodes to your cluster
-helm upgrade graylog ./graylog -n graylog --set graylog.replicas=3 --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=3 --reuse-values
 
 # scaling in: remove Graylog nodes from your cluster
-helm upgrade graylog ./graylog -n graylog --set graylog.replicas=1 --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=1 --reuse-values
 ```
 
 ## Scale DataNode
 ```sh
 # scaling out: add more Graylog Data Nodes to your cluster
-helm upgrade graylog ./graylog -n graylog --set datanode.replicas=5 --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set datanode.replicas=5 --reuse-values
 ```
 
 ## Scale MongoDB
 ```sh
 # scaling out: add more MongoDB nodes to your replica set
-helm upgrade graylog ./graylog -n graylog --set mongodb.replicas=4 --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set mongodb.replicas=4 --reuse-values
 ```
 
 ## Modify Graylog `server.conf` parameters
@@ -228,19 +214,19 @@ helm upgrade graylog ./graylog -n graylog --set mongodb.replicas=4 --reuse-value
 # A few examples:
 
 # change server tz
-helm upgrade graylog ./graylog -n graylog --set graylog.config.timezone="America/Denver" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.timezone="America/Denver" --reuse-values
 
 # set JVM options
-helm upgrade graylog ./graylog -n graylog --set graylog.config.serverJavaOpts="-Xms2g -Xmx1g" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.serverJavaOpts="-Xms2g -Xmx1g" --reuse-values
 
 # redefine message journal maxAge
-helm upgrade graylog ./graylog -n graylog --set graylog.config.messageJournal.maxAge="24h" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.messageJournal.maxAge="24h" --reuse-values
 
 # enable CORS headers for HTTP interface
-helm upgrade graylog ./graylog -n graylog --set graylog.config.network.enableCors=true --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.network.enableCors=true --reuse-values
 
 # enable email transport and set sender address
-helm upgrade graylog ./graylog -n graylog --set graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
 ```
 
 ## Customize deployed Kubernetes resources
@@ -248,13 +234,13 @@ helm upgrade graylog ./graylog -n graylog --set graylog.config.email.enabled=tru
 # A few examples: 
 
 # expose the Graylog application with a LoadBalancer service
-helm upgrade graylog ./graylog -n graylog --set graylog.service.type="LoadBalancer" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.service.type="LoadBalancer" --reuse-values
 
 # modify readiness probe initial delay
-helm upgrade graylog ./graylog -n graylog --set graylog.readinessProbe.initialDelaySeconds=5 --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.readinessProbe.initialDelaySeconds=5 --reuse-values
 
 # use a custom Storage Class for all resources (e.g. for AWS EKS)
-helm upgrade graylog ./graylog -n graylog --set global.storageClass="gp2" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set global.storageClass="gp2" --reuse-values
 ```
 
 ## Add inputs
@@ -278,7 +264,7 @@ Then, save it as `inputs.yaml`
 
 Finally, upgrade your installation like so:
 ```sh
-helm upgrade graylog ./graylog -n graylog -f inputs.yaml --reuse-values
+helm upgrade graylog graylog/graylog -n graylog -f inputs.yaml --reuse-values
 ```
 
 The inputs should now be exposed. Make sure to complete their configuration through the Graylog UI.
@@ -326,7 +312,7 @@ ingress:
 ```
 
 ```sh
-helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yaml
+helm upgrade graylog graylog/graylog -n graylog --reuse-values -f ingress-with-tls.yaml
 ```
 
 ### Option 2: Auto-issued certificates using cert-manager
@@ -356,7 +342,7 @@ ingress:
 ```
 
 ```sh
-helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yaml --set ingress.config.tls.issuer.existingName='<name of your existing issuer resource>'
+helm upgrade graylog graylog/graylog -n graylog --reuse-values -f ingress-with-tls.yaml --set ingress.config.tls.issuer.existingName='<name of your existing issuer resource>'
 ```
 
 > [!NOTE]
@@ -382,7 +368,7 @@ kubectl create secret tls my-cert --cert=public.pem --key=private.key -n graylog
 
 Enable TLS for your Graylog nodes, referencing the Kubernetes secret:
 ```sh
-helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.tls.enabled=true --set graylog.config.tls.secretName="my-cert" --set graylog.config.tls.updateKeyStore=true
+helm upgrade graylog graylog/graylog -n graylog --reuse-values --set graylog.config.tls.enabled=true --set graylog.config.tls.secretName="my-cert" --set graylog.config.tls.updateKeyStore=true
 ```
 The default set of trusted Certificate Authorities bundled in the Java Runtime for Java 17 is aligned with major,
 well-known public root CAs. Make sure to set `graylog.config.tls.updateKeyStore` to `true` if you are using a
@@ -390,7 +376,7 @@ self-signed certificate, or if you think the CA that signed your certificate mig
 
 ## Enable Geolocation
 ```sh
-helm upgrade graylog ./graylog -n graylog --reuse-values --set graylog.config.geolocation.enabled=true --set graylog.config.geolocation.maxmindGeoIp.enabled=true --set graylog.config.geolocation.maxmindGeoIp.accountId="<YOUR-MAXMIND-ACCOUNT-ID-HERE>" --set graylog.config.geolocation.maxmindGeoIp.licenseKey="<YOUR-MAXMIND-LICENSE-KEY-HERE>"
+helm upgrade graylog graylog/graylog -n graylog --reuse-values --set graylog.config.geolocation.enabled=true --set graylog.config.geolocation.maxmindGeoIp.enabled=true --set graylog.config.geolocation.maxmindGeoIp.accountId="<YOUR-MAXMIND-ACCOUNT-ID-HERE>" --set graylog.config.geolocation.maxmindGeoIp.licenseKey="<YOUR-MAXMIND-LICENSE-KEY-HERE>"
 ```
 
 Use the following paths when enabling the Geo-location processor in the Graylog web UI:
@@ -406,7 +392,7 @@ By default, this chart manages application secrets (including MongoDB credential
 If you already manage secrets using an external system, you can disable Helm-managed secrets and point the chart to your existing resources.
 
 ```sh
-helm upgrade -i graylog ./graylog -n graylog --reuse-values --set global.existingSecretName="<your secret name>"
+helm upgrade -i graylog graylog/graylog -n graylog --reuse-values --set global.existingSecretName="<your secret name>"
 ```
 
 > [!IMPORTANT]
@@ -427,7 +413,7 @@ corresponding pods.
 If you prefer to use your own MongoDB instance, you can disable the custom MongoDB resource and configure the chart to
 connect to your external database:
 ```sh
-helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
+helm upgrade --install graylog graylog/graylog --namespace graylog --reuse-values \
   --set mongodb.communityResource.enabled=false \
   --set graylog.config.mongodb.customUri="mongodb[+srv]://<username>:<password>@<hostname>:<port>[,<i-th hostname>:<i-th port>]/<db name>"
 ```
@@ -435,7 +421,7 @@ helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
 **Alternatively**, the MongoDB URI can also be provided as part of an externally-managed secret:
 
 ```sh
-helm upgrade --install graylog ./graylog --namespace graylog --reuse-values \
+helm upgrade --install graylog graylog/graylog --namespace graylog --reuse-values \
   --set mongodb.communityResource.enabled=false \
   --set global.existingSecretName="<your secret name>"
 ```
