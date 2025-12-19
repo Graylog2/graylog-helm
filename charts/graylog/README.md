@@ -116,15 +116,13 @@ helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
 
 ### Install the official Graylog Helm chart
 
+When deploying to Amazon EKS, use the `--set provider=aws` option to enable AWS-specific configurations:
+
 ```sh
 # add the repo
 helm repo add graylog https://graylog2.github.io/graylog-helm
 helm repo update
-```
 
-When deploying to Amazon EKS, use the `--set provider=aws` option to enable AWS-specific configurations:
-
-```sh
 # install the chart
 helm install graylog graylog/graylog --namespace graylog --create-namespace --set provider=aws
 ```
