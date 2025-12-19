@@ -1,0 +1,34 @@
+{{- if .Values.serviceAccount.create -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "graylog.serviceAccountName" . }}
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: {{ .Values.serviceAccount.automount | default true }}
+{{- if empty .Values.serviceAccount.role.rules | not | and .Values.serviceAccount.role.create }}
+{{- $roleName := include "graylog.serviceAccountName" . | printf "%s-role" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $roleName }}
+rules: {{ .Values.serviceAccount.role.rules | toYaml | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "graylog.serviceAccountName" . | printf "%s-rb" }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "graylog.serviceAccountName" . }}
+roleRef:
+  kind: Role
+  name: {{ $roleName }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}

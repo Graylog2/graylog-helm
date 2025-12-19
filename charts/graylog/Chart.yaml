@@ -1,0 +1,9 @@
+apiVersion: v2
+name: graylog
+description: Official Graylog Helm chart for Kubernetes
+icon: https://github.com/Graylog2/graylog2-server/blob/6.3.0/graylog2-web-interface/public/images/favicon.png
+type: application
+# This is the chart version.
+version: 0.1.0
+# This is the version number of the Graylog application bundled with this chart.
+appVersion: "6.3"

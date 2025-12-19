@@ -1,0 +1,19 @@
+{{- if .Values.provider | default "" | eq "aws" | and (empty .Values.global.storageClass) }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ include "graylog.provider.storageClassName" . }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  # fsType: ext4
+  # encrypted: "true"
+  # iops: "3000"
+  # throughput: "125"  # MiB/s
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+{{- end }}

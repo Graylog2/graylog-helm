@@ -1,0 +1,21 @@
+{{- if not .Values.graylog.config.tls.enabled | and .Values.ingress.enabled .Values.ingress.config.tls.issuer.managed.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "graylog.cert-manager.issuer.name" . }}
+spec:
+  acme:
+    server: {{ .Values.ingress.config.tls.issuer.managed.staging | ternary "-staging" "" | printf "https://acme%s-v02.api.letsencrypt.org/directory" }}
+    privateKeySecretRef:
+      name: {{ include "graylog.fullname" . | printf "%s-acme-pk" }}
+    solvers:
+      - http01:
+          ingress:
+            name: {{ include "graylog.ingress.web.name" . }}
+            {{- with .Values.tolerations }}
+            podTemplate:
+              spec:
+                tolerations:
+                  {{- toYaml . | nindent 18 }}
+            {{- end }}
+{{- end }}

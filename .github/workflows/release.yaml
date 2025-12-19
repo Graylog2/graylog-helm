@@ -29,6 +29,7 @@ jobs:
         uses: helm/chart-releaser-action@v1.7.0
         with:
           charts_dir: .
+          pages_branch: private-pages
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 #  push:

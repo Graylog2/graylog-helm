@@ -1,0 +1,65 @@
+{{- if and .Values.graylog.enabled .Values.ingress.enabled .Values.ingress.web.enabled }}
+{{- $defaultPath := include "graylog.ingress.defaultPath" . | dict "path" }}
+{{- $_ := include "graylog.ingress.defaultPathType" . | set $defaultPath "pathType" }}
+{{- $defaultBackendService := include "graylog.service.name" . | dict "name" }}
+{{- $_ = dict "number" .Values.graylog.service.ports.app | set $defaultBackendService "port" }}
+{{- $_ = dict "service" $defaultBackendService | set $defaultPath "backend" }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "graylog.ingress.web.name" . }}
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+  {{- $clusterissuer := .Values.ingress.config.tls.clusterIssuer.existingName }}
+  {{- if or $clusterissuer .Values.ingress.config.tls.issuer.existingName .Values.ingress.config.tls.issuer.managed.enabled | and .Values.ingress.web.tls }}
+    {{- if $clusterissuer }}
+    cert-manager.io/cluster-issuer: {{ $clusterissuer }}
+    {{- else }}
+    cert-manager.io/issuer: {{ include "graylog.cert-manager.issuer.name" . | coalesce .Values.ingress.config.tls.issuer.existingName }}
+    {{- end }}
+  {{- end }}
+  {{- if eq .Values.ingress.web.className "nginx" | and .Values.ingress.config.defaultBackend.enabled }}
+    nginx.ingress.kubernetes.io/default-backend: {{ include "graylog.fallback.name" . }}
+  {{- end }}
+  {{- with .Values.ingress.web.annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.config.defaultBackend.enabled }}
+  defaultBackend:
+    service:
+      name: {{ include "graylog.fallback.name" . }}
+      port:
+        number: 3000
+  {{- end }}
+  {{- with .Values.ingress.web.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.web.tls }}
+  tls:
+    {{- range .Values.ingress.web.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName | default (include "graylog.fullname" $ | printf "%s-tls") }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.web.hosts }}
+    - http:
+        paths:
+          {{- range .paths | default (list $defaultPath) }}
+          - path: {{ .path | default $defaultPath.path }}
+            pathType: {{ .pathType | default $defaultPath.pathType }}
+            {{- with .backend | default $defaultPath.backend }}
+            backend:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          {{- end }}
+      {{ with .host -}}
+      host: {{ . | quote }}
+      {{- end }}
+    {{- end }}
+{{- end }}
