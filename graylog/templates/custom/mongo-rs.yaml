@@ -16,6 +16,16 @@ spec:
   type: ReplicaSet
   version: {{ .Values.mongodb.version | default "7.0" | quote }}
   security:
+    {{- if .Values.mongodb.security.tls.enabled }}
+    tls:
+      {{- with .Values.mongodb.security.tls }}
+      enabled: {{ .enabled }}
+      certificateKeySecretRef:
+        name: {{ .certificateKeySecretRef }}
+      caCertificateSecretRef:
+        name: {{ .caCertificateSecretRef }}
+      {{- end }}
+    {{- end }}
     authentication:
       modes: ["SCRAM"]
       ignoreUnknownUsers: true
