@@ -1,0 +1,7 @@
+graylog:
+  replicas: 1
+datanode:
+  replicas: 1
+mongodb:
+  replicas: 1
+  arbiters: 0

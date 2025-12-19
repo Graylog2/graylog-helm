@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gelf-input-tester
+  labels:
+    app: gelf-input-tester
+spec:
+  containers:
+    - name: gelf-tester
+      image: curlimages/curl:8.17.0
+      command:
+        - /bin/sh
+        - -c
+        - |
+          trap 'echo "Received shutdown signal, exiting..."; exit 0' SIGINT SIGTERM
+          while true; do
+            NUMBER=$RANDOM
+            echo "Number: $NUMBER"
+            curl -XPOST "${GRAYLOG_INPUT}/gelf" -p0 -d "{\"short_message\":\"Hello there: ${NUMBER}\", \"host\":\"example.org\", \"facility\":\"test\", \"_foo\":\"bar\"}"
+            sleep 10
+          done
+      env:
+        - name: GRAYLOG_INPUT
+          value: "http://graylog-svc:12201"
+  restartPolicy: Always
