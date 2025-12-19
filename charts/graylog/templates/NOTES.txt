@@ -10,10 +10,13 @@ SUMMARY
 
   - {{ include "graylog.replicas" . | int }} replicas of the Graylog application.
   - {{ include "graylog.datanode.replicas" . | int }} replicas of the Graylog Datanode.
-  {{- if .Values.mongodb.subchart.enabled }}
-  - {{ if eq .Values.mongodb.architecture "replicaset" }}{{ .Values.mongodb.replicaCount }} replicas{{ if .Values.mongodb.arbiter.enabled }} (+ 1 arbiter){{ end }} for MongoDB, running as a replicaset in Primary-Secondary{{if .Values.mongodb.arbiter.enabled }}-Arbiter{{ end }} mode.
-    {{- else }}1 replica for MongoDB running in standalone mode.
-    WARNING: running mongoDB in standalone mode is NOT SUPPORTED.{{ end }}
+  {{- if .Values.mongodb.communityResource.enabled }}
+  {{- $mongoReplicaCount := .Values.mongodb.replicas | int }}
+  {{- $mongoArbiterCount := .Values.mongodb.arbiters | int }}
+  - {{ $mongoReplicaCount }} replicas{{ if $mongoArbiterCount }} (+ {{ $mongoArbiterCount }} arbiter){{ end }} for MongoDB, running as a replica set in Primary{{ if gt 1 $mongoReplicaCount }}-Secondary{{ end }}{{ if $mongoArbiterCount }}-Arbiter{{ end }} mode.
+  {{ if mod (add $mongoArbiterCount $mongoReplicaCount | int) 2 | eq 0 }}
+  WARNING: An odd number of workers (replicas + arbiters) is preferred for MongoDB Replica Sets.
+  {{- end }}
   {{- end }}
 
   Use the following command to list all the resources deployed with this release:
@@ -39,7 +42,7 @@ EXTERNAL ACCESS
 
 {{- if .Release.IsInstall }}
 
-  You might need to wait for a bit until:
+  You might need to wait for a few minutes until:
   1. The corresponding LB is provisioned before retrieving the URL (~2 min).
   2. All workloads are ready before opening the URL in your browser (~5 min).
 {{- end }}
@@ -50,14 +53,22 @@ EXTERNAL ACCESS
     helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "ingress.web.hosts[0].paths[0].path=/"
 {{- else }}
 {{ $firstHost := index .Values.ingress.web.hosts 0 }}
+{{ $firstHostPath := include "graylog.ingress.defaultPath" . }}
+{{- with $firstHost.paths }}
+    {{ $firstHostPath = (index . 0).path | default $firstHostPath }}
+{{- end }}
 {{- if empty $firstHost.host | not }}
 · Your instance is exposed through Ingress and can be accessed using the following URL:
 
-    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://{{ $firstHost.host }}{{ (index $firstHost.paths 0).path }}
+    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://{{ $firstHost.host }}{{ $firstHostPath }}
 {{- else }}
-· Your instance is exposed through Ingress but no hostnames have been configured for the Ingress resource. The Graylog UI can still be accessed using the address provided by your cluster’s ingress controller:
+· Your instance is exposed through Ingress but no hostnames have been configured for the Ingress resource. A new host can be configured using the following command:
 
-    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://<your-ingress-controller-address>{{ (index $firstHost.paths 0).path }}
+    helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "ingress.web.hosts[0].host=<your-host>"
+
+  Meanwhile, the Graylog UI can still be accessed using the address provided by your cluster’s ingress controller:
+
+    {{ empty .Values.ingress.web.tls | ternary "http" "https" }}://<your-ingress-controller-address>{{ $firstHostPath }}
 
   The exact address depends on your cluster setup. If you are unsure, please check with your cluster administrator or cloud provider.
 
@@ -69,7 +80,7 @@ EXTERNAL ACCESS
 {{- end }}
 {{- if .Release.IsInstall }}
 
-  You might need to wait for a bit until:
+  You might need to wait for a few minutes until:
   1. The corresponding LB is provisioned for the Ingress Controller Service before retrieving your URL (~2 min).
   2. All workloads are ready before opening the URL in your browser (~5 min).
 {{- end }}
@@ -98,7 +109,7 @@ ADDITIONAL NOTES
 
 · IMPORTANT: You are currently using a randomly generated password: {{ include "graylog.rootPassword" . | quote }}, which will NOT persist across upgrades. Please run the following command to set a persistent password:
 
-    echo "Enter your new password and press return:" && read -s pass && echo "Upgrading helm release {{ squote .Release.Name}}..." && helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
+    echo "Enter your new password and press return:" && read -s pass && echo "Upgrading helm release {{ squote .Release.Name }}..." && helm upgrade {{ .Release.Name }} ./graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 {{- end }}
 
 · Use the following command to print this status page again:

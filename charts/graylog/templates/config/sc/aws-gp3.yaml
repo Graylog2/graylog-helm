@@ -1,14 +1,11 @@
-{{- $provider := .Values.provider | default "" }}
-{{- $isAWS := hasPrefix "aws" $provider }}
-{{- if empty .Values.global.defaultStorageClass | and $isAWS }}
+{{- if .Values.provider | default "" | eq "aws" | and (empty .Values.global.storageClass) }}
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: {{ include "graylog.fullname" . | printf "%s-gp3" }}
+  name: {{ include "graylog.provider.storageClassName" . }}
   annotations:
-    {{- if hasSuffix "-managed-sc" $provider | and $isAWS }}
-    storageclass.kubernetes.io/is-default-class: "true"
-    {{- end }}
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
 provisioner: ebs.csi.aws.com
 parameters:
   type: gp3

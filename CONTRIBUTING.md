@@ -25,6 +25,8 @@ git rebase origin/main
 - [Validating chart](#validating-chart)
 - [Installing Graylog](#installing-chart)
 - [Upgrading chart](#upgrading-chart)
+- [Verifying configurations](#verifying-different-configurations)
+- [Running Helm tests](#running-the-helm-test-suite)
 
 ## Setting up a MicroK8s cluster
 
@@ -102,21 +104,41 @@ multipass exec microk8s-vm -- sudo sysctl -w vm.max_map_count=262144
 ### Validating chart
 
 ```bash
+# lint the chart for syntax
+helm lint graylog
+
 # check template rendering
 helm template graylog . --debug | less
 
 # do a dry run with a small configuration
-helm install graylog . --dry-run --debug --create-namespace -n graylog --set size="xs"
+helm install graylog . --dry-run --debug --create-namespace -n graylog --set graylog.replicas=1 --set datanode.replicas=1 --set mongodb.replicas=1 --set mongodb.arbiters=0
 
 # do a dry run with the default configuration
 helm install graylog . --dry-run --debug --create-namespace -n graylog
 
+# validate against the JSON schema
+helm template graylog . --validate
 ```
 
 ### Installing chart
 
 ```bash
-helm install graylog . -n graylog --create-namespace -n graylog --set size="xs" --set graylog.service.type="LoadBalancer"
+# install the MongoDB Kubernetes Operator (required dependency)
+helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
+  --repo https://mongodb.github.io/helm-charts --version "1.6.1" \
+  --set operator.watchNamespace="*" --reuse-values \
+  --namespace operators --create-namespace
+
+# install the Graylog Helm chart
+helm install graylog . -n graylog --set graylog.service.type="LoadBalancer" \
+  --set graylog.replicas=1 --set datanode.replicas=1 \
+  --namespace graylog --create-namespace
+
+# watch pods come up
+kubectl get pods -n graylog -w
+
+# verify all resources
+helm get all graylog -n graylog
 ```
 
 ### Upgrading chart
@@ -139,6 +161,46 @@ helm install graylog . -n graylog --create-namespace -n graylog --set size="xs" 
 > In addition, if no `-f` (or `--values`), or `--set` (or `--set-string`, or `--set-file`) flags are applied,
 > `--reuse-values` will be used by default. Otherwise, `--reset-values` will be used by default.
 ```bash
-# keeps previously set values and overrides current "version"
+# keeps previously set values and overrides current "appVersion"
 helm upgrade graylog . -n graylog --reuse-values --set version="6.3"
+```
+
+### Verifying different configurations
+
+Verify that:
+- All pods reach Running state (Graylog, DataNode, MongoDB)
+- MongoDB replica set initializes properly
+- Graylog UI is accessible and login works
+- DataNodes register with Graylog (visible in System > Nodes)
+- Inputs can be configured and receive data
+- Persistence survives pod restarts
+
+```sh
+# scaling
+helm upgrade graylog . -n graylog --set graylog.replicas=3 --reuse-values
+
+# using a LoadBalancer service
+helm upgrade graylog . -n graylog --set graylog.service.type=LoadBalancer --reuse-values
+
+# with ingress enabled
+helm upgrade graylog . -n graylog --set ingress.enabled=true --set ingress.web.enabled=true --reuse-values
+```
+
+### Running the Helm test suite
+
+This chart includes a test suite that can be run on a given Helm release, with the following tests:
+
+| File                                | Test Name                          | Purpose                                                       |
+|-------------------------------------|------------------------------------|---------------------------------------------------------------|
+| `test-graylog-api-health.yaml`      | graylog-test-api-health            | Basic smoke test - checks /api/system/lbstatus returns 200    |
+| `test-graylog-cluster-status.yaml`  | graylog-test-cluster-status        | Validates authentication and queries cluster nodes API        |
+| `test-datanode-registration.yaml`   | graylog-test-datanode-registration | Verifies expected number of DataNodes registered with Graylog |
+| `test-mongodb-connectivity.yaml`    | graylog-test-mongodb               | Tests MongoDB replica set connectivity and health             |
+
+```sh
+# install the chart (if you haven't already)
+helm upgrade -i graylog . -n graylog --create-namespace --reset-values
+
+# run the test suite
+helm test graylog -n graylog --logs
 ```

@@ -65,60 +65,28 @@ Service account name
 {{- end }}
 
 {{/*
-Size presets
-usage: (list <size preset key> <size field to index> . | list "graylog" | include "_presets.size")
+MongoDB service account name
 */}}
-{{- define "graylog._presets.size" }}
-{{- $indices := dict "replicas" 0 "cpu" 1 "memory" 2 -}}
-{{- $defaults := dict }}
-{{- $_ := list 2 1 1 | set $defaults "graylog" }}
-{{- $_  = list 3 0.5 3.5 | set $defaults "datanode" }}
-{{- $dictName  := index . 0 }}
-{{- $args := index . 1 | initial }}
-{{- $ctx := index . 1 | last }}
-{{- $sizeKey   := index $args 0 | default "default" }}
-{{- $fieldToIndex := index $args 1 | required "please request a valid size field: replicas, cpu, memory" }}
-{{- if hasKey $defaults $dictName | not }}
-  {{- fail "presets are only available for 'graylog' and 'datanode'" }}
+{{- define "graylog.mongodb.serviceAccountName" -}}
+{{ $defaultName := "default" }}
+{{- if .Values.mongodb.serviceAccount.create }}
+{{- $defaultName = include "graylog.fullname" . | printf "%s-mongo-sa" }}
 {{- end }}
-{{- $default := index $defaults $dictName }}
-{{- $presets := $ctx.Files.Get "files/presets.yaml" | fromYaml | default dict }}
-{{- $values := dig "size" $sizeKey $dictName $default $presets }}
-{{- index $indices $fieldToIndex | index $values }}
-{{- end }}
-
-{{/*
-Graylog size presets
-Returns {replicas|cpu|memory} values for a given preset
-usage: (list $key <field> . | include "graylog.presets.size")
-  e.g. (list "small" "replicas" . | include "graylog.presets.size")
-*/}}
-{{- define "graylog.presets.size" }}
-{{- list "graylog" . | include "graylog._presets.size" }}
-{{- end }}
-
-{{/*
-Datanode size presets
-Returns {replicas|cpu|memory} values for a given preset
-usage: (list $key <field> . | include "datanode.presets.size")
-  e.g. (list "small" "replicas" . | include "graylog.datanode.presets.size")
-*/}}
-{{- define "graylog.datanode.presets.size" }}
-{{- list "datanode" . | include "graylog._presets.size" }}
+{{- .Values.mongodb.serviceAccount.nameOverride | default $defaultName }}
 {{- end }}
 
 {{/*
 Graylog replicas
 */}}
 {{- define "graylog.replicas" }}
-{{- .Values.graylog.replicas | default (list .Values.size "replicas" . | include "graylog.presets.size") | default 2 }}
+{{- .Values.graylog.replicas | default 2 | int }}
 {{- end }}
 
 {{/*
 Datanode replicas
 */}}
 {{- define "graylog.datanode.replicas" }}
-{{- .Values.datanode.replicas | default (list .Values.size "replicas" . | include "graylog.datanode.presets.size") | default 3 }}
+{{- .Values.datanode.replicas | default 3 | int }}
 {{- end }}
 
 {{/*
@@ -179,7 +147,7 @@ Graylog root password
 Graylog secret pepper
 */}}
 {{- define "graylog.secretPepper" }}
-{{- $pepper := .Values.graylog.config.secretPepper | default (randAlphaNum 96) }}
+{{- $pepper := .Values.graylog.config.customSecretPepper | default (randAlphaNum 96) }}
 {{- if len $pepper | ge 64 }}
 {{- fail "Use at least 64 characters when setting a secret to pepper the stored user data." }}
 {{- else }}
@@ -209,16 +177,38 @@ Graylog Datanode secret name
 Graylog backup-secret name
 */}}
 {{- define "graylog.backupSecretName" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-backup-secret" }}
-{{- .Values.mongodb.passwordUpdateJob.previousPasswords.existingSecret | default $defaultName }}
+{{- include "graylog.fullname" . | printf "%s-backup-secret" }}
 {{- end }}
 
 {{/*
-MongoDB secret name
+MongoDB Community Resource name
 */}}
-{{- define "graylog.mongodb.secretName" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-mongo-secret" }}
-{{- .Values.mongodb.auth.existingSecret | default $defaultName }}
+{{- define "graylog.mongodb.crName" -}}
+{{- include "graylog.fullname" . | printf "%s-mongo-rs" }}
+{{- end }}
+
+{{/*
+MongoDB Community Resource main username
+*/}}
+{{- define "graylog.mongodb.crUsername" -}}
+{{- print "graylog" }}
+{{- end }}
+
+{{/*
+MongoDB Community Resource main database
+*/}}
+{{- define "graylog.mongodb.crDatabase" -}}
+{{- print "graylog" }}
+{{- end }}
+
+{{/*
+MongoDB Community Resource Secret name
+*/}}
+{{- define "graylog.mongodb.crSecretName" -}}
+{{- $crName := include "graylog.mongodb.crName" . }}
+{{- $userName := include "graylog.mongodb.crUsername" . }}
+{{- $dbName := include "graylog.mongodb.crDatabase" . }}
+{{- printf "%s-%s-%s" $crName $userName $dbName }}
 {{- end }}
 
 {{/*
@@ -281,6 +271,44 @@ Datanode configmap name
 */}}
 {{- define "graylog.datanode.configmap.name" -}}
 {{- include "graylog.fullname" . | printf "%s-datanode-config" }}
+{{- end }}
+
+{{/*
+Provider-defined Storage Class name
+*/}}
+{{- define "graylog.provider.storageClassName" }}
+{{- $names := dict }}
+{{- $_ := include "graylog.fullname" . | printf "%s-gp3" | set $names "aws" -}}
+{{/* add more entries here */}}
+{{- .Values.provider | default "" | get $names }}
+{{- end }}
+
+{{/*
+Graylog Storage Class name
+*/}}
+{{- define "graylog.storageClassName" }}
+{{- include "graylog.provider.storageClassName" . | coalesce .Values.graylog.persistence.storageClass .Values.global.storageClass | default "" }}
+{{- end }}
+
+{{/*
+Datanode data Storage Class name
+*/}}
+{{- define "graylog.datanode.data.storageClassName" }}
+{{- include "graylog.provider.storageClassName" . | coalesce .Values.datanode.persistence.data.storageClass .Values.global.storageClass | default "" }}
+{{- end }}
+
+{{/*
+Datanode native libs Storage Class name
+*/}}
+{{- define "graylog.datanode.nativeLibs.storageClassName" }}
+{{- include "graylog.provider.storageClassName" . | coalesce .Values.datanode.persistence.nativeLibs.storageClass .Values.global.storageClass | default "" }}
+{{- end }}
+
+{{/*
+MongoDB Storage Class name
+*/}}
+{{- define "graylog.mongodb.storageClassName" }}
+{{- include "graylog.provider.storageClassName" . | coalesce .Values.mongodb.persistence.storageClass .Values.global.storageClass | default "" }}
 {{- end }}
 
 {{/*
@@ -503,4 +531,18 @@ Fallback service/deployment name
 */}}
 {{- define "graylog.fallback.name" }}
 {{- include "graylog.fullname" . | printf "%s-waiting-room" }}
+{{- end }}
+
+{{/*
+Default ingress path
+*/}}
+{{- define "graylog.ingress.defaultPath" }}
+{{- print "/" }}
+{{- end }}
+
+{{/*
+Default ingress pathType
+*/}}
+{{- define "graylog.ingress.defaultPathType" }}
+{{- print "ImplementationSpecific" }}
 {{- end }}

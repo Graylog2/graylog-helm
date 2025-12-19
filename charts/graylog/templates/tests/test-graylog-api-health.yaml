@@ -1,0 +1,33 @@
+{{- if .Values.graylog.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "graylog.fullname" . }}-test-api-health
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: test-api-health
+      image: curlimages/curl:8.17.0
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Testing Graylog API health..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 30 \
+            --retry 3 \
+            --retry-delay 5 \
+            {{ .Values.graylog.config.tls.enabled | ternary "https" "http" }}://{{ include "graylog.service.name" . }}:{{ include "graylog.service.port.app" . }}/api/system/lbstatus)
+          if [ "$RESPONSE" = "200" ]; then
+            echo "Graylog API is healthy (HTTP $RESPONSE)"
+            exit 0
+          else
+            echo "Graylog API health check failed (HTTP $RESPONSE)"
+            exit 1
+          fi
+  restartPolicy: Never
+{{- end }}

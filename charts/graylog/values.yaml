@@ -1,8 +1,5 @@
 # Default values for Graylog.
 
-# Preset cluster size (optional)
-size: ""
-
 # Kubernetes provider (optional)
 provider: ""
 
@@ -18,8 +15,8 @@ fullnameOverride: ""
 # Overrides values for Graylog, Datanode, and MongoDB
 global:
   imagePullSecrets: []
-  defaultStorageClass: ""
   existingSecretName: ""
+  storageClass: ""
 
 # Graylog application
 graylog:
@@ -49,6 +46,7 @@ graylog:
   config:
     rootUsername: "admin"
     rootPassword: ""
+    customSecretPepper: ""
     timezone: "UTC"
     selfSignedStartup: "true"
     serverJavaOpts: "-Xms1g -Xmx1g"
@@ -140,9 +138,9 @@ graylog:
     imagePullPolicy: IfNotPresent
     imagePullSecrets: []
   updateStrategy:
-    type:
+    type: RollingUpdate
     rollingUpdate:
-      maxUnavailable:
+      maxUnavailable: 1
       partition:
   resources:
     limits:
@@ -181,7 +179,7 @@ graylog:
     minAvailable: 1
   podAnnotations: {}
   nodeSelector: {}
-  tolerations: {}
+  tolerations: []
   affinity: {}
   extraEnv: []
 
@@ -213,9 +211,9 @@ datanode:
     imagePullPolicy: IfNotPresent
     imagePullSecrets: []
   updateStrategy:
-    type:
+    type: RollingUpdate
     rollingUpdate:
-      maxUnavailable:
+      maxUnavailable: 1
       partition:
   resources:
     limits:
@@ -266,7 +264,7 @@ datanode:
     minAvailable: 2
   podAnnotations: {}
   nodeSelector: {}
-  tolerations: {}
+  tolerations: []
   affinity: {}
   extraEnv: []
 
@@ -276,7 +274,13 @@ serviceAccount:
   automount: true
   annotations: {}
   nameOverride: ""
-
+  role:
+    create: false
+    rules: []
+#      - apiGroups: [ "" ]
+#        resources: [ "pods" ]
+#        resourceNames: []
+#        verbs: [ "get" ]
 # Ingress configuration
 # more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -289,7 +293,7 @@ ingress:
         existingName:
       issuer:
         existingName:
-        autoissue:
+        managed:
           enabled: false
           staging: true
   web:
@@ -297,8 +301,7 @@ ingress:
     className: ""
     annotations: {}
     hosts:
-      - host: chart-example.local
-        paths:
+      - paths:
           - path: /
             pathType: ImplementationSpecific
     tls: []
@@ -316,24 +319,32 @@ ingress:
             pathType: ImplementationSpecific
     tls: []
 
-# MongoDB Bitnami Chart configuration
-# more information can be found here: https://artifacthub.io/packages/helm/bitnami/mongodb
+# MongoDB Community Resource configuration
+# Requires MongoDB Kubernetes Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
 mongodb:
-  subchart:
+  communityResource:
     enabled: true
-  image:
-    tag: "7.0"
-  architecture: "replicaset"
-  arbiter:
-    enabled: true
-  replicaCount: 2
+  version: "7.0.25"
+  replicas: 2
+  arbiters: 1
   persistence:
     storageClass: ""
-  auth:
-    username: "graylog"
-    database: "graylog"
-    existingSecret: "graylog-mongodb-secret"
-  passwordUpdateJob:
-    enabled: true
-    previousPasswords:
-      existingSecret: "graylog-backup-secret"
+    size:
+      data: "10G"
+      logs: "2G"
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+    nameOverride: ""
+    role:
+      create: true
+      rules:
+        - apiGroups: [ "" ]
+          resources: [ "secrets" ]
+          resourceNames: [ ]
+          verbs: [ "get" ]
+        - apiGroups: [ "" ]
+          resources: [ "pods" ]
+          resourceNames: [ ]
+          verbs: [ "get", "patch", "delete" ]
