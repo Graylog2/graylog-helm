@@ -169,6 +169,10 @@ kubectl get pods -n graylog -w
 
 #### 2.3 Verify All Resources
 
+Verify that:
+- All pods reach Running state (Graylog, DataNode, MongoDB)
+- MongoDB replica set initializes properly
+
 ```sh
 # List all deployed resources
 helm get all graylog -n graylog
@@ -193,12 +197,12 @@ helm test graylog -n graylog
 
 #### 3.2 Test Suite Details
 
-| Test                                 | What It Validates                                             |
-|--------------------------------------|---------------------------------------------------------------|
-| `graylog-test-api-health`            | Graylog API responds with HTTP 200 on `/api/system/lbstatus`  |
-| `graylog-test-cluster-status`        | Authentication works, cluster nodes API accessible            |
-| `graylog-test-datanode-registration` | Expected number of DataNodes registered                       |
-| `graylog-test-mongodb`               | MongoDB replica set is healthy with a primary                 |
+| Test                                 | What It Validates                                            |
+|--------------------------------------|--------------------------------------------------------------|
+| `graylog-test-api-health`            | Graylog API responds with HTTP 200 on `/api/system/lbstatus` |
+| `graylog-test-cluster-status`        | Authentication works, cluster nodes API accessible           |
+| `graylog-test-datanode-registration` | Expected number of DataNodes registered with Graylog         |
+| `graylog-test-mongodb`               | MongoDB replica set is healthy with a primary                |
 
 #### 3.3 Run Individual Tests
 
@@ -217,6 +221,12 @@ kubectl logs -n graylog graylog-test-api-health
 ### Phase 4: Functional Verification
 
 These manual checks validate end-to-end functionality.
+
+Verify that:
+- Graylog UI is accessible and login works
+- DataNodes register with Graylog (visible in System > Nodes)
+- Inputs can be configured and receive data
+- Persistence survives pod restarts
 
 #### 4.1 Access the Web UI
 
