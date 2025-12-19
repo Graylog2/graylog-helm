@@ -12,7 +12,7 @@ metadata:
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
   {{- $clusterissuer := .Values.ingress.config.tls.clusterIssuer.existingName }}
-  {{- if or $clusterissuer .Values.ingress.config.tls.issuer.existingName .Values.ingress.config.tls.issuer.autoissue.enabled | and .Values.ingress.web.tls }}
+  {{- if or $clusterissuer .Values.ingress.config.tls.issuer.existingName .Values.ingress.config.tls.issuer.managed.enabled | and .Values.ingress.web.tls }}
     {{- if $clusterissuer }}
     cert-manager.io/cluster-issuer: {{ $clusterissuer }}
     {{- else }}

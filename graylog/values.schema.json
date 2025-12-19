@@ -614,7 +614,7 @@
                   "type": "object",
                   "properties": {
                     "existingName": { "type": ["string", "null"] },
-                    "autoissue": {
+                    "managed": {
                       "type": "object",
                       "properties": {
                         "enabled": { "type": "boolean" },
@@ -723,17 +723,6 @@
               "properties": {
                 "create": { "type": "boolean" },
                 "rules": { "type": "array" }
-              }
-            }
-          }
-        },
-        "security": {
-          "type": "object",
-          "properties": {
-            "tls": {
-              "type": "object",
-              "properties": {
-                "enabled": { "type": "boolean" }
               }
             }
           }

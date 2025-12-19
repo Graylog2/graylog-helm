@@ -293,7 +293,7 @@ ingress:
         existingName:
       issuer:
         existingName:
-        autoissue:
+        managed:
           enabled: false
           staging: true
   web:
@@ -348,6 +348,3 @@ mongodb:
           resources: [ "pods" ]
           resourceNames: [ ]
           verbs: [ "get", "patch", "delete" ]
-  security:
-    tls:
-      enabled: false

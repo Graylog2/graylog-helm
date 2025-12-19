@@ -76,13 +76,6 @@ Then, configure `ingress.tls` and `ingress.config.issuer` with the name of an ex
 and let `cert-manager` do the rest!
 
 <!--
-For convenience, this chart also provides an optional built-in feature to automatically create a Let's Encrypt issuer
-for `cert-manager`. This feature is disabled by default, since issuers are typically managed directly by cluster
-administrators. However, if you don't want to manage the issuer yourself, just set `managed.issuer=true` and
-we'll provision one automatically for you.
--->
-
-<!--
 ### Install
 ```sh
 helm install graylog graylog/graylog -n graylog --create-namespace
@@ -322,6 +315,7 @@ Enable TLS termination at the Ingress entrypoint for your Graylog installation, 
 ```yaml
 # ingress-with-tls.yaml
 ingress:
+  enabled: true
   web:
     enabled: true
     hosts:
@@ -342,10 +336,6 @@ helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yam
 ### Option 2: Auto-issued certificates using cert-manager
 
 > [!NOTE]
-> An Issuer or ClusterIssuer resource is required for cert-manager to issue TLS certificates automatically.
-> Please refer to [cert-manager docs](https://cert-manager.io/docs/) for instructions.
-
-> [!NOTE]
 > TLS certificates issued by cert-manager are to be used in conjunction with Ingress.
 > Please make sure you already have an Ingress Controller running in your cluster before proceeding.
 
@@ -355,6 +345,7 @@ without having to provision a TLS certificate yourself.
 ```yaml
 # ingress-with-tls.yaml
 ingress:
+  enabled: true
   web:
     enabled: true
     hosts:
@@ -371,6 +362,15 @@ ingress:
 ```sh
 helm upgrade graylog ./graylog -n graylog --reuse-values -f ingress-with-tls.yaml --set ingress.config.tls.issuer.existingName='<name of your existing issuer resource>'
 ```
+
+> [!NOTE]
+> An Issuer or ClusterIssuer resource is required for cert-manager to issue TLS certificates automatically.
+> Please refer to [cert-manager docs](https://cert-manager.io/docs/) for instructions.
+
+For convenience, this chart includes an optional built-in feature to automatically create a Let's Encrypt `Issuer` 
+resource for `cert-manager`. Since issuers are typically managed by cluster administrators, this is disabled by default. 
+If you prefer the Graylog chart to handle this specific issuer creation, you may enable it by setting 
+`ingress.config.tls.issuer.managed.enabled=true`.
 
 ### Option 3: Bring Your Own Certificate with Graylog Native TLS
 
@@ -639,10 +639,10 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.plugins[i].checksum`      | Checksum of JAR file.                  | `13550350a8681c84c861aac2e5b440161c2b33a3e4f302ac680ca5b686de48de` |
 
 ### Graylog environment variables
-| Key Path           | Description                                                                                                                                                                                    | Example                                                                                                                                                    |
-|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `graylog.env`      | Simple key/value environment variables                                                                                                                                                         | `graylog.env.FOO=BAR`, `graylog.env.HELLO=123`                                                                                                              |
-| `graylog.extraEnv` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables<br/>(valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:&#10;  - name: MADE_UP_PASSWORD&#10;    valueFrom:&#10;      secretKeyRef:&#10;        name: mysecret&#10;        key: password</code></pre> |
+| Key Path           | Description                                                                                                                                                                                | Example                                                                                                                                                          |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `graylog.env`      | Simple key/value environment variables                                                                                                                                                     | `graylog.env.FOO=BAR`, `graylog.env.HELLO=123`                                                                                                                   |
+| `graylog.extraEnv` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables (valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:&#10;  - name: MADE_UP_PASSWORD&#10;    valueFrom:&#10;      secretKeyRef:&#10;        name: mysecret&#10;        key: password</code></pre> |
 
 ## Datanode
 | Key Path                                               | Description                                     | Default           |
@@ -729,14 +729,14 @@ These values affect Graylog, DataNode, and MongoDB.
 
 ## Ingress
 
-| Key Path                                      | Description                                        | Default |
-|-----------------------------------------------|----------------------------------------------------|---------|
-| `ingress.enabled`                             | Enable ingress resources.                          | `false` |
-| `ingress.config.defaultBackend.enabled`       | Enable default backend for ingress.                | `true`  |
+| Key Path                                        | Description                                      | Default |
+|-------------------------------------------------|--------------------------------------------------|---------|
+| `ingress.enabled`                               | Enable ingress resources.                        | `false` |
+| `ingress.config.defaultBackend.enabled`         | Enable default backend for ingress.              | `true`  |
 | `ingress.config.tls.clusterIssuer.existingName` | Name of existing ClusterIssuer for TLS.          | `""`    |
-| `ingress.config.tls.issuer.existingName`      | Name of existing Issuer for TLS.                   | `""`    |
-| `ingress.config.tls.issuer.autoissue.enabled` | Enable auto-issuing of TLS certificates.           | `false` |
-| `ingress.config.tls.issuer.autoissue.staging` | Use staging environment for auto-issued certs.     | `true`  |
+| `ingress.config.tls.issuer.existingName`        | Name of existing Issuer for TLS.                 | `""`    |
+| `ingress.config.tls.issuer.managed.enabled`     | Enable auto-issuing of TLS certificates.         | `false` |
+| `ingress.config.tls.issuer.managed.staging`     | Use staging environment for auto-issued certs.   | `true`  |
 
 ### Web Ingress
 | Key Path                                 | Description                        | Default                  |
@@ -773,7 +773,6 @@ Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/ma
 | `mongodb.persistence.storageClass`    | StorageClass to use for persistent volumes.                 | `""`                                                                                                                                                                                                                   |
 | `mongodb.persistence.size.data`       | Persistent volume size for data storage.                    | `"10G"`                                                                                                                                                                                                                |
 | `mongodb.persistence.size.logs`       | Persistent volume size for MongoDB logs.                    | `"2G"`                                                                                                                                                                                                                 |
-| `mongodb.security.tls.enabled`        | Enables TLS/SSL for MongoDB communication.                  | `false`                                                                                                                                                                                                                |
 | `mongodb.serviceAccount.create`       | Create a new service account for MongoDB workloads.         | `true`                                                                                                                                                                                                                 |
 | `mongodb.serviceAccount.automount`    | Automount service account token.                            | `true`                                                                                                                                                                                                                 |
 | `mongodb.serviceAccount.annotations`  | Annotations for service account.                            | `{}`                                                                                                                                                                                                                   |
