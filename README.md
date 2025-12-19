@@ -1,11 +1,7 @@
 # Graylog Helm
 ![Tests](https://github.com/graylog2/graylog-helm/actions/workflows/lint-and-test.yaml/badge.svg)
 
-Official helm chart for Graylog.
-
-## Not For External Use
-This chart is still in development. We should not distribute this chart or any part of this repository externally until we've cleaned up the git history and received approval for external distribution.
-This chart is still under development and does not have locked in api contracts yet.
+Official Helm chart for Graylog.
 
 ## Table of Contents
 * [Requirements](#requirements)
