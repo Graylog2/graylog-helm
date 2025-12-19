@@ -68,7 +68,7 @@ You can always [bring your own certificates](#bring-your-own-certificate-ingress
 but using `cert-manager` can simplify TLS setup and certificate renewal considerably.
 
 Make sure you have [Ingress Controller](#ingress-controller) installed, and that `ingress.enabled` is set to `true`.
-Then, configure `ingress.tls` and `ingress.config.issuer` with the name of an existing Issuer resource,
+Then, configure `ingress.web.tls` and `ingress.config.issuer` with the name of an existing Issuer resource,
 and let `cert-manager` do the rest!
 
 <!--

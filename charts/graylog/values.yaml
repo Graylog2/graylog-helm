@@ -301,7 +301,8 @@ ingress:
     className: ""
     annotations: {}
     hosts:
-      - paths:
+      - host: ""
+        paths:
           - path: /
             pathType: ImplementationSpecific
     tls: []
