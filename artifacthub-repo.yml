@@ -1,0 +1,9 @@
+# Artifact Hub repository metadata file
+repositoryID: ca2e7800-7d73-4619-9667-ad0773ab62ac
+owners:
+  - name: Ramón Márquez
+    email: ramon.marquez@graylog.com
+  - name: William Trelawny
+    email: william.trelawny@graylog.com
+  - name: Alix Fullerton
+    email: alix.fullerton@graylog.com
