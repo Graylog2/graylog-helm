@@ -2,17 +2,6 @@ apiVersion: v1
 entries:
   graylog:
   - apiVersion: v2
-    appVersion: "7.0"
-    created: "2025-12-19T17:00:08.1620184Z"
-    description: Official Graylog Helm chart for Kubernetes
-    digest: d82bc29af140f76e0cb0e2e22e34f9ff98928d5604470ba67f4f6f1e2d859747
-    icon: https://github.com/Graylog2/graylog2-server/blob/6.3.0/graylog2-web-interface/public/images/favicon.png
-    name: graylog
-    type: application
-    urls:
-    - https://github.com/Graylog2/graylog-helm/releases/download/graylog-1.0.0/graylog-1.0.0.tgz
-    version: 1.0.0
-  - apiVersion: v2
     appVersion: "6.3"
     created: "2025-09-22T19:07:22.658816707Z"
     dependencies:
