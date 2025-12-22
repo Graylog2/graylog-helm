@@ -1,7 +1,7 @@
 apiVersion: v2
 name: graylog
 description: Official Graylog Helm chart for Kubernetes
-icon: https://github.com/Graylog2/graylog2-server/blob/6.3.0/graylog2-web-interface/public/images/favicon.png
+icon: https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.0.0/graylog2-web-interface/public/images/favicon.png
 type: application
 home: https://graylog.org
 sources:
