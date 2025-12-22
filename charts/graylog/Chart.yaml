@@ -18,18 +18,17 @@ keywords:
   - Alerts
 annotations:
   artifacthub.io/category: security
-  artifacthub.io/license: Apache-2.0
   artifacthub.io/operator: "false"
   artifacthub.io/prerelease: "false"
   artifacthub.io/images: |
-    - name: graylog
-      image: graylog/graylog:7.0
+    - name: "graylog"
+      image: "graylog/graylog:7.0"
       whitelisted: true
       platforms:
         - linux/amd64
         - linux/arm64
-    - name: graylog-datanode
-      image: graylog/graylog-datanode:7.0
+    - name: "graylog-datanode"
+      image: "graylog/graylog-datanode:7.0"
       whitelisted: true
       platforms:
         - linux/amd64
@@ -37,24 +36,29 @@ annotations:
   # Changelog
   artifacthub.io/changes: |
     - kind: added
-      description: add LICENSE
+      description: "add LICENSE"
       links:
-        - name: Create LICENSE
-          url: https://github.com/Graylog2/graylog-helm/pull/59
+        - name: "Create LICENSE"
+          url: "https://github.com/Graylog2/graylog-helm/pull/59"
     - kind: added
-      description: Support for official MongoDB Kubernetes Operator
+      description: "Support for official MongoDB Kubernetes Operator"
       links:
-        - name: Replace bitnami/mongodb dependency
-          url: https://github.com/Graylog2/graylog-helm/issues/48
-        - name: Use MongoDB Kubernetes Operator
-          url: https://github.com/Graylog2/graylog-helm/pull/55
+        - name: "Replace bitnami/mongodb dependency"
+          url: "https://github.com/Graylog2/graylog-helm/issues/48"
+        - name: "Use MongoDB Kubernetes Operator"
+          url: "https://github.com/Graylog2/graylog-helm/pull/55"
     - kind: changed
-      description: Bump appVersion to "7.0"
+      description: "Bump appVersion to '7.0'"
     - kind: fixed
-      description: Forwarder ingress TLS condition
+      description: "Forwarder ingress TLS condition"
       links:
-        - name: fix: forwarder TLS condition
-          url: https://github.com/Graylog2/graylog-helm/pull/60
+        - name: "fix: forwarder TLS condition"
+          url: "https://github.com/Graylog2/graylog-helm/pull/60"
+    - kind: removed
+      description: "Remove global size preset value"
+      links:
+        - name: "Remove global size preset"
+          url: "https://github.com/Graylog2/graylog-helm/pull/56"
   artifacthub.io/containsSecurityUpdates: "true"
 # This is the chart version.
 version: 1.0.0
