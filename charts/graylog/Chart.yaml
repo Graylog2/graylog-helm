@@ -3,6 +3,59 @@ name: graylog
 description: Official Graylog Helm chart for Kubernetes
 icon: https://github.com/Graylog2/graylog2-server/blob/6.3.0/graylog2-web-interface/public/images/favicon.png
 type: application
+home: https://graylog.org
+sources:
+  - https://github.com/graylog2
+keywords:
+  - SIEM
+  - API
+  - Triage
+  - Security
+  - Observability
+  - Logs
+  - Monitoring
+  - Troubleshooting
+  - Alerts
+annotations:
+  artifacthub.io/category: security
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "false"
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/images: |
+    - name: graylog
+      image: graylog/graylog:7.0
+      whitelisted: true
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    - name: graylog-datanode
+      image: graylog/graylog-datanode:7.0
+      whitelisted: true
+      platforms:
+        - linux/amd64
+        - linux/arm64
+  # Changelog
+  artifacthub.io/changes: |
+    - kind: added
+      description: add LICENSE
+      links:
+        - name: Create LICENSE
+          url: https://github.com/Graylog2/graylog-helm/pull/59
+    - kind: added
+      description: Support for official MongoDB Kubernetes Operator
+      links:
+        - name: Replace bitnami/mongodb dependency
+          url: https://github.com/Graylog2/graylog-helm/issues/48
+        - name: Use MongoDB Kubernetes Operator
+          url: https://github.com/Graylog2/graylog-helm/pull/55
+    - kind: changed
+      description: Bump appVersion to "7.0"
+    - kind: fixed
+      description: Forwarder ingress TLS condition
+      links:
+        - name: fix: forwarder TLS condition
+          url: https://github.com/Graylog2/graylog-helm/pull/60
+  artifacthub.io/containsSecurityUpdates: "true"
 # This is the chart version.
 version: 1.0.0
 # This is the version number of the Graylog application bundled with this chart.

@@ -1,5 +1,8 @@
 # Graylog Helm
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/graylog2)](https://artifacthub.io/packages/search?repo=graylog2)
+[![License](https://img.shields.io/github/license/graylog2/graylog-helm)](https://github.com/graylog2/graylog-helm/blob/master/LICENSE)
 ![Tests](https://github.com/graylog2/graylog-helm/actions/workflows/lint-and-test.yaml/badge.svg)
+[![Contributing](https://img.shields.io/badge/contributions-welcome-green.svg)](https://github.com/graylog2/graylog-helm/blob/master/CONTRIBUTING.md)
 
 Official Helm chart for Graylog.
 
