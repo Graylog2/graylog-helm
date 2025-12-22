@@ -456,6 +456,7 @@ stern statefulset/graylog-datanode -n graylog
 ---
 
 # Graylog Helm Chart Values Reference
+
 | Key Path           | Description                                                      | Default |
 |--------------------|------------------------------------------------------------------|---------|
 | `provider`         | Kubernetes provider (optional).                                  | `""`    |
@@ -474,6 +475,7 @@ These values affect Graylog, DataNode, and MongoDB.
 
 
 ## Graylog application
+
 | Key Path                                                              | Description                                                 | Default                         |
 |-----------------------------------------------------------------------|-------------------------------------------------------------|---------------------------------|
 | `graylog.enabled`                                                     | Enable the Graylog server.                                  | `true`                          |
@@ -602,6 +604,7 @@ These values affect Graylog, DataNode, and MongoDB.
 
 
 ### Graylog inputs
+
 | Key Path                       | Description                       | Example            |
 |--------------------------------|-----------------------------------|--------------------|
 | `graylog.inputs[i].name`       | Name to identify this input.      | `input-gelf`       |
@@ -610,6 +613,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.inputs[i].protocol`   | Protocol used for this input.     | `TCP`              |
 
 ### Graylog plugins
+
 | Key Path                           | Description                            | Example                                                            |
 |------------------------------------|----------------------------------------|--------------------------------------------------------------------|
 | `graylog.plugins[i].name`          | Name to identify this plugin.          | `graylog-plugin-slack`                                             |
@@ -619,12 +623,14 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.plugins[i].checksum`      | Checksum of JAR file.                  | `13550350a8681c84c861aac2e5b440161c2b33a3e4f302ac680ca5b686de48de` |
 
 ### Graylog environment variables
+
 | Key Path           | Description                                                                                                                                                                                | Example                                                                                                                                                          |
 |--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `graylog.env`      | Simple key/value environment variables                                                                                                                                                     | `graylog.env.FOO=BAR`, `graylog.env.HELLO=123`                                                                                                                   |
 | `graylog.extraEnv` | [EnvVar spec](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#environment-variables)-compliant environment variables (valueFrom, configMaps, secrets, etc.) | <pre><code>extraEnv:&#10;  - name: MADE_UP_PASSWORD&#10;    valueFrom:&#10;      secretKeyRef:&#10;        name: mysecret&#10;        key: password</code></pre> |
 
-## Datanode
+## DataNode
+
 | Key Path                                               | Description                                     | Default           |
 |--------------------------------------------------------|-------------------------------------------------|-------------------|
 | `datanode.enabled`                                     | Enable Graylog datanode.                        | `true`            |
@@ -697,6 +703,7 @@ These values affect Graylog, DataNode, and MongoDB.
 
 
 ## Service Account
+
 | Key Path                      | Description                                             | Default |
 |-------------------------------|---------------------------------------------------------|---------|
 | `serviceAccount.create`       | Create a new service account.                           | `true`  |
@@ -719,6 +726,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `ingress.config.tls.issuer.managed.staging`     | Use staging environment for auto-issued certs.   | `true`  |
 
 ### Web Ingress
+
 | Key Path                                 | Description                        | Default                  |
 |------------------------------------------|------------------------------------|--------------------------|
 | `ingress.web.enabled`                    | Enable ingress for Graylog Web.    | `false`                  |
@@ -730,6 +738,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `ingress.web.tls`                        | TLS configuration.                 | `[]`                     |
 
 ### Forwarder Ingress
+
 | Key Path                                       | Description                           | Default                  |
 |------------------------------------------------|---------------------------------------|--------------------------|
 | `ingress.forwarder.enabled`                    | Enable ingress for Graylog Forwarder. | `false`                  |
