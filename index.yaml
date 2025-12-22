@@ -1,6 +1,75 @@
 apiVersion: v1
 entries:
   graylog:
+  - annotations:
+      artifacthub.io/category: security
+      artifacthub.io/changes: |
+        - kind: added
+          description: "add LICENSE"
+          links:
+            - name: "Create LICENSE"
+              url: "https://github.com/Graylog2/graylog-helm/pull/59"
+        - kind: added
+          description: "Support for official MongoDB Kubernetes Operator"
+          links:
+            - name: "Replace bitnami/mongodb dependency"
+              url: "https://github.com/Graylog2/graylog-helm/issues/48"
+            - name: "Use MongoDB Kubernetes Operator"
+              url: "https://github.com/Graylog2/graylog-helm/pull/55"
+        - kind: changed
+          description: "Bump appVersion to '7.0'"
+        - kind: fixed
+          description: "Forwarder ingress TLS condition"
+          links:
+            - name: "fix: forwarder TLS condition"
+              url: "https://github.com/Graylog2/graylog-helm/pull/60"
+        - kind: removed
+          description: "Remove global size preset value"
+          links:
+            - name: "Remove global size preset"
+              url: "https://github.com/Graylog2/graylog-helm/pull/56"
+      artifacthub.io/containsSecurityUpdates: "true"
+      artifacthub.io/images: |
+        - name: "graylog"
+          image: "graylog/graylog:7.0"
+          whitelisted: true
+          platforms:
+            - linux/amd64
+            - linux/arm64
+        - name: "graylog-datanode"
+          image: "graylog/graylog-datanode:7.0"
+          whitelisted: true
+          platforms:
+            - linux/amd64
+            - linux/arm64
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: "7.0"
+    created: "2025-12-22T11:04:13.070182602Z"
+    description: Official Graylog Helm chart for Kubernetes
+    digest: 06e18864ca7a81809ad23cd081a73b5306ea9f80f78ea3cc71e2abeb64dcf1a4
+    home: https://graylog.org
+    icon: https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.0.0/graylog2-web-interface/public/images/favicon.png
+    keywords:
+    - SIEM
+    - API
+    - Triage
+    - Security
+    - Observability
+    - Search
+    - Logs
+    - Monitoring
+    - Troubleshooting
+    - Events
+    - Alerts
+    name: graylog
+    sources:
+    - https://github.com/graylog2
+    type: application
+    urls:
+    - https://github.com/Graylog2/graylog-helm/releases/download/graylog-1.0.0/graylog-1.0.0.tgz
+    version: 1.0.0
   - apiVersion: v2
     appVersion: "6.3"
     created: "2025-09-22T19:07:22.658816707Z"
@@ -16,4 +85,4 @@ entries:
     urls:
     - https://github.com/Graylog2/graylog-helm/releases/download/graylog-0.1.0/graylog-0.1.0.tgz
     version: 0.1.0
-generated: "2025-12-22T10:45:20.43077727Z"
+generated: "2025-12-22T11:04:13.070194374Z"
