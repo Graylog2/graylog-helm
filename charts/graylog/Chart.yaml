@@ -12,9 +12,11 @@ keywords:
   - Triage
   - Security
   - Observability
+  - Search
   - Logs
   - Monitoring
   - Troubleshooting
+  - Events
   - Alerts
 annotations:
   artifacthub.io/category: security
