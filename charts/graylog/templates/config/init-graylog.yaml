@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: init-script-cm
+  name: {{ include "graylog.cm.init.name" . }}
 data:
   init-script.sh: |
     #!/bin/sh

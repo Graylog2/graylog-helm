@@ -3,7 +3,7 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: graylog-datanode
+  name: {{ include "graylog.fullname" . | printf "%s-pdb-datanode" }}
   namespace: {{ .Release.Namespace }}
   labels:
     app: graylog-datanode
