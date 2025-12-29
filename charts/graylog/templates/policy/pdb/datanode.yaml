@@ -1,5 +1,5 @@
 {{- if .Values.datanode.podDisruptionBudget.enabled }}
-{{- if include "graylog.datanode.replicas" . | int | lt 1 }}
+{{- if ge (include "graylog.datanode.replicas" . | int) 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -13,5 +13,6 @@ spec:
   selector:
     matchLabels:
       app: graylog-datanode
+      {{- include "graylog.selectorLabels" . | nindent 6 }}
 {{- end }}
 {{- end }}
