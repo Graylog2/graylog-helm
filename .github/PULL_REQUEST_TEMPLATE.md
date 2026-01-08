@@ -19,33 +19,13 @@ This fixes #??
 ## Testing Checklist
 
 ### Static Validation
-- [ ] Linter check passes
-  
-  ```sh
-  helm lint ./charts/graylog
-  ```
-- [ ] Helm renders local template sucessfully
-  
-  ```sh
-  helm template graylog ./charts/graylog --validate
-  ```
+- [ ] Linter check passes: `helm lint ./charts/graylog`
+- [ ] Helm renders local template sucessfully: `helm template graylog ./charts/graylog --validate`
 
 ### Installation
-- [ ] Fresh installation completes successfully
-
-  ```sh
-  helm install graylog ./charts/graylog -n graylog --create-namespace
-  ```
-- [ ] All pods reach Running state
-
-  ```sh
-  kubectl rollout status statefulset/graylog -n graylog
-  ```
-- [ ] Helm tests pass
-
-  ```sh
-  helm test graylog -n graylog
-  ```
+- [ ] Fresh installation completes successfully: `helm install graylog ./charts/graylog`
+- [ ] All pods reach Running state: `kubectl rollout status statefulset/graylog `
+- [ ] Helm tests pass: `helm test graylog `
 
 ### Functional (if applicable)
 - [ ] Web UI accessible and login works
