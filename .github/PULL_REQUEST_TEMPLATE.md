@@ -19,13 +19,33 @@ This fixes #??
 ## Testing Checklist
 
 ### Static Validation
-- [ ] `helm lint ./charts/graylog` passes
-- [ ] `helm template graylog ./charts/graylog --validate` passes
+- [ ] Linter check passes
+  
+  ```sh
+  helm lint ./charts/graylog
+  ```
+- [ ] Helm renders local template sucessfully
+  
+  ```sh
+  helm template graylog ./charts/graylog --validate
+  ```
 
 ### Installation
 - [ ] Fresh installation completes successfully
+
+  ```sh
+  helm install graylog ./charts/graylog -n graylog --create-namespace
+  ```
 - [ ] All pods reach Running state
-- [ ] `helm test graylog -n graylog` passes
+
+  ```sh
+  kubectl rollout status statefulset/graylog -n graylog
+  ```
+- [ ] Helm tests pass
+
+  ```sh
+  helm test graylog -n graylog
+  ```
 
 ### Functional (if applicable)
 - [ ] Web UI accessible and login works
@@ -43,5 +63,6 @@ This fixes #??
 ## Notes for reviewers
 - [ ] Verify all tests above pass
 - [ ] Verify all tests in [TESTING.md](https://github.com/Graylog2/graylog-helm/blob/main/docs/TESTING.md) pass
+- [ ] Validate that the linked issues are no longer reproducible, if applicable
 - [ ] Sync up with the author before merging
 - [ ] The commit history should be preserved - use rebase-merge or standard merge options when applicable
