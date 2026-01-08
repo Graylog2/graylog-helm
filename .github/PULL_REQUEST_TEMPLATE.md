@@ -5,6 +5,10 @@ Short description of the change.
 ## What changed
 - List of meaningful changes
 
+## Linked issues
+
+This fixes #??
+
 ## Checklist
 - [ ] Tests added/updated
 - [ ] Documentation updated
@@ -37,6 +41,6 @@ Short description of the change.
 - [ ] _describe what was specifically tested_
 
 ## Notes for reviewers
-- [ ] Verify all tests pass
+- [ ] Verify all tests in [TESTING.md](https://github.com/Graylog2/graylog-helm/blob/main/docs/TESTING.md) pass
 - [ ] Sync up with the author before merging
 - [ ] The commit history must be preserved - please use the rebase-merge or standard merge options
