@@ -19,8 +19,8 @@ This fixes #??
 ## Testing Checklist
 
 ### Static Validation
-- [ ] `helm lint ./graylog` passes
-- [ ] `helm template graylog ./graylog --validate` passes
+- [ ] `helm lint ./charts/graylog` passes
+- [ ] `helm template graylog ./charts/graylog --validate` passes
 
 ### Installation
 - [ ] Fresh installation completes successfully
@@ -43,4 +43,4 @@ This fixes #??
 ## Notes for reviewers
 - [ ] Verify all tests in [TESTING.md](https://github.com/Graylog2/graylog-helm/blob/main/docs/TESTING.md) pass
 - [ ] Sync up with the author before merging
-- [ ] The commit history should be preserved - use rebase-merge or standard merge options whenever possible
+- [ ] The commit history should be preserved - use rebase-merge or standard merge options when applicable
