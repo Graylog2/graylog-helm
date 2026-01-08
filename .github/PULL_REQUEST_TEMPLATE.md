@@ -41,6 +41,7 @@ This fixes #??
 - [ ] _describe what was specifically tested_
 
 ## Notes for reviewers
+- [ ] Verify all tests above pass
 - [ ] Verify all tests in [TESTING.md](https://github.com/Graylog2/graylog-helm/blob/main/docs/TESTING.md) pass
 - [ ] Sync up with the author before merging
 - [ ] The commit history should be preserved - use rebase-merge or standard merge options when applicable
