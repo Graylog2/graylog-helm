@@ -49,7 +49,7 @@ This fixes #??
 
 ### Functional (if applicable)
 - [ ] Web UI accessible and login works
-- [ ] DataNodes visible in System > Data Nodes
+- [ ] DataNodes visible in _System > Cluster Configuration_
 - [ ] Inputs can be created and receive data
 
 ### Upgrade (if applicable)
