@@ -182,7 +182,7 @@ spec:
       volumes:
       - name: init-script
         configMap:
-          name: init-script-cm
+          name: {{ include "graylog.cm.init.name" . }}
           defaultMode: 0755
       {{- if .Values.graylog.config.tls.enabled }}
       - name: tls-creds
