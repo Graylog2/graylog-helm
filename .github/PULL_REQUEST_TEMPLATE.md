@@ -41,7 +41,7 @@ Please check the items that apply to your change.
 - [ ] _describe what was specifically tested_
 
 ## Notes for reviewers
-- [ ] Verify all tests above pass
+- [ ] Verify all applicable tests above pass
 - [ ] Validate that the linked issues are no longer reproducible, if applicable
 - [ ] Sync up with the author before merging
 - [ ] The commit history should be preserved - use rebase-merge or standard merge options when applicable
