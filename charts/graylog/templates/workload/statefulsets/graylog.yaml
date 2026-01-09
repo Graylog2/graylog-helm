@@ -31,8 +31,8 @@ spec:
         app: graylog-app
         {{- include "graylog.selectorLabels" . | nindent 8 }}
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/config/graylog.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/config/secret/secrets.yaml") . | sha256sum }}
+        checksum/config: {{ include "graylog.configChecksum" . }}
+        checksum/secret: {{ include "graylog.secretsChecksum" . }}
       {{- with .Values.graylog.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

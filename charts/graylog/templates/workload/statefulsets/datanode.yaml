@@ -30,8 +30,8 @@ spec:
         app: graylog-datanode
         {{- include "graylog.selectorLabels" . | nindent 8 }}
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/config/datanode.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/config/secret/secrets.yaml") . | sha256sum }}
+        checksum/config: {{ include "graylog.datanode.configChecksum" . }}
+        checksum/secret: {{ include "graylog.secretsChecksum" . }}
       {{- with .Values.datanode.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
