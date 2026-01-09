@@ -546,3 +546,16 @@ Default ingress pathType
 {{- define "graylog.ingress.defaultPathType" }}
 {{- print "ImplementationSpecific" }}
 {{- end }}
+
+{{/*
+Deterministic checksum for a map.
+Sorts keys alphabetically, concatenates values, and returns sha256sum.
+Usage: {{ include "graylog.checksumMap" $mapData }}
+*/}}
+{{- define "graylog.checksumMap" -}}
+{{- $sortedValues := list -}}
+{{- range $key := keys . | sortAlpha -}}
+  {{- $sortedValues = append $sortedValues (index $ $key) -}}
+{{- end -}}
+{{- $sortedValues | join "" | sha256sum -}}
+{{- end -}}

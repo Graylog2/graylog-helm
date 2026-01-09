@@ -30,12 +30,10 @@ spec:
         app: graylog-datanode
         {{- include "graylog.selectorLabels" . | nindent 8 }}
       annotations:
-        {{- $dd := randAlphaNum 5 | dict "data" }}
-        {{- $config := include "graylog.datanode.configmap.name" . | lookup "v1" "ConfigMap" .Release.Namespace | default $dd }}
-        {{- $_ := randAlphaNum 5 | set $dd "data" }}
-        {{- $secret := include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace | default $dd }}
-        checksum/config: {{ $config.data | quote | sha256sum }}
-        checksum/secret: {{ $secret.data | quote | sha256sum }}
+        {{- $config := lookup "v1" "ConfigMap" .Release.Namespace (include "graylog.datanode.configmap.name" .) }}
+        {{- $secret := lookup "v1" "Secret" .Release.Namespace (include "graylog.secretsName" .) }}
+        checksum/config: {{ ternary (include "graylog.checksumMap" $config.data) (include (print $.Template.BasePath "/config/datanode.yaml") . | sha256sum) (not (empty $config)) }}
+        checksum/secret: {{ ternary (include "graylog.checksumMap" $secret.data) (include (print $.Template.BasePath "/config/secret/secrets.yaml") . | sha256sum) (not (empty $secret)) }}
       {{- with .Values.datanode.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

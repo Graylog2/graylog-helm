@@ -31,12 +31,15 @@ spec:
         app: graylog-app
         {{- include "graylog.selectorLabels" . | nindent 8 }}
       annotations:
-        {{- $dd := randAlphaNum 5 | dict "data" }}
-        {{- $config := include "graylog.configmap.name" . | lookup "v1" "ConfigMap" .Release.Namespace | default $dd  }}
-        {{- $_ := randAlphaNum 5 | set $dd "data" }}
-        {{- $secret := include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace | default $dd  }}
-        checksum/config: {{ $config.data | quote | sha256sum }}
-        checksum/secret: {{ $secret.data | quote | sha256sum }}
+        {{- $random := randAlphaNum 32 | dict "random" }}
+        {{- $config := include "graylog.configmap.name" . | lookup "v1" "ConfigMap" .Release.Namespace }}
+        {{- $secret := include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace }}
+        checksum/config: {{ $config.data | default $random | include "graylog.checksumMap" }}
+        checksum/secret: {{ $secret.data | default $random | include "graylog.checksumMap" }}
+{{/*        {{- $config := lookup "v1" "ConfigMap" .Release.Namespace (include "graylog.configmap.name" .) }}*/}}
+{{/*        {{- $secret := lookup "v1" "Secret" .Release.Namespace (include "graylog.secretsName" .) }}*/}}
+{{/*        checksum/config: {{ ternary (include "graylog.checksumMap" $config.data) (include (print $.Template.BasePath "/config/graylog.yaml") . | sha256sum) (not (empty $config)) }}*/}}
+{{/*        checksum/secret: {{ ternary (include "graylog.checksumMap" $secret.data) (include (print $.Template.BasePath "/config/secret/secrets.yaml") . | sha256sum) (not (empty $secret)) }}*/}}
       {{- with .Values.graylog.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
