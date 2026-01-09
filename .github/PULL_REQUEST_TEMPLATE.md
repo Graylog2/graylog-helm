@@ -1,15 +1,15 @@
 ## Summary
-
 Short description of the change.
 
-## What changed
-- List of meaningful changes
+## Details
+- List of meaningful technical changes
 
 ## Linked issues
-
 This fixes #??
 
-## Checklist
+## PR Checklist
+Please check the items that apply to your change.
+
 - [ ] Tests added/updated
 - [ ] Documentation updated
 - [ ] This PR includes a new feature
@@ -42,7 +42,6 @@ This fixes #??
 
 ## Notes for reviewers
 - [ ] Verify all tests above pass
-- [ ] Verify all tests in [TESTING.md](https://github.com/Graylog2/graylog-helm/blob/main/docs/TESTING.md) pass
 - [ ] Validate that the linked issues are no longer reproducible, if applicable
 - [ ] Sync up with the author before merging
 - [ ] The commit history should be preserved - use rebase-merge or standard merge options when applicable
