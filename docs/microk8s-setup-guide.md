@@ -19,7 +19,7 @@ microk8s install --cpu 8 --mem 24 --disk 200 --channel latest/stable
 
 ```bash
 mkdir $HOME/.kube && microk8s config -o yaml > $HOME/.kube/config
-chmod 400 $HOME/.kube/config
+chmod 600 $HOME/.kube/config
 ```
 
 ## Enable [DNS](https://microk8s.io/docs/addon-dns) and [local storage](https://microk8s.io/docs/addon-hostpath-storage) addons
