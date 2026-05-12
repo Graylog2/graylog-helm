@@ -383,10 +383,10 @@ backoffLimit: 2
 activeDeadlineSeconds: 900
 template:
   spec:
+    {{- with index . 3 }}
     securityContext:
-      runAsUser: 1100
-      runAsGroup: 1100
-      fsGroup: 1100
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     containers:
       - name: geoipupdate
         image: maxmindinc/geoipupdate:latest

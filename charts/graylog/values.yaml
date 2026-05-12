@@ -177,6 +177,11 @@ graylog:
   podDisruptionBudget:
     enabled: false
     minAvailable: 1
+  podSecurityContext:
+    runAsUser: 1100
+    runAsGroup: 1100
+    fsGroup: 1100
+  containerSecurityContext: {}
   podAnnotations: {}
   nodeSelector: {}
   tolerations: []
@@ -262,6 +267,10 @@ datanode:
   podDisruptionBudget:
     enabled: false
     minAvailable: 2
+  podSecurityContext:
+    fsGroup: 999
+    fsGroupChangePolicy: "OnRootMismatch"
+  containerSecurityContext: {}
   podAnnotations: {}
   nodeSelector: {}
   tolerations: []

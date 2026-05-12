@@ -52,10 +52,10 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
+      {{- with .Values.graylog.podSecurityContext }}
       securityContext:
-        runAsUser: 1100
-        runAsGroup: 1100
-        fsGroup: 1100
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         - name: copy-data
           image: {{ include "graylog.image" . }}
@@ -106,6 +106,10 @@ spec:
         - name: graylog-app
           image: {{ include "graylog.image" . }}
           imagePullPolicy: {{ .Values.graylog.image.imagePullPolicy }}
+          {{- with .Values.graylog.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: POD_NAME
               valueFrom:
