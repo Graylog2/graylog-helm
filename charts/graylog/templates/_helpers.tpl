@@ -167,6 +167,19 @@ Graylog secret name
 {{- end }}
 
 {{/*
+Graylog test credentials secret name
+Returns the existing secret name when global.existingSecretName is set (user must include
+GRAYLOG_ROOT_USERNAME and GRAYLOG_ROOT_PASSWORD keys), otherwise the generated test-credentials secret.
+*/}}
+{{- define "graylog.testCredentialsSecretName" -}}
+{{- if .Values.global.existingSecretName -}}
+{{- .Values.global.existingSecretName -}}
+{{- else -}}
+{{- include "graylog.fullname" . }}-test-credentials
+{{- end -}}
+{{- end }}
+
+{{/*
 Graylog Datanode secret name
 */}}
 {{- define "graylog.datanode.secretsName" -}}

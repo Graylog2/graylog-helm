@@ -45,12 +45,12 @@ spec:
         - name: GRAYLOG_ROOT_USERNAME
           valueFrom:
             secretKeyRef:
-              name: {{ include "graylog.fullname" . }}-test-credentials
+              name: {{ include "graylog.testCredentialsSecretName" . }}
               key: GRAYLOG_ROOT_USERNAME
         - name: GRAYLOG_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ include "graylog.fullname" . }}-test-credentials
+              name: {{ include "graylog.testCredentialsSecretName" . }}
               key: GRAYLOG_ROOT_PASSWORD
   restartPolicy: Never
 {{- end }}

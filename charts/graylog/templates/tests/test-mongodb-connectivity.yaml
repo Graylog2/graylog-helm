@@ -1,4 +1,4 @@
-{{- if .Values.graylog.enabled }}
+{{- if and .Values.graylog.enabled .Values.mongodb.communityResource.enabled }}
 apiVersion: v1
 kind: Pod
 metadata:
