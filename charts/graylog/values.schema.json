@@ -32,7 +32,11 @@
       "properties": {
         "imagePullSecrets": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "object",
+            "properties": { "name": { "type": "string" } },
+            "required": ["name"]
+          }
         },
         "storageClass": { "type": "string" },
         "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" }
@@ -286,7 +290,14 @@
             "repository": { "type": "string" },
             "tag": { "type": "string" },
             "imagePullPolicy": { "type": "string" },
-            "imagePullSecrets": { "type": "array" }
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "name": { "type": "string" } },
+                "required": ["name"]
+              }
+            }
           }
         },
         "updateStrategy": {
@@ -439,7 +450,14 @@
             "repository": { "type": "string" },
             "tag": { "type": "string" },
             "imagePullPolicy": { "type": "string" },
-            "imagePullSecrets": { "type": "array" }
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "name": { "type": "string" } },
+                "required": ["name"]
+              }
+            }
           }
         },
         "updateStrategy": {
