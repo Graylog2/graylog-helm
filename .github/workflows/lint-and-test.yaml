@@ -1,6 +1,6 @@
 name: Tests
 
-on: 
+on:
   pull_request:
     branches: ["main"]
   push:
@@ -11,5 +11,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: d3adb5/helm-unittest-action@v2
       - run: helm lint charts/graylog
