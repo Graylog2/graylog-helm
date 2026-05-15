@@ -54,10 +54,17 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Init script ConfigMap name
+*/}}
+{{- define "graylog.cm.init.name" }}
+{{- include "graylog.fullname" . | printf "%s-init-cm" }}
+{{- end }}
+
+{{/*
 Service account name
 */}}
-{{- define "graylog.serviceAccountName" -}}
-{{ $defaultName := "default" }}
+{{- define "graylog.serviceAccountName" }}
+{{- $defaultName := "default" }}
 {{- if .Values.serviceAccount.create }}
 {{- $defaultName = include "graylog.fullname" . | printf "%s-sa" }}
 {{- end }}
@@ -67,8 +74,8 @@ Service account name
 {{/*
 MongoDB service account name
 */}}
-{{- define "graylog.mongodb.serviceAccountName" -}}
-{{ $defaultName := "default" }}
+{{- define "graylog.mongodb.serviceAccountName" }}
+{{- $defaultName := "default" }}
 {{- if .Values.mongodb.serviceAccount.create }}
 {{- $defaultName = include "graylog.fullname" . | printf "%s-mongo-sa" }}
 {{- end }}
