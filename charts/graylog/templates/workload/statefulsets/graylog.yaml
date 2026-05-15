@@ -31,12 +31,8 @@ spec:
         app: graylog-app
         {{- include "graylog.selectorLabels" . | nindent 8 }}
       annotations:
-        {{- $dd := randAlphaNum 5 | dict "data" }}
-        {{- $config := include "graylog.configmap.name" . | lookup "v1" "ConfigMap" .Release.Namespace | default $dd  }}
-        {{- $_ := randAlphaNum 5 | set $dd "data" }}
-        {{- $secret := include "graylog.secretsName" . | lookup "v1" "Secret" .Release.Namespace | default $dd  }}
-        checksum/config: {{ $config.data | quote | sha256sum }}
-        checksum/secret: {{ $secret.data | quote | sha256sum }}
+        checksum/config: {{ include "graylog.configChecksum" . }}
+        checksum/secret: {{ include "graylog.secretsChecksum" . }}
       {{- with .Values.graylog.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

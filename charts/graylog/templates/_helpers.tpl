@@ -553,3 +553,28 @@ Default ingress pathType
 {{- define "graylog.ingress.defaultPathType" }}
 {{- print "ImplementationSpecific" }}
 {{- end }}
+
+{{/*
+Graylog ConfigMap template checksum
+*/}}
+{{- define "graylog.configChecksum" }}
+{{- include (print $.Template.BasePath "/config/graylog.yaml") . | sha256sum }}
+{{- end }}
+
+{{/*
+Datanode ConfigMap template checksum
+*/}}
+{{- define "graylog.datanode.configChecksum" }}
+{{- include (print $.Template.BasePath "/config/datanode.yaml") . | sha256sum }}
+{{- end }}
+
+{{/*
+Secrets template checksum
+Renders the secrets template once and caches the result for consistent checksums
+*/}}
+{{- define "graylog.secretsChecksum" -}}
+{{- if not (index $ "__secretsChecksum") -}}
+  {{- $_ := include (print $.Template.BasePath "/config/secret/secrets.yaml") . | sha256sum | set $ "__secretsChecksum" -}}
+{{- end -}}
+{{- index $ "__secretsChecksum" -}}
+{{- end -}}
