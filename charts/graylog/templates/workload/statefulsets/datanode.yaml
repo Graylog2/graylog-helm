@@ -161,7 +161,7 @@ spec:
     {{- end }}
     {{- if .Values.datanode.persistence.nativeLibs.enabled }}
     - metadata:
-        name: nativeLibs
+        name: native-libs
       spec:
         accessModes:
         {{- if .Values.datanode.persistence.nativeLibs.accessModes }}
