@@ -1,11 +1,15 @@
 ## Summary
-
 Short description of the change.
 
-## What changed
-- List of meaningful changes
+## Details
+- List of meaningful technical changes
 
-## Checklist
+## Linked issues
+This fixes #??
+
+## PR Checklist
+Please check the items that apply to your change.
+
 - [ ] Tests added/updated
 - [ ] Documentation updated
 - [ ] This PR includes a new feature
@@ -15,17 +19,17 @@ Short description of the change.
 ## Testing Checklist
 
 ### Static Validation
-- [ ] `helm lint ./graylog` passes
-- [ ] `helm template graylog ./graylog --validate` passes
+- [ ] Linter check passes: `helm lint ./charts/graylog`
+- [ ] Helm renders local template sucessfully: `helm template graylog ./charts/graylog --validate`
 
 ### Installation
-- [ ] Fresh installation completes successfully
-- [ ] All pods reach Running state
-- [ ] `helm test graylog -n graylog` passes
+- [ ] Fresh installation completes successfully: `helm install graylog ./charts/graylog`
+- [ ] All pods reach Running state: `kubectl rollout status statefulset/graylog `
+- [ ] Helm tests pass: `helm test graylog `
 
 ### Functional (if applicable)
 - [ ] Web UI accessible and login works
-- [ ] DataNodes visible in System > Data Nodes
+- [ ] DataNodes visible in _System > Cluster Configuration_
 - [ ] Inputs can be created and receive data
 
 ### Upgrade (if applicable)
@@ -37,6 +41,7 @@ Short description of the change.
 - [ ] _describe what was specifically tested_
 
 ## Notes for reviewers
-- [ ] Verify all tests pass
+- [ ] Verify all applicable tests above pass
+- [ ] Validate that the linked issues are no longer reproducible, if applicable
 - [ ] Sync up with the author before merging
-- [ ] The commit history must be preserved - please use the rebase-merge or standard merge options
+- [ ] The commit history should be preserved - use rebase-merge or standard merge options when applicable
