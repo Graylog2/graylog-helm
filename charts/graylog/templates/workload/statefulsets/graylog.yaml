@@ -46,8 +46,8 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.graylog.nodeSelector }}
-      nodeSelector: {{ .Values.graylog.nodeSelector }}
+      {{- with .Values.graylog.nodeSelector }}
+      nodeSelector: {{ . | toYaml | nindent 8 }}
       {{- end }}
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
