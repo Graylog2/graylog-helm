@@ -1,0 +1,11 @@
+# Configuration for chart-testing (ct), used by .github/workflows/lint-and-test.yaml
+# Full reference: https://github.com/helm/chart-testing
+
+chart-dirs:
+  - charts
+
+target-branch: main
+
+# Chart.yaml does not declare a maintainers list today; enabling this would
+# block linting. Revisit if a maintainers list is added.
+validate-maintainers: false
