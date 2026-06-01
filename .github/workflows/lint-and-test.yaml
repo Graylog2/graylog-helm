@@ -37,11 +37,19 @@ jobs:
     needs: helm-ct-lint
     strategy:
       fail-fast: false
+      # Asymmetric K8s × Helm matrix: full K8s coverage on Helm 3 (the chart's
+      # stated minimum per docs/TESTING.md), with Helm 4 added as bonus coverage
+      # on the most recent K8s version. Expand by adding more `include:` entries.
       matrix:
-        k8s-version:
-          - v1.32.11
-          - v1.33.7
-          - v1.34.3
+        include:
+          - k8s-version: v1.32.11
+            helm-version: v3.16.4
+          - k8s-version: v1.33.7
+            helm-version: v3.16.4
+          - k8s-version: v1.34.3
+            helm-version: v3.16.4
+          - k8s-version: v1.34.3
+            helm-version: v4.2.0
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -51,7 +59,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v5
         with:
-          version: v3.16.4
+          version: ${{ matrix.helm-version }}
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.8.0
