@@ -29,6 +29,13 @@ jobs:
   helm-ct-install:
     runs-on: ubuntu-latest
     needs: helm-ct-lint
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s-version:
+          - v1.32.11
+          - v1.33.7
+          - v1.34.3
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -45,6 +52,8 @@ jobs:
 
       - name: Create kind cluster
         uses: helm/kind-action@v1.14.0
+        with:
+          node_image: kindest/node:${{ matrix.k8s-version }}
 
       - name: Install MongoDB Kubernetes Operator
         run: |
