@@ -10,6 +10,18 @@ target-branch: main
 # block linting. Revisit if a maintainers list is added.
 validate-maintainers: false
 
+# Defaults below are made explicit to document the chart's CI policy
+# rather than relying on ct's built-in defaults.
+check-version-increment: true
+validate-chart-schema: true
+validate-yaml: true
+
+# Enable in-place upgrade testing. ct will install the chart's previous
+# revision and upgrade to the current, but only when the chart version
+# differs between target-branch and the PR. Safeguards against breaking
+# upgrade paths for existing users.
+upgrade: true
+
 # Passed through to `helm install` during `ct install`. 15-minute timeout
 # accommodates Graylog's startup time on minimal-resource CI runners.
 helm-extra-args: --timeout=900s
