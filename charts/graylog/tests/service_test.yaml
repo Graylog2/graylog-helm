@@ -1,0 +1,89 @@
+suite: graylog Service
+templates:
+  - service/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: does not render when graylog.enabled is false
+    set:
+      graylog.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: defaults to ClusterIP service type
+    asserts:
+      - equal:
+          path: spec.type
+          value: ClusterIP
+
+  - it: respects graylog.service.type override
+    set:
+      graylog.service.type: LoadBalancer
+    asserts:
+      - equal:
+          path: spec.type
+          value: LoadBalancer
+
+  - it: includes metrics port when graylog.service.metrics.enabled is true
+    set:
+      graylog.service.metrics.enabled: true
+      graylog.service.ports.metrics: 9833
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9833
+            targetPort: metrics
+            protocol: TCP
+
+  - it: skips metrics port when graylog.service.metrics.enabled is false
+    set:
+      graylog.service.metrics.enabled: false
+    asserts:
+      - notContains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9833
+            targetPort: metrics
+            protocol: TCP
+
+  - it: renders one port per graylog.inputs entry
+    set:
+      graylog.inputs:
+        - name: input-gelf
+          port: 12201
+          targetPort: 12201
+          protocol: TCP
+        - name: input-syslog
+          port: 514
+          targetPort: 514
+          protocol: UDP
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: input-gelf
+            port: 12201
+            targetPort: 12201
+            protocol: TCP
+      - contains:
+          path: spec.ports
+          content:
+            name: input-syslog
+            port: 514
+            targetPort: 514
+            protocol: UDP
+
+  - it: always includes input-fwd-conf port
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: input-fwd-conf
+            port: 13302
+            targetPort: 13302
+            protocol: TCP

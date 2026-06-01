@@ -1,0 +1,66 @@
+suite: graylog init-script ConfigMap
+templates:
+  - config/init-graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: does not render when graylog.enabled is false
+    set:
+      graylog.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the init-script.sh data key
+    asserts:
+      - exists:
+          path: data["init-script.sh"]
+
+  - it: always includes the MongoDB credentials check
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'env \| grep GRAYLOG_MONGODB_URI \| grep -q "@"'
+
+  - it: includes truststore-import logic when TLS is enabled with updateKeyStore
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert'
+
+  - it: skips truststore-import logic when TLS is enabled but updateKeyStore is false
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: false
+    asserts:
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert'
+
+  - it: skips TLS setup entirely when TLS is disabled
+    set:
+      graylog.config.tls.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: '/mnt/tls/tls.crt'
+
+  - it: includes plugin-copy logic when plugins are enabled
+    set:
+      graylog.config.plugins.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'find /mnt/shared/plugins/'
+
+  - it: skips plugin logic when plugins are disabled
+    set:
+      graylog.config.plugins.enabled: false
+    asserts:
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'find /mnt/shared/plugins/'
