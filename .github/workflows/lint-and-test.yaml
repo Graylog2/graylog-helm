@@ -42,14 +42,14 @@ jobs:
       # on the most recent K8s version. Expand by adding more `include:` entries.
       matrix:
         include:
-          - k8s-version: v1.32.11
-            helm-version: v3.16.4
-          - k8s-version: v1.33.7
-            helm-version: v3.16.4
-          - k8s-version: v1.34.3
-            helm-version: v3.16.4
-          - k8s-version: v1.34.3
-            helm-version: v4.2.0
+          - helm-version: v3.16.4
+            k8s-version: v1.32.11
+          - helm-version: v3.16.4
+            k8s-version: v1.33.7
+          - helm-version: v3.16.4
+            k8s-version: v1.34.3
+          - helm-version: v4.2.0
+            k8s-version: v1.34.3
     steps:
       - name: Checkout
         uses: actions/checkout@v6
