@@ -57,5 +57,14 @@ jobs:
             --wait \
             --timeout 5m
 
+      - name: Generate ephemeral CI rootPassword and mask in workflow logs
+        id: ci-root-password
+        run: |
+          password=$(openssl rand -hex 16)
+          echo "::add-mask::${password}"
+          echo "value=${password}" >> "$GITHUB_OUTPUT"
+
       - name: Run ct install
-        run: ct install --config .github/ct.yaml --all
+        run: |
+          ct install --config .github/ct.yaml --all \
+            --helm-extra-set-args "--set graylog.config.rootPassword=${{ steps.ci-root-password.outputs.value }}"
