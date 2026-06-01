@@ -16,11 +16,13 @@ check-version-increment: true
 validate-chart-schema: true
 validate-yaml: true
 
-# Enable in-place upgrade testing. ct will install the chart's previous
-# revision and upgrade to the current, but only when the chart version
-# differs between target-branch and the PR. Safeguards against breaking
-# upgrade paths for existing users.
-upgrade: true
+# In-place upgrade testing (disabled). ct's `--upgrade` doesn't exercise
+# `helm upgrade` against an existing deployed release the way users would
+# expect; it installs the previous revision into an ephemeral namespace,
+# upgrades to current, then tears down. Combined with the ~2x CI runtime
+# cost, not worth enabling right now. Revisit if ct's upgrade semantics
+# change or maintainers want to opt in.
+upgrade: false
 
 # Passed through to `helm install` during `ct install`. 15-minute timeout
 # accommodates Graylog's startup time on minimal-resource CI runners.
