@@ -306,7 +306,7 @@ datanode:
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]
-      add: ["CHOWN", "DAC_OVERRIDE", "SETUID", "SETGID"]
+      add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
     seccompProfile:
       type: RuntimeDefault
   podAnnotations: {}
