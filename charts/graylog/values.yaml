@@ -177,6 +177,28 @@ graylog:
   podDisruptionBudget:
     enabled: false
     minAvailable: 1
+  podSecurityContext:
+    runAsUser: 1100
+    runAsGroup: 1100
+    runAsNonRoot: true
+    fsGroup: 1100
+    seccompProfile:
+      type: RuntimeDefault
+  initContainerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+      add: ["NET_BIND_SERVICE"]
+    seccompProfile:
+      type: RuntimeDefault
   podAnnotations: {}
   nodeSelector: {}
   tolerations: []
@@ -262,6 +284,31 @@ datanode:
   podDisruptionBudget:
     enabled: false
     minAvailable: 2
+  podSecurityContext:
+    fsGroup: 999
+    fsGroupChangePolicy: "OnRootMismatch"
+    seccompProfile:
+      type: RuntimeDefault
+  initContainerImage:
+    repository: "busybox"
+    tag: "latest"
+    imagePullPolicy: IfNotPresent
+  initContainerSecurityContext:
+    runAsUser: 0
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+      add: ["CHOWN", "DAC_OVERRIDE"]
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+      add: ["CHOWN", "DAC_OVERRIDE", "SETUID", "SETGID"]
+    seccompProfile:
+      type: RuntimeDefault
   podAnnotations: {}
   nodeSelector: {}
   tolerations: []
