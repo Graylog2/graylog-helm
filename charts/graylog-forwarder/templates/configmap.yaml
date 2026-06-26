@@ -1,18 +1,19 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: graylog-forwarder
+  name: {{ include "graylog-forwarder.fullname" . }}
+  labels:
+    {{- include "graylog-forwarder.labels" . | nindent 4 }}
 data:
-  GRAYLOG_FORWARDER_SERVER_HOSTNAME: {{ .Values.config.graylogForwarderServerHostname }}
-  GRAYLOG_FORWARDER_GRPC_API_TOKEN: {{ .Values.config.graylogForwarderGrpcApiToken }}
-  GRAYLOG_FORWARDER_API_ENABLED: {{ .Values.config.graylogForwarderApiEnabled }}
-  GRAYLOG_FORWARDER_PORT_12201_TCP: {{ .Values.config.graylogForwarderPort12201Tcp }}
-  GRAYLOG_FORWARDER_PORT_12201_TCP_ADDR: {{ .Values.config.graylogForwarderPort12201TcpAddr }}
-  GRAYLOG_MESSAGE_JOURNAL_MAX_AGE: "12h"
-  # GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE: "8GB"
-  # GRAYLOG_DATA_DIR: "/data/graylog-forwarder/data"
-  # GRAYLOG_FORWARDER_API_ENABLED: true
-  # GRAYLOG_FORWARDER_API_TCP_BIND_ADDRESS: "0.0.0.0:9001"
-  # GRAYLOG_FORWARDER_GRPC_API_TOKEN: "some-token"
-  # GRAYLOG_NODE_ID_FILE : "/data/graylog-forwarder/node-id"
-  # GRAYLOG_MESSAGE_JOURNAL_DIR : "/data/graylog-forwarder/journal"
+  GRAYLOG_FORWARDER_SERVER_HOSTNAME: {{ .Values.config.serverHostname | quote }}
+  GRAYLOG_FORWARDER_API_ENABLED: {{ .Values.config.apiEnabled | quote }}
+  {{- if .Values.config.apiEnabled }}
+  GRAYLOG_FORWARDER_API_TCP_BIND_ADDRESS: {{ .Values.config.apiBindAddress | quote }}
+  {{- end }}
+  GRAYLOG_NODE_ID_FILE: {{ .Values.config.nodeIdFile | quote }}
+  GRAYLOG_DATA_DIR: {{ .Values.config.dataDir | quote }}
+  GRAYLOG_MESSAGE_JOURNAL_DIR: {{ .Values.config.journal.dir | quote }}
+  GRAYLOG_MESSAGE_JOURNAL_MAX_AGE: {{ .Values.config.journal.maxAge | quote }}
+  {{- with .Values.config.journal.maxSize }}
+  GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE: {{ . | quote }}
+  {{- end }}

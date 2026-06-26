@@ -8,8 +8,11 @@ metadata:
     "helm.sh/hook": test
 spec:
   containers:
-    - name: wget
+    - name: nc
       image: busybox
-      command: ['wget']
-      args: ['{{ include "graylog-forwarder.fullname" . }}:{{ .Values.service.port }}']
+      command:
+        - sh
+        - -c
+        - |
+          nc -z {{ include "graylog-forwarder.fullname" . }} {{ .Values.service.ports.forwarderConfig }}
   restartPolicy: Never

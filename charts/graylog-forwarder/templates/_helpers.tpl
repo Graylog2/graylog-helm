@@ -60,3 +60,15 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Name of the secret holding the API token.
+Returns existingSecret if set, otherwise the chart-managed secret name.
+*/}}
+{{- define "graylog-forwarder.secretName" -}}
+{{- if .Values.config.existingSecret }}
+{{- .Values.config.existingSecret }}
+{{- else }}
+{{- include "graylog-forwarder.fullname" . }}
+{{- end }}
+{{- end }}

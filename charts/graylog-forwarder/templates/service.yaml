@@ -4,12 +4,24 @@ metadata:
   name: {{ include "graylog-forwarder.fullname" . }}
   labels:
     {{- include "graylog-forwarder.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: http
+    - name: forwarder-config
+      port: {{ .Values.service.ports.forwarderConfig }}
+      targetPort: forwarder-config
       protocol: TCP
-      name: http
+    - name: gelf
+      port: {{ .Values.service.ports.gelf }}
+      targetPort: gelf
+      protocol: TCP
+    - name: api
+      port: {{ .Values.service.ports.api }}
+      targetPort: api
+      protocol: TCP
   selector:
     {{- include "graylog-forwarder.selectorLabels" . | nindent 4 }}
