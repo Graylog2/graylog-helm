@@ -78,6 +78,9 @@ Then, configure `ingress.web.tls` and `ingress.config.issuer` with the name of a
 and let `cert-manager` do the rest!
 
 # Installation
+## Pre Installation
+> [!WARNING]
+> If you are managing the deployment of this chart through GitOps (ArgoCD, Flux etc), you must manually generate the Graylog Secrets resource. Otherwise auto generated credentials will rotate after initial deployment. Refer to the [Graylog Secrets](../../docs/graylog-secrets.md) doc for requirements of that secret.
 
 ## Installing on Kubernetes
 

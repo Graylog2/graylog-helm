@@ -4,9 +4,9 @@ Official open source Helm charts for Graylog.
 
 ## Available modules
 
-* charts/graylog - official Graylog helm chart
-* docs - documentation for testing and configuration guides
-* examples - example values files and Kubernetes manifests
+* [charts/graylog](charts/graylog/README.md) - official Graylog helm chart
+* [docs](docs/) - documentation for testing and configuration guides
+* [examples](/examples/) - example values files and Kubernetes manifests
 
 ---
 <small>&copy; 2026 <a href="https://graylog.org">Graylog, Inc.</a></small>
