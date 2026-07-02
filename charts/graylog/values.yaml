@@ -233,6 +233,15 @@ datanode:
     tag: ""
     imagePullPolicy: IfNotPresent
     imagePullSecrets: []
+  sysctlInit:
+    enabled: false
+    image:
+      repository: "busybox"
+      tag: "1.35"
+      imagePullPolicy: IfNotPresent
+    securityContext:
+      privileged: true
+    vmMaxMapCount: 262144
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
