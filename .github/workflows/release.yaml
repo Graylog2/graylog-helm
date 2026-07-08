@@ -1,8 +1,8 @@
 name: Release Graylog Chart
 
 on:
-  push:
-    ## only manually triggered releases for now
+  ## only manually triggered releases for now
+  # push:
     # branches:
     #   - main
     # paths:
