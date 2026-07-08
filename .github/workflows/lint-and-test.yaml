@@ -7,8 +7,87 @@ on:
     branches: ["main"]
 
 jobs:
-  lint:
+  helm-ct-lint:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        helm-version:
+          - v3.16.4
+          - v4.2.0
     steps:
-      - uses: actions/checkout@v3
-      - run: helm lint charts/graylog
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ matrix.helm-version }}
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.8.0
+
+      - name: Run ct lint
+        run: ct lint --config .github/ct.yaml --all
+
+  helm-ct-install:
+    runs-on: ubuntu-latest
+    needs: helm-ct-lint
+    strategy:
+      fail-fast: false
+      # Asymmetric K8s × Helm matrix: full K8s coverage on Helm 3 (the chart's
+      # stated minimum per docs/TESTING.md), with Helm 4 added as bonus coverage
+      # on the most recent K8s version. Expand by adding more `include:` entries.
+      matrix:
+        include:
+          - helm-version: v3.16.4
+            k8s-version: v1.32.11
+          - helm-version: v3.16.4
+            k8s-version: v1.33.7
+          - helm-version: v3.16.4
+            k8s-version: v1.34.3
+          - helm-version: v4.2.0
+            k8s-version: v1.34.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: ${{ matrix.helm-version }}
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.8.0
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.14.0
+        with:
+          node_image: kindest/node:${{ matrix.k8s-version }}
+
+      - name: Install MongoDB Kubernetes Operator
+        run: |
+          helm upgrade --install mongodb-kubernetes-operator mongodb-kubernetes \
+            --repo https://mongodb.github.io/helm-charts \
+            --version "1.6.1" \
+            --set operator.watchNamespace="*" \
+            --namespace operators \
+            --create-namespace \
+            --wait \
+            --timeout 5m
+
+      - name: Generate ephemeral CI rootPassword and mask in workflow logs
+        id: ci-root-password
+        run: |
+          password=$(openssl rand -hex 16)
+          echo "::add-mask::${password}"
+          echo "value=${password}" >> "$GITHUB_OUTPUT"
+
+      - name: Run ct install
+        run: |
+          ct install --config .github/ct.yaml --all \
+            --helm-extra-set-args "--set graylog.config.rootPassword=${{ steps.ci-root-password.outputs.value }}"

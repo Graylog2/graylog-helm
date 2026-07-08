@@ -341,11 +341,11 @@ mongodb:
     role:
       create: true
       rules:
-        - apiGroups: [ "" ]
-          resources: [ "secrets" ]
-          resourceNames: [ ]
-          verbs: [ "get" ]
-        - apiGroups: [ "" ]
-          resources: [ "pods" ]
-          resourceNames: [ ]
-          verbs: [ "get", "patch", "delete" ]
+        - apiGroups: [""]
+          resources: ["secrets"]
+          resourceNames: []
+          verbs: ["get"]
+        - apiGroups: [""]
+          resources: ["pods"]
+          resourceNames: []
+          verbs: ["get", "patch", "delete"]
