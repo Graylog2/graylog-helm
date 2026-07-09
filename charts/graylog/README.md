@@ -26,6 +26,8 @@ Official Helm chart for Graylog.
 * [Using External Resources](#using-external-resources)
   * [Managing Secrets Externally](#managing-secrets-externally)
   * [Bring Your Own MongoDB](#bring-your-own-mongodb)
+* [Maintenance](#maintenance)
+  * [Back Up and Restore MongoDB](#back-up-and-restore-mongodb)
 * [Uninstall](#uninstall)
   * [Removing everything](#removing-everything)
 * [Debugging](#debugging)
@@ -426,6 +428,13 @@ helm upgrade --install graylog graylog/graylog --namespace graylog --reuse-value
   --set mongodb.communityResource.enabled=false \
   --set global.existingSecretName="<your secret name>"
 ```
+
+# Maintenance
+
+## Back Up and Restore MongoDB
+
+To take a manual `mongodump` backup of Graylog's MongoDB database and restore it
+with `mongorestore`, see [docs/mongodb-backup-restore.md](../../docs/mongodb-backup-restore.md).
 
 # Uninstall
 ```sh
