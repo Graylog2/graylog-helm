@@ -1,0 +1,112 @@
+suite: graylog web Ingress
+templates:
+  - service/ingress/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: does not render when ingress.enabled is false
+    set:
+      ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render when ingress.web.enabled is false
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders when ingress.enabled and ingress.web.enabled are both true
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: Ingress
+      - equal:
+          path: apiVersion
+          value: networking.k8s.io/v1
+
+  - it: sets ingressClassName from values
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.className: nginx
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  - it: renders TLS section when ingress.web.tls is provided
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.tls:
+        - secretName: graylog-tls
+          hosts:
+            - graylog.example.com
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: graylog-tls
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: graylog.example.com
+
+  - it: omits TLS section when ingress.web.tls is empty
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.tls: []
+    asserts:
+      - notExists:
+          path: spec.tls
+
+  - it: adds cert-manager cluster-issuer annotation when configured
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.tls:
+        - secretName: graylog-tls
+          hosts:
+            - graylog.example.com
+      ingress.config.tls.clusterIssuer.existingName: letsencrypt-prod
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt-prod
+
+  - it: adds cert-manager issuer annotation when existingName is configured
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.tls:
+        - secretName: graylog-tls
+          hosts:
+            - graylog.example.com
+      ingress.config.tls.issuer.existingName: my-issuer
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/issuer"]
+          value: my-issuer
+
+  - it: does NOT add cert-manager annotation when no issuer is configured
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.tls:
+        - secretName: graylog-tls
+          hosts:
+            - graylog.example.com
+    asserts:
+      - notExists:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+      - notExists:
+          path: metadata.annotations["cert-manager.io/issuer"]

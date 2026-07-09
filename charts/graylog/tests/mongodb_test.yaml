@@ -1,0 +1,86 @@
+suite: MongoDB Community Custom Resource
+templates:
+  - custom/mongo-rs.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders the MongoDBCommunity CR when communityResource.enabled is true
+    set:
+      mongodb.communityResource.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: MongoDBCommunity
+      - equal:
+          path: apiVersion
+          value: mongodbcommunity.mongodb.com/v1
+
+  - it: does NOT render the MongoDBCommunity CR when communityResource.enabled is false
+    set:
+      mongodb.communityResource.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: uses configured mongodb.version
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.version: "8.0.23"
+    asserts:
+      - equal:
+          path: spec.version
+          value: "8.0.23"
+
+  - it: configures members count from mongodb.replicas
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.replicas: 3
+      mongodb.arbiters: 0
+    asserts:
+      - equal:
+          path: spec.members
+          value: 3
+
+  - it: includes arbiters when mongodb.arbiters > 0
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.replicas: 3
+      mongodb.arbiters: 1
+    asserts:
+      - equal:
+          path: spec.arbiters
+          value: 1
+
+  - it: omits arbiters key when mongodb.arbiters is 0
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.replicas: 3
+      mongodb.arbiters: 0
+    asserts:
+      - notExists:
+          path: spec.arbiters
+
+  - it: fails when arbiters >= replicas
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.replicas: 2
+      mongodb.arbiters: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "Number of MongoDB arbiters must be less than the number of replicas"
+
+  - it: sets persistence size from values
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.persistence.size.data: "20G"
+      mongodb.persistence.size.logs: "5G"
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "20G"
+      - equal:
+          path: spec.statefulSet.spec.volumeClaimTemplates[1].spec.resources.requests.storage
+          value: "5G"
