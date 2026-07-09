@@ -95,9 +95,11 @@ spec:
         {{- if empty .existingClaim | and .image }}
         - name: {{ printf "copy-plugin-%s" .name }}
           image: {{ .image }}
+          {{- if $.Values.graylog.initContainerSecurityContext }}
           {{- with merge (dict "readOnlyRootFilesystem" true) $.Values.graylog.initContainerSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- end }}
           command: [ "/bin/sh", "-c", "cp *.jar /mnt/plugins/" ]
           volumeMounts:
