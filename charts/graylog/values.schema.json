@@ -382,6 +382,18 @@
             "minAvailable": { "type": "integer" }
           }
         },
+        "podSecurityContext": {
+          "type": ["object", "null"],
+          "description": "Pod-level securityContext for the Graylog StatefulSet. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
+        },
+        "initContainerSecurityContext": {
+          "type": ["object", "null"],
+          "description": "Container securityContext applied to the Graylog init containers. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
+        },
+        "containerSecurityContext": {
+          "type": ["object", "null"],
+          "description": "Container securityContext applied to the graylog-app container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
+        },
         "podAnnotations": {
           "type": "object"
         },
@@ -569,6 +581,14 @@
             "enabled": { "type": "boolean" },
             "minAvailable": { "type": "integer" }
           }
+        },
+        "podSecurityContext": {
+          "type": ["object", "null"],
+          "description": "Pod-level securityContext for the Datanode StatefulSet. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
+        },
+        "containerSecurityContext": {
+          "type": ["object", "null"],
+          "description": "Container securityContext applied to the graylog-datanode container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
         "podAnnotations": {
           "type": "object"
