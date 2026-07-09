@@ -1,0 +1,57 @@
+suite: datanode StatefulSet
+templates:
+  # The StatefulSet's pod-spec annotations reference two checksum helpers that
+  # `include` other templates by path. helm-unittest's `templates:` filter must
+  # list those dependencies so the includes resolve. Assertions below use the
+  # `template:` field to scope each assert to the StatefulSet specifically.
+  - workload/statefulsets/datanode.yaml
+  - config/datanode.yaml          # checksum/config dependency
+  - config/secret/secrets.yaml    # checksum/secret dependency
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # Security contexts (issue #70): defaults come from values.yaml, each field is overridable
+  - it: renders the default pod securityContext
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            fsGroup: 999
+            fsGroupChangePolicy: "OnRootMismatch"
+            seccompProfile:
+              type: RuntimeDefault
+        template: workload/statefulsets/datanode.yaml
+
+  - it: omits pod securityContext when datanode.podSecurityContext is set to null
+    set:
+      datanode.podSecurityContext: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.securityContext
+        template: workload/statefulsets/datanode.yaml
+
+  - it: renders containerSecurityContext with the startup capabilities on the datanode container
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: graylog-datanode
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
+            seccompProfile:
+              type: RuntimeDefault
+        template: workload/statefulsets/datanode.yaml
+
+  - it: omits datanode container securityContext when datanode.containerSecurityContext is set to null
+    set:
+      datanode.containerSecurityContext: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext
+        template: workload/statefulsets/datanode.yaml

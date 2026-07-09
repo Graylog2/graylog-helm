@@ -108,3 +108,109 @@ tests:
       - notExists:
           path: spec.template.spec.imagePullSecrets
         template: workload/statefulsets/graylog.yaml
+
+  # Security contexts (issue #70): defaults come from values.yaml, each field is overridable
+  - it: renders the default pod securityContext
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsUser: 1100
+            runAsGroup: 1100
+            runAsNonRoot: true
+            fsGroup: 1100
+            seccompProfile:
+              type: RuntimeDefault
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits pod securityContext when graylog.podSecurityContext is set to null
+    set:
+      graylog.podSecurityContext: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.securityContext
+        template: workload/statefulsets/graylog.yaml
+
+  - it: renders initContainerSecurityContext on the copy-data init container without NET_BIND_SERVICE
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: copy-data
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext
+          value:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits copy-data securityContext when graylog.initContainerSecurityContext is set to null
+    set:
+      graylog.initContainerSecurityContext: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers[0].securityContext
+        template: workload/statefulsets/graylog.yaml
+
+  - it: renders containerSecurityContext with NET_BIND_SERVICE on the graylog-app container
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE"]
+            seccompProfile:
+              type: RuntimeDefault
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits graylog-app securityContext when graylog.containerSecurityContext is set to null
+    set:
+      graylog.containerSecurityContext: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext
+        template: workload/statefulsets/graylog.yaml
+
+  - it: forces readOnlyRootFilesystem on copy-plugin init containers
+    set:
+      graylog.config.plugins.enabled: true
+      graylog.plugins:
+        - name: my-plugin
+          image: example/my-plugin:1.0.0
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: copy-plugin-my-plugin
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.readOnlyRootFilesystem
+          value: true
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.seccompProfile
+          value:
+            type: RuntimeDefault
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits copy-plugin securityContext when graylog.initContainerSecurityContext is set to null
+    set:
+      graylog.config.plugins.enabled: true
+      graylog.initContainerSecurityContext: null
+      graylog.plugins:
+        - name: my-plugin
+          image: example/my-plugin:1.0.0
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: copy-plugin-my-plugin
+        template: workload/statefulsets/graylog.yaml
+      - notExists:
+          path: spec.template.spec.initContainers[1].securityContext
+        template: workload/statefulsets/graylog.yaml
