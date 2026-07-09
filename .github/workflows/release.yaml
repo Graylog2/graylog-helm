@@ -1,11 +1,12 @@
 name: Release Graylog Chart
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - charts/graylog/Chart.yaml
+  ## only manually triggered releases for now
+  # push:
+    # branches:
+    #   - main
+    # paths:
+    #   - charts/graylog/Chart.yaml
   workflow_dispatch:
 
 jobs:

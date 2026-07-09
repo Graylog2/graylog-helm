@@ -30,4 +30,5 @@ spec:
       protocol: TCP
   selector:
     app: graylog-app
+    {{- include "graylog.selectorLabels" . | nindent 4 }}
 {{- end }}
