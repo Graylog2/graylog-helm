@@ -35,7 +35,7 @@ Follow this guide when reviewing PRs or validating internal modifications.
 
 ### Cluster Setup
 
-For local development, we recommend MicroK8s. See [CONTRIBUTING.md](CONTRIBUTING.md#setting-up-a-microk8s-cluster) for detailed setup instructions.
+For local development, we recommend MicroK8s. See [Setting up a MicroK8s cluster](microk8s-setup-guide.md) for detailed setup instructions.
 
 **Minimum cluster resources:**
 - CPU: 8 cores

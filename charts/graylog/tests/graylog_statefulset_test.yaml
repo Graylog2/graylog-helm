@@ -1,0 +1,110 @@
+suite: graylog StatefulSet
+templates:
+  # The StatefulSet's pod-spec annotations reference two checksum helpers that
+  # `include` other templates by path. helm-unittest's `templates:` filter must
+  # list those dependencies so the includes resolve. Assertions below use the
+  # `template:` field to scope each assert to the StatefulSet specifically.
+  - workload/statefulsets/graylog.yaml
+  - config/graylog.yaml         # checksum/config dependency
+  - config/secret/secrets.yaml  # checksum/secret dependency
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: respects graylog.replicas value
+    set:
+      graylog.replicas: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+        template: workload/statefulsets/graylog.yaml
+
+  - it: mounts tls-creds volume when graylog.config.tls.enabled is true
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.secretName: my-tls-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tls-creds
+            secret:
+              secretName: "my-tls-secret"
+        template: workload/statefulsets/graylog.yaml
+
+  - it: mounts tls-creds at /usr/share/graylog/tls when TLS enabled
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.secretName: my-tls-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tls-creds
+            mountPath: /usr/share/graylog/tls
+        template: workload/statefulsets/graylog.yaml
+
+  - it: does NOT mount tls-creds when graylog.config.tls.enabled is false
+    set:
+      graylog.config.tls.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tls-creds
+            mountPath: /usr/share/graylog/tls
+        template: workload/statefulsets/graylog.yaml
+
+  - it: adds init-plugins emptyDir volume when graylog.config.plugins.enabled is true
+    set:
+      graylog.config.plugins.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: init-plugins
+            emptyDir: {}
+        template: workload/statefulsets/graylog.yaml
+
+  - it: does NOT add init-plugins volume when graylog.config.plugins.enabled is false
+    set:
+      graylog.config.plugins.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: init-plugins
+            emptyDir: {}
+        template: workload/statefulsets/graylog.yaml
+
+  # Regression guard for the imagePullSecrets schema (issue #84): empty by default (ct lint never catches it)
+  - it: renders global.imagePullSecrets into the pod spec
+    set:
+      global.imagePullSecrets:
+        - name: my-pull-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: my-pull-secret
+        template: workload/statefulsets/graylog.yaml
+
+  - it: prefers graylog.image.imagePullSecrets over global.imagePullSecrets
+    set:
+      global.imagePullSecrets:
+        - name: global-secret
+      graylog.image.imagePullSecrets:
+        - name: graylog-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: graylog-secret
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits imagePullSecrets when none are set
+    asserts:
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+        template: workload/statefulsets/graylog.yaml

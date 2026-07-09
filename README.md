@@ -9,4 +9,4 @@ Official open source Helm charts for Graylog.
 * examples - example values files and Kubernetes manifests
 
 ---
-<small>&copy; 2025 <a href="https://graylog.org">Graylog, Inc.</a></small>
+<small>&copy; 2026 <a href="https://graylog.org">Graylog, Inc.</a></small>
