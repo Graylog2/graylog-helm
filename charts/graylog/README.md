@@ -433,8 +433,8 @@ helm upgrade --install graylog graylog/graylog --namespace graylog --reuse-value
 
 ## Back Up and Restore MongoDB
 
-To take a manual `mongodump` backup of Graylog's MongoDB database and restore it
-with `mongorestore`, see [docs/mongodb-backup-restore.md](../../docs/mongodb-backup-restore.md).
+See [the included guide](../../docs/mongodb-backup-restore.md) if you need to take a manual `mongodump` backup of 
+Graylog's MongoDB database and restore it with `mongorestore`.
 
 # Uninstall
 ```sh

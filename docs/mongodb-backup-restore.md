@@ -15,8 +15,8 @@ It applies to the MongoDB replica set deployed by this chart (the default
 
 - `kubectl` access to the cluster and namespace where Graylog is installed.
 - `jq` installed locally (used to decode the connection secret).
-- Enough disk space for the dump, both inside the temporary pod and — if you
-  copy it out — on your local machine.
+- Enough disk space for the dump, both inside the temporary pod and optionally
+  on your local machine (only if you need to copy it out).
 
 ## Back up
 
