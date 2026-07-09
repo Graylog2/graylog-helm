@@ -77,3 +77,34 @@ tests:
             name: init-plugins
             emptyDir: {}
         template: workload/statefulsets/graylog.yaml
+
+  # Regression guard for the imagePullSecrets schema (issue #84): empty by default (ct lint never catches it)
+  - it: renders global.imagePullSecrets into the pod spec
+    set:
+      global.imagePullSecrets:
+        - name: my-pull-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: my-pull-secret
+        template: workload/statefulsets/graylog.yaml
+
+  - it: prefers graylog.image.imagePullSecrets over global.imagePullSecrets
+    set:
+      global.imagePullSecrets:
+        - name: global-secret
+      graylog.image.imagePullSecrets:
+        - name: graylog-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: graylog-secret
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits imagePullSecrets when none are set
+    asserts:
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+        template: workload/statefulsets/graylog.yaml
