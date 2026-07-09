@@ -289,19 +289,6 @@ datanode:
     fsGroupChangePolicy: "OnRootMismatch"
     seccompProfile:
       type: RuntimeDefault
-  initContainerImage:
-    repository: "busybox"
-    tag: "latest"
-    imagePullPolicy: IfNotPresent
-  initContainerSecurityContext:
-    runAsUser: 0
-    allowPrivilegeEscalation: false
-    readOnlyRootFilesystem: true
-    capabilities:
-      drop: ["ALL"]
-      add: ["CHOWN", "DAC_OVERRIDE"]
-    seccompProfile:
-      type: RuntimeDefault
   containerSecurityContext:
     allowPrivilegeEscalation: false
     capabilities:

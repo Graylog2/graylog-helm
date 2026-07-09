@@ -51,27 +51,6 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- $dataMountPath := .Values.datanode.persistence.data.mountPath | default "/var/lib/graylog-datanode" }}
-      initContainers:
-        - name: data-chown
-          image: "{{ .Values.datanode.initContainerImage.repository }}:{{ .Values.datanode.initContainerImage.tag }}"
-          imagePullPolicy: {{ .Values.datanode.initContainerImage.imagePullPolicy }}
-          {{- with .Values.datanode.initContainerSecurityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          command:
-            - sh
-            - -c
-            - |
-              mkdir -p \
-                {{ $dataMountPath }}/opensearch/config \
-                {{ $dataMountPath }}/opensearch/data \
-                {{ $dataMountPath }}/opensearch/logs
-              chown -R 999:999 {{ $dataMountPath }}
-          volumeMounts:
-            - name: data
-              mountPath: {{ $dataMountPath | quote }}
       containers:
         - name: graylog-datanode
           image: {{ include "graylog.datanode.image" . }}
