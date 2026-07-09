@@ -178,7 +178,7 @@ tests:
           path: spec.template.spec.containers[0].securityContext
         template: workload/statefulsets/graylog.yaml
 
-  - it: forces readOnlyRootFilesystem on copy-plugin init containers
+  - it: defaults readOnlyRootFilesystem to true on copy-plugin init containers
     set:
       graylog.config.plugins.enabled: true
       graylog.plugins:
@@ -197,6 +197,28 @@ tests:
           path: spec.template.spec.initContainers[1].securityContext.seccompProfile
           value:
             type: RuntimeDefault
+        template: workload/statefulsets/graylog.yaml
+
+  # The default is only applied when the key is absent (hasKey), so an explicit
+  # false is preserved rather than being overwritten back to true.
+  - it: preserves an explicit readOnlyRootFilesystem false on copy-plugin init containers
+    set:
+      graylog.config.plugins.enabled: true
+      graylog.initContainerSecurityContext:
+        readOnlyRootFilesystem: false
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      graylog.plugins:
+        - name: my-plugin
+          image: example/my-plugin:1.0.0
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.readOnlyRootFilesystem
+          value: false
         template: workload/statefulsets/graylog.yaml
 
   - it: omits copy-plugin securityContext when graylog.initContainerSecurityContext is set to null
