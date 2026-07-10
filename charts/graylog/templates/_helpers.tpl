@@ -383,7 +383,7 @@ Graylog External URI
 
 {{/*
 GeoIP update JobSpec
-usage: {{ list $geoSecretName $claimName $podIndex | include "graylog.geoip.job.spec" | indent }}
+usage: {{ list $geoSecretName $claimName $podIndex $podSecCtx $conSecCtx | include "graylog.geoip.job.spec" | indent }}
 */}}
 {{- define "graylog.geoip.job.spec" }}
 backoffLimit: 2
