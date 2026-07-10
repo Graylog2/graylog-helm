@@ -1,0 +1,55 @@
+suite: geoip update CronJob
+templates:
+  - workload/cronjobs/geoip.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # The geoip job spec pulls its security contexts from the graylog values and
+  # threads them through the graylog.geoip.job.spec helper as positional args.
+  # Pin down that plumbing so the arg order can't silently drift.
+  - it: propagates graylog pod/container securityContexts into the CronJob job spec
+    set:
+      graylog.replicas: 1
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.postInstallRun: false
+    asserts:
+      # doc 0 is the geoip Secret, doc 1 is the per-replica CronJob
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext
+          value:
+            runAsUser: 1100
+            runAsGroup: 1100
+            runAsNonRoot: true
+            fsGroup: 1100
+            seccompProfile:
+              type: RuntimeDefault
+        documentIndex: 1
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext
+          value:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE"]
+            seccompProfile:
+              type: RuntimeDefault
+        documentIndex: 1
+
+  - it: omits securityContexts from the job spec when graylog contexts are empty
+    set:
+      graylog.replicas: 1
+      graylog.podSecurityContext: null
+      graylog.containerSecurityContext: null
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.postInstallRun: false
+    asserts:
+      - notExists:
+          path: spec.jobTemplate.spec.template.spec.securityContext
+        documentIndex: 1
+      - notExists:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext
+        documentIndex: 1

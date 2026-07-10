@@ -383,20 +383,24 @@ Graylog External URI
 
 {{/*
 GeoIP update JobSpec
-usage: {{ list $geoSecretName $claimName $podIndex | include "graylog.geoip.job.spec" | indent }}
+usage: {{ list $geoSecretName $claimName $podIndex $podSecCtx $conSecCtx | include "graylog.geoip.job.spec" | indent }}
 */}}
 {{- define "graylog.geoip.job.spec" }}
 backoffLimit: 2
 activeDeadlineSeconds: 900
 template:
   spec:
+    {{- with index . 3 }}
     securityContext:
-      runAsUser: 1100
-      runAsGroup: 1100
-      fsGroup: 1100
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     containers:
       - name: geoipupdate
         image: maxmindinc/geoipupdate:latest
+        {{- with index . 4 }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         envFrom:
           - secretRef:
               name: {{ index . 0 }}

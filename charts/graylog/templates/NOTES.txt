@@ -19,6 +19,13 @@ SUMMARY
   {{- end }}
   {{- end }}
 
+  {{- if or (.Values.graylog.podSecurityContext | empty) (.Values.graylog.podSecurityContext.fsGroup | empty) }}
+
+  WARNING: graylog.podSecurityContext.fsGroup is not set. The Graylog application runs as a non-root user and
+  relies on fsGroup to write its persistent volume; without it, Graylog may fail to start on storage that enforces
+  volume ownership (e.g. AWS EBS). See the "Hardened Environments" section of the README before opting out.
+  {{- end }}
+
   Use the following command to list all the resources deployed with this release:
 
     helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}

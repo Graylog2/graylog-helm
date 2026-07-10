@@ -23,6 +23,7 @@ Official Helm chart for Graylog.
   * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
   * [Add inputs](#add-inputs)
   * [Enable TLS](#enable-tls)
+* [Hardened Environments](#hardened-environments)
 * [Using External Resources](#using-external-resources)
   * [Managing Secrets Externally](#managing-secrets-externally)
   * [Bring Your Own MongoDB](#bring-your-own-mongodb)
@@ -386,6 +387,23 @@ Use the following paths when enabling the Geo-location processor in the Graylog 
 
 - Path to the city database: `/usr/share/graylog/data/geolocation/GeoLite2-City.mmdb`
 - Path to the ASN database: `/usr/share/graylog/data/geolocation/GeoLite2-ASN.mmdb`
+
+# Hardened Environments
+
+All workloads run with tightened pod and container security contexts by default (non-root where possible, dropped
+capabilities, and `seccompProfile: RuntimeDefault`). The Graylog application is compliant with the Kubernetes
+[`restricted` Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
+
+Two components cannot yet meet `restricted` and need an exemption if you enforce it:
+
+- **DataNode** must currently start as root to prepare its data directory before dropping privileges to a non-root
+  user. We are working on updating the entrypoint upstream to remove this requirement; until then, the DataNode
+  requires the `baseline` level (not `restricted`) or a namespace exemption.
+- **MongoDB**, when provisioned by the MCK operator, runs pods that are not `restricted`-compliant. Either exempt
+  them, or [bring your own MongoDB](#bring-your-own-mongodb) for hardened environments.
+
+If you enforce [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/), set the
+namespace to `baseline` rather than `restricted`, or apply the exemptions above.
 
 # Using External Resources
 
