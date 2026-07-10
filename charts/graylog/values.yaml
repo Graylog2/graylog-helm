@@ -178,6 +178,7 @@ graylog:
     enabled: false
     minAvailable: 1
   podSecurityContext:
+    # fsGroup is required to make mounted volumes writable
     runAsUser: 1100
     runAsGroup: 1100
     runAsNonRoot: true
