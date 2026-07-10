@@ -286,15 +286,18 @@ datanode:
     enabled: false
     minAvailable: 2
   podSecurityContext:
+    runAsUser: 999
+    runAsGroup: 999
+    runAsNonRoot: true
     fsGroup: 999
     fsGroupChangePolicy: "OnRootMismatch"
     seccompProfile:
       type: RuntimeDefault
   containerSecurityContext:
+    runAsNonRoot: true
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]
-      add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
     seccompProfile:
       type: RuntimeDefault
   podAnnotations: {}

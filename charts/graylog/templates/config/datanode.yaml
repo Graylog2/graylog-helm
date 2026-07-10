@@ -3,6 +3,10 @@ kind: ConfigMap
 metadata:
   name: {{ include "graylog.datanode.configmap.name" . }}
 data:
+  # Required by the datanode entrypoint to take the non-root startup path
+  # (mkdir + chmod instead of chown + setpriv). Ignored when the container
+  # runs as root. See graylog-docker entrypoint.sh (PR #306).
+  GDN_RUN_AS_NONROOT: "true"
   JAVA_OPTS: {{ .Values.datanode.config.javaOpts | quote }}
   GRAYLOG_DATANODE_NODE_ID_FILE: {{ .Values.datanode.config.nodeIdFile | default "/var/lib/graylog-datanode/node-id" | quote }}
   GRAYLOG_DATANODE_OPENSEARCH_HEAP: {{ .Values.datanode.config.opensearchHeap | quote }}

@@ -432,20 +432,21 @@ helm upgrade --install graylog graylog/graylog --namespace graylog --reuse-value
 
 # Hardened Environments
 
-All workloads run with tightened pod and container security contexts by default (non-root where possible, dropped
-capabilities, and `seccompProfile: RuntimeDefault`). The Graylog application is compliant with the Kubernetes
+All Graylog workloads run with tightened pod and container security contexts by default (non-root, dropped capabilities,
+and `seccompProfile: RuntimeDefault`). Both the Graylog application and the DataNode are compliant with the Kubernetes
 [`restricted` Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
 
-Two components cannot yet meet `restricted` and need an exemption if you enforce it:
+> [!NOTE]
+> If you enforce [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) at the
+> `restricted` level and let the chart provision MongoDB, you might need to exempt the MongoDB pods (or
+> [bring your own MongoDB](#bring-your-own-mongodb)). With an external MongoDB, all chart-managed workloads are
+> `restricted`-compliant.
 
-- **DataNode** must currently start as root to prepare its data directory before dropping privileges to a non-root
-  user. We are working on updating the entrypoint upstream to remove this requirement; until then, the DataNode
-  requires the `baseline` level (not `restricted`) or a namespace exemption.
-- **MongoDB**, when provisioned by the MCK operator, runs pods that are not `restricted`-compliant. Either exempt
-  them, or [bring your own MongoDB](#bring-your-own-mongodb) for hardened environments.
-
-If you enforce [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/), set the
-namespace to `baseline` rather than `restricted`, or apply the exemptions above.
+> [!NOTE]
+> The DataNode runs non-root by relying on `fsGroup` for volume ownership and setting `GDN_RUN_AS_NONROOT`, which
+> tells the container entrypoint to skip its root-only privilege-drop path. This requires a DataNode image whose
+> entrypoint supports `GDN_RUN_AS_NONROOT` (graylog-datanode `7.1`+). If you pin an older `datanode.image.tag`,
+> override `datanode.podSecurityContext` and `datanode.containerSecurityContext` to run the container as root.
 
 # Maintenance
 
