@@ -1,0 +1,51 @@
+suite: graylog PodDisruptionBudget
+templates:
+  - policy/pdb/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: does not render by default (podDisruptionBudget.enabled is false)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render when graylog.enabled is false
+    set:
+      graylog.enabled: false
+      graylog.podDisruptionBudget.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders when enabled and minAvailable is below the replica count
+    set:
+      graylog.podDisruptionBudget.enabled: true
+      graylog.replicas: 3
+      graylog.podDisruptionBudget.minAvailable: 1
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.minAvailable
+          value: 1
+
+  - it: fails when minAvailable equals the replica count
+    set:
+      graylog.podDisruptionBudget.enabled: true
+      graylog.replicas: 2
+      graylog.podDisruptionBudget.minAvailable: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "must be less than graylog.replicas"
+
+  - it: fails when minAvailable exceeds the replica count
+    set:
+      graylog.podDisruptionBudget.enabled: true
+      graylog.replicas: 1
+      graylog.podDisruptionBudget.minAvailable: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "must be less than graylog.replicas"
