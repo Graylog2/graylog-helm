@@ -66,3 +66,4 @@ annotations:
 version: 1.0.0
 # This is the version number of the Graylog application bundled with this chart.
 appVersion: "7.0"
+# End of file. Thanks for scrolling.
