@@ -23,6 +23,8 @@ Official Helm chart for Graylog.
   * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
   * [Add inputs](#add-inputs)
   * [Enable TLS](#enable-tls)
+  * [Enable Geolocation](#enable-geolocation)
+  * [Enable Data Tiering](#enable-data-tiering)
 * [Using External Resources](#using-external-resources)
   * [Managing Secrets Externally](#managing-secrets-externally)
   * [Bring Your Own MongoDB](#bring-your-own-mongodb)
@@ -70,7 +72,7 @@ You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's in
 
 ### cert-manager
 
-You can always [bring your own certificates](#bring-your-own-certificate-ingress-controller-recommended),
+You can always [bring your own certificates](#option-1-bring-your-own-certificate-with-ingress-controller-recommended),
 but using `cert-manager` can simplify TLS setup and certificate renewal considerably.
 
 Make sure you have [Ingress Controller](#ingress-controller) installed, and that `ingress.enabled` is set to `true`.
@@ -388,6 +390,40 @@ Use the following paths when enabling the Geo-location processor in the Graylog 
 - Path to the city database: `/usr/share/graylog/data/geolocation/GeoLite2-City.mmdb`
 - Path to the ASN database: `/usr/share/graylog/data/geolocation/GeoLite2-ASN.mmdb`
 
+## Enable Data Tiering
+
+Data tiering moves older index data into a lower-cost **warm tier** backed by S3-compatible object storage, where it is kept as 
+searchable snapshots. This is a [Graylog Enterprise](https://go2docs.graylog.org/current/setting_up_graylog/data_tiering.htm)
+feature and requires an Enterprise license.
+
+The chart configures the DataNode S3 client through the `datanode.config.s3ClientDefault*` values: `s3ClientDefaultEndpoint`,
+`s3ClientDefaultAccessKey`, and `s3ClientDefaultSecretKey` must all be set together.
+
+The defaults `s3ClientDefaultProtocol: "http"`, `s3ClientDefaultPathStyleAccess: "true"` target S3-compatible stores such as MinIO.
+For actual AWS S3, override the protocol and addressing style:
+
+```sh
+helm upgrade -i graylog graylog/graylog -n graylog --reuse-values \
+  --set datanode.config.s3ClientDefaultEndpoint="s3.<region>.amazonaws.com" \
+  --set datanode.config.s3ClientDefaultRegion="<region>" \
+  --set datanode.config.s3ClientDefaultProtocol="https" \
+  --set datanode.config.s3ClientDefaultPathStyleAccess="false" \
+  --set datanode.config.s3ClientDefaultAccessKey="<access-key>" \
+  --set datanode.config.s3ClientDefaultSecretKey="<secret-key>"
+```
+
+> [!IMPORTANT]
+> `datanode.config.nodeSearchCacheSize` reserves space on the DataNode data volume for the searchable-snapshot cache.
+> It must fit within `datanode.persistence.data.size` alongside hot index data, or the DataNode fails preflight with 
+> `not enough usable space for the node search cache`. Keep the data volume comfortably larger than the cache.
+
+Once the Data Node is running, create the warm-tier repository and enable the warm tier on an index set from the Graylog web UI. 
+See [Create a Warm Tier on Data Node](https://go2docs.graylog.org/current/setting_up_graylog/create_warm_tier_on_data_node.htm) 
+for the full workflow.
+
+For step-by-step walkthroughs of both AWS S3 and MinIO, see 
+the [Data Tiering guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/data-tiering.md).
+
 # Using External Resources
 
 ## Managing Secrets Externally
@@ -451,8 +487,8 @@ namespace to `baseline` rather than `restricted`, or apply the exemptions above.
 
 ## Back Up and Restore MongoDB
 
-See [the included guide](../../docs/mongodb-backup-restore.md) if you need to take a manual `mongodump` backup of 
-Graylog's MongoDB database and restore it with `mongorestore`.
+See [the included guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/mongodb-backup-restore.md) if you need 
+to take a manual `mongodump` backup of Graylog's MongoDB database and restore it with `mongorestore`.
 
 # Uninstall
 ```sh
