@@ -299,6 +299,24 @@ have to pass (root, group) dicts around:
 {{- end }}
 
 {{/*
+Validate datanode node-group role coverage. Hard-fails when no group is eligible to be
+a cluster manager (i.e. every group sets explicit roles and none includes
+cluster_manager). A group with empty roles uses the Data Node default, which already
+includes cluster_manager, so the all-defaults install never trips this.
+*/}}
+{{- define "graylog.datanode.validate" -}}
+{{- $manager := false -}}
+{{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- if or (empty $g.roles) (has "cluster_manager" $g.roles) -}}
+{{- $manager = true -}}
+{{- end -}}
+{{- end -}}
+{{- if not $manager -}}
+{{- fail "datanode: no node group is eligible to be a cluster_manager. Add 'cluster_manager' to datanode.roles or to at least one datanode.extraNodeGroups entry's roles." -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Graylog Datanode service name (shared across all node groups)
 */}}
 {{- define "graylog.datanode.service.name" -}}

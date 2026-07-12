@@ -1,4 +1,5 @@
 {{- if .Values.datanode.enabled }}
+{{- include "graylog.datanode.validate" . }}
 {{- range include "graylog.datanode.groups" $ | fromYamlArray }}
 ---
 apiVersion: apps/v1
