@@ -253,7 +253,7 @@ datanode:
       existingClaim: ""
       mountPath: ""
       accessModes: []
-      size: "8Gi"
+      size: "20Gi"
       annotations: {}
       labels: {}
       selector: {}
