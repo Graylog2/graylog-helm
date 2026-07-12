@@ -1,26 +1,34 @@
-{{ if .Values.datanode.enabled  }}
+{{- if .Values.datanode.enabled }}
+{{- range include "graylog.datanode.groups" $ | fromYamlArray }}
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "graylog.datanode.name" . }}
+  name: {{ .fullname }}
   labels:
     app: graylog-datanode
-    {{- include "graylog.labels" . | nindent 4 }}
+    {{- with .groupLabel }}
+    graylog-datanode-group: {{ . }}
+    {{- end }}
+    {{- include "graylog.labels" $ | nindent 4 }}
   annotations:
-    {{- include "graylog.annotations" . | nindent 4 }}
+    {{- include "graylog.annotations" $ | nindent 4 }}
 spec:
-  replicas: {{ include "graylog.datanode.replicas" . | int }}
-  serviceName: {{ include "graylog.datanode.service.name" . }}
+  replicas: {{ .replicas | int }}
+  serviceName: {{ include "graylog.datanode.service.name" $ }}
   selector:
     matchLabels:
       app: graylog-datanode
-      {{- include "graylog.selectorLabels" . | nindent 6 }}
+      {{- with .groupLabel }}
+      graylog-datanode-group: {{ . }}
+      {{- end }}
+      {{- include "graylog.selectorLabels" $ | nindent 6 }}
   updateStrategy:
-    type: {{ .Values.datanode.updateStrategy.type | default "RollingUpdate" | quote }}
-    {{- if .Values.datanode.updateStrategy.type | default "RollingUpdate" | eq "RollingUpdate" }}
+    type: {{ .updateStrategy.type | default "RollingUpdate" | quote }}
+    {{- if .updateStrategy.type | default "RollingUpdate" | eq "RollingUpdate" }}
     rollingUpdate:
-      maxUnavailable: {{ .Values.datanode.updateStrategy.rollingUpdate.maxUnavailable | default 1 }}
-      {{- with .Values.datanode.updateStrategy.rollingUpdate.partition }}
+      maxUnavailable: {{ .updateStrategy.rollingUpdate.maxUnavailable | default 1 }}
+      {{- with .updateStrategy.rollingUpdate.partition }}
       partition: {{ int . }}
       {{- end }}
     {{- end }}
@@ -28,159 +36,163 @@ spec:
     metadata:
       labels:
         app: graylog-datanode
-        {{- include "graylog.selectorLabels" . | nindent 8 }}
+        {{- with .groupLabel }}
+        graylog-datanode-group: {{ . }}
+        {{- end }}
+        {{- include "graylog.selectorLabels" $ | nindent 8 }}
       annotations:
-        checksum/config: {{ include "graylog.datanode.configChecksum" . }}
-        checksum/secret: {{ include "graylog.secretsChecksum" . }}
-      {{- with .Values.datanode.podAnnotations }}
+        checksum/config: {{ include "graylog.datanode.configChecksum" $ }}
+        checksum/secret: {{ include "graylog.secretsChecksum" $ }}
+      {{- with .podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
       dnsPolicy: ClusterFirst
-      {{- with .Values.datanode.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      {{- with $.Values.datanode.image.imagePullSecrets | default $.Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.datanode.nodeSelector }}
+      {{- with .nodeSelector }}
       nodeSelector: {{ . | toYaml | nindent 8 }}
       {{- end }}
-      {{- if .Values.serviceAccount.create }}
-      serviceAccountName: {{ include "graylog.serviceAccountName" . }}
+      {{- if $.Values.serviceAccount.create }}
+      serviceAccountName: {{ include "graylog.serviceAccountName" $ }}
       {{- end }}
-      {{- with .Values.datanode.podSecurityContext }}
+      {{- with .podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: graylog-datanode
-          image: {{ include "graylog.datanode.image" . }}
-          imagePullPolicy: {{ .Values.datanode.image.imagePullPolicy }}
-          {{- with .Values.datanode.containerSecurityContext }}
+          image: {{ include "graylog.datanode.image" $ }}
+          imagePullPolicy: {{ $.Values.datanode.image.imagePullPolicy }}
+          {{- with .containerSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           envFrom:
             - configMapRef:
-                name: {{ include "graylog.datanode.configmap.name" . }}
+                name: {{ .configmapName }}
             - secretRef:
-                name: {{ include "graylog.datanode.secretsName" . }}
+                name: {{ include "graylog.datanode.secretsName" $ }}
           env:
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
             - name: GRAYLOG_DATANODE_NODE_NAME
-              value: $(POD_NAME).{{ include "graylog.datanode.service.name" . }}.{{ .Release.Namespace }}.svc.cluster.local
+              value: $(POD_NAME).{{ include "graylog.datanode.service.name" $ }}.{{ $.Release.Namespace }}.svc.cluster.local
             - name: GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS
-              value: {{ include "graylog.datanode.hosts" . }}
+              value: {{ include "graylog.datanode.hosts" $ }}
             - name: GRAYLOG_DATANODE_PASSWORD_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "graylog.secretsName" . }}
+                  name: {{ include "graylog.secretsName" $ }}
                   key: GRAYLOG_PASSWORD_SECRET
             - name: GRAYLOG_DATANODE_MONGODB_URI
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "graylog.secretsName" . }}
+                  name: {{ include "graylog.secretsName" $ }}
                   key: GRAYLOG_MONGODB_URI
-            {{- include "graylog.env" .Values.datanode | indent 12 }}
+            {{- include "graylog.env" . | indent 12 }}
           ports:
             - name: api
-              containerPort: {{ .Values.datanode.service.ports.api | default 8999 | int }}
+              containerPort: {{ .service.ports.api | default 8999 | int }}
               protocol: TCP
             - name: data
-              containerPort: {{ .Values.datanode.service.ports.data | default 9200 | int }}
+              containerPort: {{ .service.ports.data | default 9200 | int }}
               protocol: TCP
             - name: config
-              containerPort: {{ .Values.datanode.service.ports.config | default 9300 | int }}
+              containerPort: {{ .service.ports.config | default 9300 | int }}
               protocol: TCP
           volumeMounts:
             - name: "data"
-              mountPath: {{ .Values.datanode.persistence.data.mountPath | default "/var/lib/graylog-datanode" | quote }}
+              mountPath: {{ .persistence.data.mountPath | default "/var/lib/graylog-datanode" | quote }}
             - name: native-libs
-              mountPath: {{ .Values.datanode.persistence.nativeLibs.mountPath | default "/native_libs" | quote }}
-          {{- if .Values.datanode.livenessProbe.enabled }}
+              mountPath: {{ .persistence.nativeLibs.mountPath | default "/native_libs" | quote }}
+          {{- if .livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
-              port: {{ .Values.datanode.service.ports.api | default 8999 | int }}
-            initialDelaySeconds: {{ .Values.datanode.livenessProbe.initialDelaySeconds | int }}
-            periodSeconds: {{ .Values.datanode.livenessProbe.periodSeconds | int }}
-            timeoutSeconds: {{ .Values.datanode.livenessProbe.timeoutSeconds | int }}
-            failureThreshold: {{ .Values.datanode.livenessProbe.failureThreshold | int }}
-            successThreshold: {{ .Values.datanode.livenessProbe.successThreshold | int }}
+              port: {{ .service.ports.api | default 8999 | int }}
+            initialDelaySeconds: {{ .livenessProbe.initialDelaySeconds | int }}
+            periodSeconds: {{ .livenessProbe.periodSeconds | int }}
+            timeoutSeconds: {{ .livenessProbe.timeoutSeconds | int }}
+            failureThreshold: {{ .livenessProbe.failureThreshold | int }}
+            successThreshold: {{ .livenessProbe.successThreshold | int }}
           {{- end }}
-          {{- if .Values.datanode.readinessProbe.enabled }}
+          {{- if .readinessProbe.enabled }}
           readinessProbe:
             tcpSocket:
-              port: {{ .Values.datanode.service.ports.api | default 8999 | int }}
-            initialDelaySeconds: {{ .Values.datanode.readinessProbe.initialDelaySeconds | int }}
-            periodSeconds: {{ .Values.datanode.readinessProbe.periodSeconds | int }}
-            timeoutSeconds: {{ .Values.datanode.readinessProbe.timeoutSeconds | int }}
-            failureThreshold: {{ .Values.datanode.readinessProbe.failureThreshold | int }}
-            successThreshold: {{ .Values.datanode.readinessProbe.successThreshold | int }}
+              port: {{ .service.ports.api | default 8999 | int }}
+            initialDelaySeconds: {{ .readinessProbe.initialDelaySeconds | int }}
+            periodSeconds: {{ .readinessProbe.periodSeconds | int }}
+            timeoutSeconds: {{ .readinessProbe.timeoutSeconds | int }}
+            failureThreshold: {{ .readinessProbe.failureThreshold | int }}
+            successThreshold: {{ .readinessProbe.successThreshold | int }}
           {{- end }}
-          {{- with .Values.datanode.resources }}
+          {{- with .resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       tolerations:
-      {{- with .Values.datanode.tolerations }}
+      {{- with .tolerations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       affinity:
-      {{- with .Values.datanode.affinity }}
+      {{- with .affinity }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if and .Values.datanode.persistence.data.enabled .Values.datanode.persistence.nativeLibs.enabled | not }}
+      {{- if and .persistence.data.enabled .persistence.nativeLibs.enabled | not }}
       volumes:
-        {{- if not .Values.datanode.persistence.nativeLibs.enabled }}
+        {{- if not .persistence.nativeLibs.enabled }}
         - name: native-libs
           emptyDir: {}
         {{- end }}
-        {{- if not .Values.datanode.persistence.data.enabled }}
+        {{- if not .persistence.data.enabled }}
         - name: data
           emptyDir: {}
         {{- end }}
       {{- end }}
-  {{- if or .Values.datanode.persistence.data.enabled .Values.datanode.persistence.nativeLibs.enabled }}
+  {{- if or .persistence.data.enabled .persistence.nativeLibs.enabled }}
   volumeClaimTemplates:
-    {{- if .Values.datanode.persistence.data.enabled }}
+    {{- if .persistence.data.enabled }}
     - metadata:
         name: data
       spec:
         accessModes:
-        {{- if .Values.datanode.persistence.data.accessModes }}
-        {{- range .Values.datanode.persistence.data.accessModes }}
+        {{- if .persistence.data.accessModes }}
+        {{- range .persistence.data.accessModes }}
           - {{ . | quote }}
         {{- end }}
         {{- else }}
           - "ReadWriteOnce"
         {{- end }}
-        {{- with (include "graylog.datanode.data.storageClassName" . ) }}
+        {{- with .dataStorageClass }}
         storageClassName: {{ . | quote }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.datanode.persistence.data.size | default "8Gi" | quote }}
+            storage: {{ .persistence.data.size | default "8Gi" | quote }}
     {{- end }}
-    {{- if .Values.datanode.persistence.nativeLibs.enabled }}
+    {{- if .persistence.nativeLibs.enabled }}
     - metadata:
         name: native-libs
       spec:
         accessModes:
-        {{- if .Values.datanode.persistence.nativeLibs.accessModes }}
-        {{- range .Values.datanode.persistence.nativeLibs.accessModes }}
+        {{- if .persistence.nativeLibs.accessModes }}
+        {{- range .persistence.nativeLibs.accessModes }}
           - {{ . | quote }}
         {{- end }}
         {{- else }}
           - "ReadWriteOnce"
         {{- end }}
-        {{- with (include "graylog.datanode.nativeLibs.storageClassName" . ) }}
+        {{- with .nativeLibsStorageClass }}
         storageClassName: {{ . | quote }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.datanode.persistence.nativeLibs.size | default "8Gi" | quote }}
+            storage: {{ .persistence.nativeLibs.size | default "8Gi" | quote }}
     {{- end }}
   {{- end }}
+{{- end }}
 {{- end }}

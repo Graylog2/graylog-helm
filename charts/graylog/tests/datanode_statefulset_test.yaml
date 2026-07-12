@@ -7,6 +7,7 @@ templates:
   - workload/statefulsets/datanode.yaml
   - config/datanode.yaml          # checksum/config dependency
   - config/secret/secrets.yaml    # checksum/secret dependency
+  - policy/pdb/datanode.yaml      # node-group PDB coverage
 release:
   name: graylog
   namespace: graylog
@@ -55,3 +56,193 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].securityContext
         template: workload/statefulsets/datanode.yaml
+
+  # ---------------------------------------------------------------------------
+  # Node groups (issue #107): role delegation across dedicated StatefulSets.
+  # The top-level datanode block is the primary group; datanode.extraNodeGroups
+  # (a map keyed by name) adds dedicated groups that inherit and override it.
+  # ---------------------------------------------------------------------------
+
+  # Back-compat: empty extraNodeGroups renders one StatefulSet with the legacy
+  # (unsuffixed) name, no node-group label, and (with roles unset) no node_roles.
+  - it: renders a single legacy-named datanode StatefulSet with no extra groups
+    asserts:
+      - equal:
+          path: metadata.name
+          value: graylog-datanode
+        template: workload/statefulsets/datanode.yaml
+      - notExists:
+          path: metadata.labels['graylog-datanode-group']
+        template: workload/statefulsets/datanode.yaml
+      - notExists:
+          path: data.GRAYLOG_DATANODE_NODE_ROLES
+        template: config/datanode.yaml
+
+  - it: back-compat seed hosts span the default replica count
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[2].name
+          value: GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "graylog-datanode-0.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-1.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-2.graylog-datanode-svc.graylog.svc.cluster.local"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: emits node_roles on the primary group when datanode.roles is set
+    set:
+      datanode.roles: [cluster_manager, data, ingest, remote_cluster_client]
+    asserts:
+      - equal:
+          path: data.GRAYLOG_DATANODE_NODE_ROLES
+          value: "cluster_manager,data,ingest,remote_cluster_client"
+        template: config/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode-config
+
+  - it: labels the primary group `default` once extra groups exist
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+          replicas: 2
+    asserts:
+      - equal:
+          path: metadata.labels['graylog-datanode-group']
+          value: default
+        template: workload/statefulsets/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode
+      - equal:
+          path: spec.selector.matchLabels['graylog-datanode-group']
+          value: default
+        template: workload/statefulsets/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode
+
+  - it: renders a StatefulSet per extra group with suffixed name and group label
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+          replicas: 2
+          config:
+            opensearchHeap: "4g"
+    asserts:
+      - equal:
+          path: metadata.labels['graylog-datanode-group']
+          value: search
+        template: workload/statefulsets/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode-search
+      - equal:
+          path: spec.replicas
+          value: 2
+        template: workload/statefulsets/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode-search
+
+  - it: extra group inherits top-level resources it does not override
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+          replicas: 2
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 5Gi
+        template: workload/statefulsets/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode-search
+
+  - it: emits per-group node_roles and heap in each group's ConfigMap
+    set:
+      datanode.roles: [cluster_manager, data, ingest, remote_cluster_client]
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+          config:
+            opensearchHeap: "3g"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_DATANODE_NODE_ROLES
+          value: "cluster_manager,data,ingest,remote_cluster_client"
+        template: config/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode-config
+      - equal:
+          path: data.GRAYLOG_DATANODE_NODE_ROLES
+          value: "search"
+        template: config/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode-search-config
+      - equal:
+          path: data.GRAYLOG_DATANODE_OPENSEARCH_HEAP
+          value: "3g"
+        template: config/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode-search-config
+
+  - it: seed hosts span the primary and every extra group
+    set:
+      datanode.replicas: 2
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+          replicas: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "graylog-datanode-0.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-1.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-search-0.graylog-datanode-svc.graylog.svc.cluster.local"
+        template: workload/statefulsets/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode
+
+  - it: supports hyphenated extra group names
+    set:
+      datanode.extraNodeGroups:
+        warm-tier:
+          roles: [search]
+          replicas: 1
+    asserts:
+      - equal:
+          path: metadata.labels['graylog-datanode-group']
+          value: warm-tier
+        template: workload/statefulsets/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-datanode-warm-tier
+
+  - it: renders a PDB per group with distinct suffixed names and selectors
+    set:
+      datanode.podDisruptionBudget.enabled: true
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+          replicas: 2
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels['graylog-datanode-group']
+          value: default
+        template: policy/pdb/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-pdb-datanode
+      - equal:
+          path: spec.selector.matchLabels['graylog-datanode-group']
+          value: search
+        template: policy/pdb/datanode.yaml
+        documentSelector:
+          path: metadata.name
+          value: graylog-pdb-datanode-search
