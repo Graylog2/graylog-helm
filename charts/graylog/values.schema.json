@@ -10,7 +10,7 @@
       "oneOf": [
         {
           "type": "string",
-          "enum": [ "aws", "aws-managed-sc", "azure", "gcp", "microk8s", "" ]
+          "enum": [ "aws", "azure", "gcp", "microk8s", "" ]
         },
         { "type": "null" }
       ]
@@ -40,7 +40,7 @@
             "required": ["name"]
           }
         },
-        "storageClass": { "type": "string", "description": "Default StorageClass applied to PersistentVolumeClaims when a workload does not set its own." },
+        "storageClass": { "type": "string", "description": "Default StorageClass to apply to PersistentVolumeClaims when a workload does not set its own." },
         "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" }
       }
     },
@@ -135,7 +135,7 @@
           "description": "Graylog server configuration. These values can be found in server.conf",
           "properties": {
             "rootUsername": { "type": "string", "description": "Username of the initial (root) Graylog admin user (server.conf: root_username)." },
-            "rootPassword": { "type": "string", "description": "Password for the initial admin user. Stored in the Graylog secret; leave empty to supply it via global.existingSecretName." },
+            "rootPassword": { "type": "string", "description": "Password for the initial admin user. Leave empty to auto-generate a randomized value." },
             "customSecretPepper": { "type": "string", "description": "Secret used to salt/encrypt stored passwords (server.conf: password_secret). Auto-generated when empty; must be stable across all nodes." },
             "timezone": { "type": "string", "description": "Default timezone for the root user (server.conf: root_timezone), e.g. UTC or Europe/Berlin." },
             "selfSignedStartup": { "type": "string", "enum": [ "true", "false" ], "description": "Generate a self-signed certificate on startup when no TLS material is provided." },
@@ -458,7 +458,7 @@
     },
     "datanode": {
       "type": "object",
-      "description": "Graylog Datanode configuration",
+      "description": "Graylog DataNode configuration",
       "properties": {
         "enabled": { "type": "boolean", "description": "Deploy the Graylog Data Node StatefulSet." },
         "replicas": { "type": "integer", "minimum": 0, "description": "Number of Data Node replicas (StatefulSet pods)." },
