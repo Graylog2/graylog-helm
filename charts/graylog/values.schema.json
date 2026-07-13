@@ -50,19 +50,19 @@
       "properties": {
         "enabled": { "type": "boolean", "default": true, "description": "Deploy the Graylog server StatefulSet." },
         "enterprise": { "type": "boolean", "default": true, "description": "Use the Graylog Enterprise image and features. Set to false for Graylog Open." },
-        "replicas": { "type": "integer", "description": "Number of Graylog server replicas (StatefulSet pods)." },
+        "replicas": { "type": "integer", "minimum": 0, "description": "Number of Graylog server replicas (StatefulSet pods)." },
         "service": {
           "type": "object",
           "description": "Kubernetes Service exposing the Graylog server.",
           "properties": {
             "nameOverride": { "type": "string", "description": "Override the generated name of the Graylog Service." },
-            "type": { "type": "string", "description": "Kubernetes Service type (e.g. ClusterIP, NodePort, LoadBalancer)." },
+            "type": { "type": "string", "enum": [ "ClusterIP", "NodePort", "LoadBalancer", "ExternalName" ], "description": "Kubernetes Service type." },
             "ports": {
               "type": "object",
               "description": "Ports exposed by the Graylog Service.",
               "properties": {
-                "app": { "type": "integer", "description": "Port for the Graylog web interface and REST API." },
-                "metrics": { "type": "integer", "description": "Port exposing Graylog Prometheus metrics." }
+                "app": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Port for the Graylog web interface and REST API." },
+                "metrics": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Port exposing Graylog Prometheus metrics." }
               }
             },
             "metrics": {
@@ -81,9 +81,9 @@
             "type": "object",
             "properties": {
               "name": { "type": "string", "description": "Name of the input port (used as the Service port name)." },
-              "port": { "type": "integer", "description": "Service port to expose." },
-              "targetPort": { "type": "integer", "description": "Container port the input listens on." },
-              "protocol": { "type": "string", "description": "Network protocol for the port (TCP or UDP)." }
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Service port to expose." },
+              "targetPort": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Container port the input listens on." },
+              "protocol": { "type": "string", "enum": [ "TCP", "UDP" ], "description": "Network protocol for the port (TCP or UDP)." }
             },
             "required": [ "name", "port", "protocol" ]
           }
@@ -138,15 +138,15 @@
             "rootPassword": { "type": "string" },
             "customSecretPepper": { "type": "string" },
             "timezone": { "type": "string" },
-            "selfSignedStartup": { "type": "string" },
+            "selfSignedStartup": { "type": "string", "enum": [ "true", "false" ] },
             "serverJavaOpts": { "type": "string" },
             "extraServerJavaOpts": {
               "type": "array",
               "items": { "type": "string" }
             },
-            "leaderElectionMode": { "type": "string" },
-            "contentPacksAutoInstall": { "type": "string" },
-            "isCloud": { "type": "string" },
+            "leaderElectionMode": { "type": "string", "enum": [ "automatic", "static" ] },
+            "contentPacksAutoInstall": { "type": "string", "enum": [ "true", "false" ] },
+            "isCloud": { "type": "string", "enum": [ "true", "false" ] },
             "tls": {
               "type": "object",
               "properties": {
@@ -168,7 +168,7 @@
             "messageJournal": {
               "type": "object",
               "properties": {
-                "enabled": { "type": "string" },
+                "enabled": { "type": "string", "enum": [ "true", "false" ] },
                 "flushAge": { "type": "string" },
                 "flushInterval": { "type": "string" },
                 "maxAge": { "type": "string" },
@@ -180,8 +180,8 @@
               "type": "object",
               "properties": {
                 "connectTimeout": { "type": "string" },
-                "enableCors": { "type": "string" },
-                "enableGzip": { "type": "string" },
+                "enableCors": { "type": "string", "enum": [ "true", "false" ] },
+                "enableGzip": { "type": "string", "enum": [ "true", "false" ] },
                 "maxHeaderSize": { "type": "string" },
                 "readTimeout": { "type": "string" },
                 "threadPoolSize": { "type": "string" },
@@ -192,10 +192,10 @@
               "type": "object",
               "properties": {
                 "asyncEventbusProcessors": { "type": "string" },
-                "autoRestartInputs": { "type": "string" },
+                "autoRestartInputs": { "type": "string", "enum": [ "true", "false" ] },
                 "inputBufferProcessors": { "type": "string" },
                 "inputBufferRingSize": { "type": "string" },
-                "inputBufferWaitStrategy": { "type": "string" },
+                "inputBufferWaitStrategy": { "type": "string", "enum": [ "blocking", "sleeping", "yielding", "busy_spinning" ] },
                 "jobSchedulerConcurrencyLimits": { "type": "string" },
                 "outputBatchSize": { "type": "string" },
                 "outputFaultCountThreshold": { "type": "string" },
@@ -209,15 +209,15 @@
             "email": {
               "type": "object",
               "properties": {
-                "enabled": { "type": "string" },
+                "enabled": { "type": "string", "enum": [ "true", "false" ] },
                 "senderAddress": { "type": "string" },
                 "hostname": { "type": "string" },
                 "port": { "type": "string" },
                 "socketConnectionTimeout": { "type": "string" },
                 "socketTimeout": { "type": "string" },
-                "useAuth": { "type": "string" },
-                "useSsl": { "type": "string" },
-                "useTls": { "type": "string" },
+                "useAuth": { "type": "string", "enum": [ "true", "false" ] },
+                "useSsl": { "type": "string", "enum": [ "true", "false" ] },
+                "useTls": { "type": "string", "enum": [ "true", "false" ] },
                 "webInterfaceUrl": { "type": "string" }
               }
             },
@@ -297,7 +297,7 @@
           "properties": {
             "repository": { "type": "string", "description": "Image repository. Leave empty to use the chart default for the selected edition." },
             "tag": { "type": "string", "description": "Image tag. Leave empty to use the chart appVersion / .Values.version." },
-            "imagePullPolicy": { "type": "string", "description": "Image pull policy (Always, IfNotPresent, or Never)." },
+            "imagePullPolicy": { "type": "string", "enum": [ "Always", "IfNotPresent", "Never" ], "description": "Image pull policy." },
             "imagePullSecrets": {
               "type": "array",
               "description": "Image pull secret references for the Graylog server image.",
@@ -313,7 +313,7 @@
           "type": "object",
           "description": "StatefulSet update strategy for the Graylog server.",
           "properties": {
-            "type": { "type": ["string", "null"], "description": "Update strategy type (RollingUpdate or OnDelete)." },
+            "type": { "type": ["string", "null"], "enum": [ "RollingUpdate", "OnDelete", null ], "description": "Update strategy type." },
             "rollingUpdate": {
               "type": "object",
               "description": "Tuning for the RollingUpdate strategy.",
@@ -332,16 +332,16 @@
               "type": "object",
               "description": "Resource limits.",
               "properties": {
-                "cpu": { "type": "string", "description": "CPU limit (e.g. \"2\" or \"500m\")." },
-                "memory": { "type": "string", "description": "Memory limit (e.g. \"2Gi\")." }
+                "cpu": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "CPU limit (e.g. \"2\" or \"500m\")." },
+                "memory": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Memory limit (e.g. \"2Gi\")." }
               }
             },
             "requests": {
               "type": "object",
               "description": "Resource requests.",
               "properties": {
-                "cpu": { "type": "string", "description": "CPU request (e.g. \"1\" or \"500m\")." },
-                "memory": { "type": "string", "description": "Memory request (e.g. \"1Gi\")." }
+                "cpu": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "CPU request (e.g. \"1\" or \"500m\")." },
+                "memory": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Memory request (e.g. \"1Gi\")." }
               }
             }
           }
@@ -356,7 +356,7 @@
             "existingClaim": { "type": [ "string", "null" ], "description": "Use an existing PVC instead of creating one." },
             "mountPath": { "type": [ "string", "null" ], "description": "Path where the volume is mounted in the container." },
             "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
-            "size": { "type": [ "string", "null" ], "description": "Requested size of the PVC (e.g. \"10Gi\")." },
+            "size": { "type": [ "string", "null" ], "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Requested size of the PVC (e.g. \"10Gi\")." },
             "annotations": {
               "type": "object",
               "description": "Annotations added to the PVC."
@@ -376,11 +376,11 @@
           "description": "Liveness probe for the Graylog server container.",
           "properties": {
             "enabled": { "type": "boolean", "description": "Enable the liveness probe." },
-            "initialDelaySeconds": { "type": "integer", "description": "Seconds to wait after container start before the first probe." },
-            "periodSeconds": { "type": "integer", "description": "How often (in seconds) to perform the probe." },
-            "timeoutSeconds": { "type": "integer", "description": "Seconds after which the probe times out." },
-            "failureThreshold": { "type": "integer", "description": "Consecutive failures before the probe is considered failed." },
-            "successThreshold": { "type": "integer", "description": "Consecutive successes before the probe is considered successful." }
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "minimum": 1, "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "readinessProbe": {
@@ -388,11 +388,11 @@
           "description": "Readiness probe for the Graylog server container.",
           "properties": {
             "enabled": { "type": "boolean", "description": "Enable the readiness probe." },
-            "initialDelaySeconds": { "type": "integer", "description": "Seconds to wait after container start before the first probe." },
-            "periodSeconds": { "type": "integer", "description": "How often (in seconds) to perform the probe." },
-            "timeoutSeconds": { "type": "integer", "description": "Seconds after which the probe times out." },
-            "failureThreshold": { "type": "integer", "description": "Consecutive failures before the probe is considered failed." },
-            "successThreshold": { "type": "integer", "description": "Consecutive successes before the probe is considered successful." }
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "minimum": 1, "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "podDisruptionBudget": {
@@ -400,7 +400,7 @@
           "description": "PodDisruptionBudget for the Graylog server.",
           "properties": {
             "enabled": { "type": "boolean", "description": "Create a PodDisruptionBudget." },
-            "minAvailable": { "type": "integer", "description": "Minimum number of pods that must remain available during voluntary disruptions." }
+            "minAvailable": { "type": "integer", "minimum": 0, "description": "Minimum number of pods that must remain available during voluntary disruptions." }
           }
         },
         "podSecurityContext": {
@@ -444,7 +444,7 @@
       "description": "Graylog Datanode configuration",
       "properties": {
         "enabled": { "type": "boolean", "description": "Deploy the Graylog Data Node StatefulSet." },
-        "replicas": { "type": "integer", "description": "Number of Data Node replicas (StatefulSet pods)." },
+        "replicas": { "type": "integer", "minimum": 0, "description": "Number of Data Node replicas (StatefulSet pods)." },
         "service": {
           "type": "object",
           "description": "Kubernetes Service exposing the Data Node.",
@@ -453,9 +453,9 @@
               "type": "object",
               "description": "Ports exposed by the Data Node Service.",
               "properties": {
-                "api": { "type": "integer", "description": "Data Node REST API port." },
-                "data": { "type": "integer", "description": "OpenSearch data/transport HTTP port." },
-                "config": { "type": "integer", "description": "OpenSearch cluster/transport port." }
+                "api": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Data Node REST API port." },
+                "data": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "OpenSearch data/transport HTTP port." },
+                "config": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "OpenSearch cluster/transport port." }
               }
             }
           }
@@ -474,14 +474,14 @@
             "nodeIdFile": { "type": "string" },
             "opensearchHeap": { "type": "string" },
             "javaOpts": { "type": "string" },
-            "skipPreflightChecks": { "type": "string" },
+            "skipPreflightChecks": { "type": "string", "enum": [ "true", "false" ] },
             "nodeSearchCacheSize": { "type": "string" },
             "s3ClientDefaultSecretKey": { "type": "string" },
             "s3ClientDefaultAccessKey": { "type": "string" },
             "s3ClientDefaultEndpoint": { "type": "string" },
             "s3ClientDefaultRegion": { "type": "string" },
-            "s3ClientDefaultProtocol": { "type": "string" },
-            "s3ClientDefaultPathStyleAccess": { "type": "string" }
+            "s3ClientDefaultProtocol": { "type": "string", "enum": [ "http", "https" ] },
+            "s3ClientDefaultPathStyleAccess": { "type": "string", "enum": [ "true", "false" ] }
           }
         },
         "image": {
@@ -490,7 +490,7 @@
           "properties": {
             "repository": { "type": "string", "description": "Image repository. Leave empty to use the chart default." },
             "tag": { "type": "string", "description": "Image tag. Leave empty to use the chart appVersion / .Values.version." },
-            "imagePullPolicy": { "type": "string", "description": "Image pull policy (Always, IfNotPresent, or Never)." },
+            "imagePullPolicy": { "type": "string", "enum": [ "Always", "IfNotPresent", "Never" ], "description": "Image pull policy." },
             "imagePullSecrets": {
               "type": "array",
               "description": "Image pull secret references for the Data Node image.",
@@ -506,7 +506,7 @@
           "type": "object",
           "description": "StatefulSet update strategy for the Data Node.",
           "properties": {
-            "type": { "type": ["string", "null"], "description": "Update strategy type (RollingUpdate or OnDelete)." },
+            "type": { "type": ["string", "null"], "enum": [ "RollingUpdate", "OnDelete", null ], "description": "Update strategy type." },
             "rollingUpdate": {
               "type": "object",
               "description": "Tuning for the RollingUpdate strategy.",
@@ -525,16 +525,16 @@
               "type": "object",
               "description": "Resource limits.",
               "properties": {
-                "cpu": { "type": "string", "description": "CPU limit (e.g. \"1\" or \"500m\")." },
-                "memory": { "type": "string", "description": "Memory limit (e.g. \"5Gi\")." }
+                "cpu": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "CPU limit (e.g. \"1\" or \"500m\")." },
+                "memory": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Memory limit (e.g. \"5Gi\")." }
               }
             },
             "requests": {
               "type": "object",
               "description": "Resource requests.",
               "properties": {
-                "cpu": { "type": "string", "description": "CPU request (e.g. \"500m\")." },
-                "memory": { "type": "string", "description": "Memory request (e.g. \"3.5Gi\")." }
+                "cpu": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "CPU request (e.g. \"500m\")." },
+                "memory": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Memory request (e.g. \"3.5Gi\")." }
               }
             }
           }
@@ -553,7 +553,7 @@
                 "existingClaim": { "type": "string", "description": "Use an existing PVC instead of creating one." },
                 "mountPath": { "type": "string", "description": "Path where the data volume is mounted in the container." },
                 "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
-                "size": { "type": "string", "description": "Requested size of the data PVC (e.g. \"8Gi\")." },
+                "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Requested size of the data PVC (e.g. \"8Gi\")." },
                 "annotations": {
                   "type": "object",
                   "description": "Annotations added to the data PVC."
@@ -581,7 +581,7 @@
                 "existingClaim": { "type": "string", "description": "Use an existing PVC instead of creating one." },
                 "mountPath": { "type": "string", "description": "Path where the native libs volume is mounted in the container." },
                 "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
-                "size": { "type": "string", "description": "Requested size of the native libs PVC (e.g. \"2Gi\")." },
+                "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Requested size of the native libs PVC (e.g. \"2Gi\")." },
                 "annotations": {
                   "type": "object",
                   "description": "Annotations added to the native libs PVC."
@@ -603,11 +603,11 @@
           "description": "Liveness probe for the Data Node container.",
           "properties": {
             "enabled": { "type": "boolean", "description": "Enable the liveness probe." },
-            "initialDelaySeconds": { "type": "integer", "description": "Seconds to wait after container start before the first probe." },
-            "periodSeconds": { "type": "integer", "description": "How often (in seconds) to perform the probe." },
-            "timeoutSeconds": { "type": "integer", "description": "Seconds after which the probe times out." },
-            "failureThreshold": { "type": "integer", "description": "Consecutive failures before the probe is considered failed." },
-            "successThreshold": { "type": "integer", "description": "Consecutive successes before the probe is considered successful." }
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "minimum": 1, "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "readinessProbe": {
@@ -615,11 +615,11 @@
           "description": "Readiness probe for the Data Node container.",
           "properties": {
             "enabled": { "type": "boolean", "description": "Enable the readiness probe." },
-            "initialDelaySeconds": { "type": "integer", "description": "Seconds to wait after container start before the first probe." },
-            "periodSeconds": { "type": "integer", "description": "How often (in seconds) to perform the probe." },
-            "timeoutSeconds": { "type": "integer", "description": "Seconds after which the probe times out." },
-            "failureThreshold": { "type": "integer", "description": "Consecutive failures before the probe is considered failed." },
-            "successThreshold": { "type": "integer", "description": "Consecutive successes before the probe is considered successful." }
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "minimum": 1, "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "podDisruptionBudget": {
@@ -627,7 +627,7 @@
           "description": "PodDisruptionBudget for the Data Node.",
           "properties": {
             "enabled": { "type": "boolean", "description": "Create a PodDisruptionBudget." },
-            "minAvailable": { "type": "integer", "description": "Minimum number of pods that must remain available during voluntary disruptions." }
+            "minAvailable": { "type": "integer", "minimum": 0, "description": "Minimum number of pods that must remain available during voluntary disruptions." }
           }
         },
         "podSecurityContext": {
@@ -747,7 +747,7 @@
                       "type": "object",
                       "properties": {
                         "path": { "type": "string", "description": "URL path." },
-                        "pathType": { "type": "string", "description": "Path matching type (Prefix, Exact, or ImplementationSpecific)." }
+                        "pathType": { "type": "string", "enum": [ "Prefix", "Exact", "ImplementationSpecific" ], "description": "Path matching type." }
                       }
                     }
                   }
@@ -778,7 +778,7 @@
                       "type": "object",
                       "properties": {
                         "path": { "type": "string", "description": "URL path." },
-                        "pathType": { "type": "string", "description": "Path matching type (Prefix, Exact, or ImplementationSpecific)." }
+                        "pathType": { "type": "string", "enum": [ "Prefix", "Exact", "ImplementationSpecific" ], "description": "Path matching type." }
                       }
                     }
                   }
@@ -802,8 +802,8 @@
           }
         },
         "version": { "type": "string", "description": "MongoDB server version." },
-        "replicas": { "type": "integer", "description": "Number of MongoDB replica set members." },
-        "arbiters": { "type": "integer", "description": "Number of arbiter members in the replica set." },
+        "replicas": { "type": "integer", "minimum": 1, "description": "Number of MongoDB replica set members." },
+        "arbiters": { "type": "integer", "minimum": 0, "description": "Number of arbiter members in the replica set." },
         "persistence": {
           "type": "object",
           "description": "Persistent storage for MongoDB.",
@@ -813,8 +813,8 @@
               "type": "object",
               "description": "Volume sizes for MongoDB.",
               "properties": {
-                "data": { "type": "string", "description": "Size of the MongoDB data volume (e.g. \"10G\")." },
-                "logs": { "type": "string", "description": "Size of the MongoDB logs volume (e.g. \"2G\")." }
+                "data": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Size of the MongoDB data volume (e.g. \"10G\")." },
+                "logs": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Size of the MongoDB logs volume (e.g. \"2G\")." }
               }
             }
           }
