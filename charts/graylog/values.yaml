@@ -210,11 +210,7 @@ graylog:
 datanode:
   enabled: true
   replicas: 3
-  # OpenSearch roles for this (primary) node group, inherited as the default by every
-  # extraNodeGroups entry. Empty = Data Node default (cluster_manager,data,ingest,
-  # remote_cluster_client, plus search auto-added when a snapshot repo is configured).
-  # Set explicitly to dedicate roles; valid values: cluster_manager, data, ingest,
-  # remote_cluster_client, search.
+  # Empty = default roles: cluster_manager,data,ingest,remote_cluster_client (search is auto-added with a snapshot repo).
   roles: []
   service:
     ports:
@@ -308,21 +304,10 @@ datanode:
   tolerations: []
   affinity: {}
   extraEnv: []
-  # Additional dedicated node groups, keyed by name. Each renders its own StatefulSet
-  # (+ ConfigMap and PDB), inheriting every datanode value above and overriding only what
-  # its entry declares. Use to delegate roles in larger clusters (e.g. a dedicated search
-  # tier). A search group requires a configured snapshot repository (S3 via config above).
-  # Enabling this relabels the primary StatefulSet's selector, which is immutable: the
-  # first time you add a group, the graylog-datanode StatefulSet must be recreated.
   extraNodeGroups: {}
   #  search:
   #    roles: [search]
   #    replicas: 2
-  #    config:
-  #      opensearchHeap: "2g"
-  #    persistence:
-  #      data:
-  #        size: "500Gi"
 # Graylog service account
 serviceAccount:
   create: true
