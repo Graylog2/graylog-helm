@@ -29,16 +29,18 @@
     },
     "global": {
       "type": "object",
+      "description": "Values shared across the Graylog, Data Node, and MongoDB workloads.",
       "properties": {
         "imagePullSecrets": {
           "type": "array",
+          "description": "Image pull secret references used by all workloads to pull from private registries.",
           "items": {
             "type": "object",
-            "properties": { "name": { "type": "string" } },
+            "properties": { "name": { "type": "string", "description": "Name of the imagePullSecret." } },
             "required": ["name"]
           }
         },
-        "storageClass": { "type": "string" },
+        "storageClass": { "type": "string", "description": "Default StorageClass applied to PersistentVolumeClaims when a workload does not set its own." },
         "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" }
       }
     },
@@ -46,52 +48,57 @@
       "type": "object",
       "description": "Graylog application values",
       "properties": {
-        "enabled": { "type": "boolean", "default": true },
-        "enterprise": { "type": "boolean", "default": true },
-        "replicas": { "type": "integer" },
+        "enabled": { "type": "boolean", "default": true, "description": "Deploy the Graylog server StatefulSet." },
+        "enterprise": { "type": "boolean", "default": true, "description": "Use the Graylog Enterprise image and features. Set to false for Graylog Open." },
+        "replicas": { "type": "integer", "description": "Number of Graylog server replicas (StatefulSet pods)." },
         "service": {
           "type": "object",
+          "description": "Kubernetes Service exposing the Graylog server.",
           "properties": {
-            "nameOverride": { "type": "string" },
-            "type": { "type": "string" },
+            "nameOverride": { "type": "string", "description": "Override the generated name of the Graylog Service." },
+            "type": { "type": "string", "description": "Kubernetes Service type (e.g. ClusterIP, NodePort, LoadBalancer)." },
             "ports": {
               "type": "object",
+              "description": "Ports exposed by the Graylog Service.",
               "properties": {
-                "app": { "type": "integer" },
-                "metrics": { "type": "integer" }
+                "app": { "type": "integer", "description": "Port for the Graylog web interface and REST API." },
+                "metrics": { "type": "integer", "description": "Port exposing Graylog Prometheus metrics." }
               }
             },
             "metrics": {
               "type": "object",
+              "description": "Prometheus metrics exporter settings.",
               "properties": {
-                "enabled": { "type":  "boolean" }
+                "enabled": { "type":  "boolean", "description": "Expose the Prometheus metrics port on the Service." }
               }
             }
           }
         },
         "inputs": {
           "type": "array",
+          "description": "Graylog input ports to open on the Service. This only exposes the port; it does not create the input in Graylog.",
           "items": {
             "type": "object",
             "properties": {
-              "name": { "type": "string" },
-              "port": { "type": "integer" },
-              "targetPort": { "type": "integer" },
-              "protocol": { "type": "string" }
+              "name": { "type": "string", "description": "Name of the input port (used as the Service port name)." },
+              "port": { "type": "integer", "description": "Service port to expose." },
+              "targetPort": { "type": "integer", "description": "Container port the input listens on." },
+              "protocol": { "type": "string", "description": "Network protocol for the port (TCP or UDP)." }
             },
             "required": [ "name", "port", "protocol" ]
           }
         },
         "plugins": {
           "type": "array",
+          "description": "Graylog plugins to install at startup. Each entry must provide exactly one source: image, existingClaim, or url.",
           "items": {
             "type": "object",
             "properties": {
-              "name": { "type": "string" },
-              "image": { "type": "string" },
-              "existingClaim": { "type": "string" },
-              "url": { "type": "string" },
-              "checksum": { "type": "string" }
+              "name": { "type": "string", "description": "Plugin name (used to label the plugin volume/artifact)." },
+              "image": { "type": "string", "description": "Container image that provides the plugin .jar (mounted via an init container)." },
+              "existingClaim": { "type": "string", "description": "Name of an existing PVC that contains the plugin .jar." },
+              "url": { "type": "string", "description": "URL to download the plugin .jar from." },
+              "checksum": { "type": "string", "description": "Expected checksum of the downloaded plugin, verified after download (requires url)." }
             },
             "required": [ "name" ],
             "oneOf": [
@@ -286,15 +293,17 @@
         },
         "image": {
           "type": "object",
+          "description": "Graylog server container image settings.",
           "properties": {
-            "repository": { "type": "string" },
-            "tag": { "type": "string" },
-            "imagePullPolicy": { "type": "string" },
+            "repository": { "type": "string", "description": "Image repository. Leave empty to use the chart default for the selected edition." },
+            "tag": { "type": "string", "description": "Image tag. Leave empty to use the chart appVersion / .Values.version." },
+            "imagePullPolicy": { "type": "string", "description": "Image pull policy (Always, IfNotPresent, or Never)." },
             "imagePullSecrets": {
               "type": "array",
+              "description": "Image pull secret references for the Graylog server image.",
               "items": {
                 "type": "object",
-                "properties": { "name": { "type": "string" } },
+                "properties": { "name": { "type": "string", "description": "Name of the imagePullSecret." } },
                 "required": ["name"]
               }
             }
@@ -302,84 +311,96 @@
         },
         "updateStrategy": {
           "type": "object",
+          "description": "StatefulSet update strategy for the Graylog server.",
           "properties": {
-            "type": { "type": ["string", "null"] },
+            "type": { "type": ["string", "null"], "description": "Update strategy type (RollingUpdate or OnDelete)." },
             "rollingUpdate": {
               "type": "object",
+              "description": "Tuning for the RollingUpdate strategy.",
               "properties": {
-                "maxUnavailable": { "type": [ "string", "integer", "null" ] },
-                "partition": { "type": [ "string", "null" ] }
+                "maxUnavailable": { "type": [ "string", "integer", "null" ], "description": "Maximum number of pods that can be unavailable during the update." },
+                "partition": { "type": [ "string", "null" ], "description": "Ordinal at which to partition the rolling update; pods with a lower ordinal are not updated." }
               }
             }
           }
         },
         "resources": {
           "type": "object",
+          "description": "Compute resource requests and limits for the Graylog server container.",
           "properties": {
             "limits": {
               "type": "object",
+              "description": "Resource limits.",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": { "type": "string", "description": "CPU limit (e.g. \"2\" or \"500m\")." },
+                "memory": { "type": "string", "description": "Memory limit (e.g. \"2Gi\")." }
               }
             },
             "requests": {
               "type": "object",
+              "description": "Resource requests.",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": { "type": "string", "description": "CPU request (e.g. \"1\" or \"500m\")." },
+                "memory": { "type": "string", "description": "Memory request (e.g. \"1Gi\")." }
               }
             }
           }
         },
         "persistence": {
           "type": "object",
+          "description": "Persistent storage for the Graylog server.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "storageClass": { "type": [ "string", "null" ] },
-            "volumeNameOverride": { "type": [ "string", "null" ] },
-            "existingClaim": { "type": [ "string", "null" ] },
-            "mountPath": { "type": [ "string", "null" ] },
-            "accessModes": { "type": "array" },
-            "size": { "type": [ "string", "null" ] },
+            "enabled": { "type": "boolean", "description": "Use a PersistentVolumeClaim for Graylog data. If false, an emptyDir is used." },
+            "storageClass": { "type": [ "string", "null" ], "description": "StorageClass for the PVC. Falls back to global.storageClass when unset." },
+            "volumeNameOverride": { "type": [ "string", "null" ], "description": "Bind the PVC to a specific PersistentVolume by name." },
+            "existingClaim": { "type": [ "string", "null" ], "description": "Use an existing PVC instead of creating one." },
+            "mountPath": { "type": [ "string", "null" ], "description": "Path where the volume is mounted in the container." },
+            "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
+            "size": { "type": [ "string", "null" ], "description": "Requested size of the PVC (e.g. \"10Gi\")." },
             "annotations": {
-              "type": "object"
+              "type": "object",
+              "description": "Annotations added to the PVC."
             },
             "labels": {
-              "type": "object"
+              "type": "object",
+              "description": "Labels added to the PVC."
             },
             "selector": {
-              "type": "object"
+              "type": "object",
+              "description": "Label selector used to bind the PVC to a matching PersistentVolume."
             }
           }
         },
         "livenessProbe": {
           "type": "object",
+          "description": "Liveness probe for the Graylog server container.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" },
-            "timeoutSeconds": { "type": "integer" },
-            "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Enable the liveness probe." },
+            "initialDelaySeconds": { "type": "integer", "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "readinessProbe": {
           "type": "object",
+          "description": "Readiness probe for the Graylog server container.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" },
-            "timeoutSeconds": { "type": "integer" },
-            "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Enable the readiness probe." },
+            "initialDelaySeconds": { "type": "integer", "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "podDisruptionBudget": {
           "type": "object",
+          "description": "PodDisruptionBudget for the Graylog server.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Create a PodDisruptionBudget." },
+            "minAvailable": { "type": "integer", "description": "Minimum number of pods that must remain available during voluntary disruptions." }
           }
         },
         "podSecurityContext": {
@@ -395,17 +416,21 @@
           "description": "Container securityContext applied to the graylog-app container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
         "podAnnotations": {
-          "type": "object"
+          "type": "object",
+          "description": "Annotations added to the Graylog server pods."
         },
         "nodeSelector": {
-          "type": "object"
+          "type": "object",
+          "description": "Node selector for scheduling the Graylog server pods."
         },
         "tolerations": {
           "type": "array",
+          "description": "Tolerations for scheduling the Graylog server pods.",
           "items": { "type": "object" }
         },
         "affinity": {
-          "type": "object"
+          "type": "object",
+          "description": "Affinity rules for scheduling the Graylog server pods."
         },
         "extraEnv": {
           "type": "array",
@@ -418,17 +443,19 @@
       "type": "object",
       "description": "Graylog Datanode configuration",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "replicas": { "type": "integer" },
+        "enabled": { "type": "boolean", "description": "Deploy the Graylog Data Node StatefulSet." },
+        "replicas": { "type": "integer", "description": "Number of Data Node replicas (StatefulSet pods)." },
         "service": {
           "type": "object",
+          "description": "Kubernetes Service exposing the Data Node.",
           "properties": {
             "ports": {
               "type": "object",
+              "description": "Ports exposed by the Data Node Service.",
               "properties": {
-                "api": { "type": "integer" },
-                "data": { "type": "integer" },
-                "config": { "type": "integer" }
+                "api": { "type": "integer", "description": "Data Node REST API port." },
+                "data": { "type": "integer", "description": "OpenSearch data/transport HTTP port." },
+                "config": { "type": "integer", "description": "OpenSearch cluster/transport port." }
               }
             }
           }
@@ -442,6 +469,7 @@
         },
         "config": {
           "type": "object",
+          "description": "Graylog Data Node configuration (rendered into datanode.conf).",
           "properties": {
             "nodeIdFile": { "type": "string" },
             "opensearchHeap": { "type": "string" },
@@ -458,15 +486,17 @@
         },
         "image": {
           "type": "object",
+          "description": "Graylog Data Node container image settings.",
           "properties": {
-            "repository": { "type": "string" },
-            "tag": { "type": "string" },
-            "imagePullPolicy": { "type": "string" },
+            "repository": { "type": "string", "description": "Image repository. Leave empty to use the chart default." },
+            "tag": { "type": "string", "description": "Image tag. Leave empty to use the chart appVersion / .Values.version." },
+            "imagePullPolicy": { "type": "string", "description": "Image pull policy (Always, IfNotPresent, or Never)." },
             "imagePullSecrets": {
               "type": "array",
+              "description": "Image pull secret references for the Data Node image.",
               "items": {
                 "type": "object",
-                "properties": { "name": { "type": "string" } },
+                "properties": { "name": { "type": "string", "description": "Name of the imagePullSecret." } },
                 "required": ["name"]
               }
             }
@@ -474,80 +504,95 @@
         },
         "updateStrategy": {
           "type": "object",
+          "description": "StatefulSet update strategy for the Data Node.",
           "properties": {
-            "type": { "type": ["string", "null"] },
+            "type": { "type": ["string", "null"], "description": "Update strategy type (RollingUpdate or OnDelete)." },
             "rollingUpdate": {
               "type": "object",
+              "description": "Tuning for the RollingUpdate strategy.",
               "properties": {
-                "maxUnavailable": { "type": [ "string", "integer", "null" ] },
-                "partition": { "type": [ "string", "null" ] }
+                "maxUnavailable": { "type": [ "string", "integer", "null" ], "description": "Maximum number of pods that can be unavailable during the update." },
+                "partition": { "type": [ "string", "null" ], "description": "Ordinal at which to partition the rolling update; pods with a lower ordinal are not updated." }
               }
             }
           }
         },
         "resources": {
           "type": "object",
+          "description": "Compute resource requests and limits for the Data Node container.",
           "properties": {
             "limits": {
               "type": "object",
+              "description": "Resource limits.",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": { "type": "string", "description": "CPU limit (e.g. \"1\" or \"500m\")." },
+                "memory": { "type": "string", "description": "Memory limit (e.g. \"5Gi\")." }
               }
             },
             "requests": {
               "type": "object",
+              "description": "Resource requests.",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": { "type": "string", "description": "CPU request (e.g. \"500m\")." },
+                "memory": { "type": "string", "description": "Memory request (e.g. \"3.5Gi\")." }
               }
             }
           }
         },
         "persistence": {
           "type": "object",
+          "description": "Persistent storage for the Data Node.",
           "properties": {
-            "enabled": { "type": "boolean" },
+            "enabled": { "type": "boolean", "description": "Use PersistentVolumeClaims for Data Node storage." },
             "data": {
               "type": "object",
+              "description": "Volume holding OpenSearch data.",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "storageClass": { "type": "string" },
-                "existingClaim": { "type": "string" },
-                "mountPath": { "type": "string" },
-                "accessModes": { "type": "array" },
-                "size": { "type": "string" },
+                "enabled": { "type": "boolean", "description": "Create the data PVC." },
+                "storageClass": { "type": "string", "description": "StorageClass for the data PVC. Falls back to global.storageClass when unset." },
+                "existingClaim": { "type": "string", "description": "Use an existing PVC instead of creating one." },
+                "mountPath": { "type": "string", "description": "Path where the data volume is mounted in the container." },
+                "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
+                "size": { "type": "string", "description": "Requested size of the data PVC (e.g. \"8Gi\")." },
                 "annotations": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Annotations added to the data PVC."
                 },
                 "labels": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Labels added to the data PVC."
                 },
                 "selector": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Label selector used to bind the data PVC to a matching PersistentVolume."
                 },
                 "dataSource": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "VolumeSource to populate the data PVC from (e.g. a VolumeSnapshot)."
                 }
               }
             },
             "nativeLibs": {
               "type": "object",
+              "description": "Optional separate volume for OpenSearch native libraries.",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "storageClass": { "type": "string" },
-                "existingClaim": { "type": "string" },
-                "mountPath": { "type": "string" },
-                "accessModes": { "type": "array" },
-                "size": { "type": "string" },
+                "enabled": { "type": "boolean", "description": "Create a dedicated PVC for native libraries." },
+                "storageClass": { "type": "string", "description": "StorageClass for the native libs PVC. Falls back to global.storageClass when unset." },
+                "existingClaim": { "type": "string", "description": "Use an existing PVC instead of creating one." },
+                "mountPath": { "type": "string", "description": "Path where the native libs volume is mounted in the container." },
+                "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
+                "size": { "type": "string", "description": "Requested size of the native libs PVC (e.g. \"2Gi\")." },
                 "annotations": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Annotations added to the native libs PVC."
                 },
                 "labels": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Labels added to the native libs PVC."
                 },
                 "selector": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Label selector used to bind the native libs PVC to a matching PersistentVolume."
                 }
               }
             }
@@ -555,31 +600,34 @@
         },
         "livenessProbe": {
           "type": "object",
+          "description": "Liveness probe for the Data Node container.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" },
-            "timeoutSeconds": { "type": "integer" },
-            "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Enable the liveness probe." },
+            "initialDelaySeconds": { "type": "integer", "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "readinessProbe": {
           "type": "object",
+          "description": "Readiness probe for the Data Node container.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" },
-            "timeoutSeconds": { "type": "integer" },
-            "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Enable the readiness probe." },
+            "initialDelaySeconds": { "type": "integer", "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "podDisruptionBudget": {
           "type": "object",
+          "description": "PodDisruptionBudget for the Data Node.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Create a PodDisruptionBudget." },
+            "minAvailable": { "type": "integer", "description": "Minimum number of pods that must remain available during voluntary disruptions." }
           }
         },
         "podSecurityContext": {
@@ -591,17 +639,21 @@
           "description": "Container securityContext applied to the graylog-datanode container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
         "podAnnotations": {
-          "type": "object"
+          "type": "object",
+          "description": "Annotations added to the Data Node pods."
         },
         "nodeSelector": {
-          "type": "object"
+          "type": "object",
+          "description": "Node selector for scheduling the Data Node pods."
         },
         "tolerations": {
           "type": "array",
+          "description": "Tolerations for scheduling the Data Node pods.",
           "items": { "type": "object" }
         },
         "affinity": {
-          "type": "object"
+          "type": "object",
+          "description": "Affinity rules for scheduling the Data Node pods."
         },
         "extraEnv": {
           "type": "array",
@@ -612,51 +664,60 @@
     },
     "serviceAccount": {
       "type": "object",
+      "description": "ServiceAccount used by the Graylog server, with an optional RBAC Role.",
       "properties": {
-        "create": { "type": "boolean" },
-        "automount": { "type": "boolean" },
-        "annotations": { "type": "object" },
-        "nameOverride": { "type": "string" },
+        "create": { "type": "boolean", "description": "Create a ServiceAccount." },
+        "automount": { "type": "boolean", "description": "Automatically mount the ServiceAccount API token." },
+        "annotations": { "type": "object", "description": "Annotations added to the ServiceAccount." },
+        "nameOverride": { "type": "string", "description": "Use an existing ServiceAccount with this name instead of the generated one." },
         "role": {
           "type": "object",
+          "description": "Optional RBAC Role and RoleBinding for the ServiceAccount.",
           "properties": {
-            "create": { "type": "boolean" },
-            "rules": { "type": "array" }
+            "create": { "type": "boolean", "description": "Create the Role and RoleBinding." },
+            "rules": { "type": "array", "description": "RBAC policy rules for the Role." }
           }
         }
       }
     },
     "ingress": {
       "type": "object",
+      "description": "Ingress resources for the Graylog web interface and forwarder.",
       "properties": {
-        "enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean", "description": "Create Ingress resources." },
         "config": {
           "type": "object",
+          "description": "Shared Ingress configuration.",
           "properties": {
             "defaultBackend": {
               "type": "object",
+              "description": "Default backend configuration for the Ingress.",
               "properties": {
-                "enabled": { "type": "boolean" }
+                "enabled": { "type": "boolean", "description": "Configure a default backend for the Ingress." }
               }
             },
             "tls": {
               "type": "object",
+              "description": "TLS configuration via cert-manager Issuer/ClusterIssuer.",
               "properties": {
                 "clusterIssuer": {
                   "type": "object",
+                  "description": "Use a cert-manager ClusterIssuer.",
                   "properties": {
-                    "existingName": { "type": ["string", "null"] }
+                    "existingName": { "type": ["string", "null"], "description": "Name of an existing cert-manager ClusterIssuer to use." }
                   }
                 },
                 "issuer": {
                   "type": "object",
+                  "description": "Use a cert-manager Issuer.",
                   "properties": {
-                    "existingName": { "type": ["string", "null"] },
+                    "existingName": { "type": ["string", "null"], "description": "Name of an existing cert-manager Issuer to use." },
                     "managed": {
                       "type": "object",
+                      "description": "Let the chart create a cert-manager Issuer (ACME/Let's Encrypt).",
                       "properties": {
-                        "enabled": { "type": "boolean" },
-                        "staging": { "type": "boolean" }
+                        "enabled": { "type": "boolean", "description": "Create a managed Issuer." },
+                        "staging": { "type": "boolean", "description": "Use the Let's Encrypt staging environment." }
                       }
                     }
                   }
@@ -667,58 +728,64 @@
         },
         "web": {
           "type": "object",
+          "description": "Ingress for the Graylog web interface / REST API.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "className": { "type": "string" },
-            "annotations": { "type": "object" },
+            "enabled": { "type": "boolean", "description": "Create the web Ingress." },
+            "className": { "type": "string", "description": "IngressClass name." },
+            "annotations": { "type": "object", "description": "Annotations added to the web Ingress." },
             "hosts": {
               "type": "array",
+              "description": "Host rules for the web Ingress.",
               "items": {
                 "type": "object",
                 "properties": {
-                  "host": { "type": "string" },
+                  "host": { "type": "string", "description": "Hostname for this rule." },
                   "paths": {
                     "type": "array",
+                    "description": "Path rules for the host.",
                     "items": {
                       "type": "object",
                       "properties": {
-                        "path": { "type": "string" },
-                        "pathType": { "type": "string" }
+                        "path": { "type": "string", "description": "URL path." },
+                        "pathType": { "type": "string", "description": "Path matching type (Prefix, Exact, or ImplementationSpecific)." }
                       }
                     }
                   }
                 }
               }
             },
-            "tls": { "type": "array" }
+            "tls": { "type": "array", "description": "TLS blocks for the web Ingress." }
           }
         },
         "forwarder": {
           "type": "object",
+          "description": "Ingress for the Graylog Forwarder.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "className": { "type": "string" },
-            "annotations": { "type": "object" },
+            "enabled": { "type": "boolean", "description": "Create the forwarder Ingress." },
+            "className": { "type": "string", "description": "IngressClass name." },
+            "annotations": { "type": "object", "description": "Annotations added to the forwarder Ingress." },
             "hosts": {
               "type": "array",
+              "description": "Host rules for the forwarder Ingress.",
               "items": {
                 "type": "object",
                 "properties": {
-                  "host": { "type": "string" },
+                  "host": { "type": "string", "description": "Hostname for this rule." },
                   "paths": {
                     "type": "array",
+                    "description": "Path rules for the host.",
                     "items": {
                       "type": "object",
                       "properties": {
-                        "path": { "type": "string" },
-                        "pathType": { "type": "string" }
+                        "path": { "type": "string", "description": "URL path." },
+                        "pathType": { "type": "string", "description": "Path matching type (Prefix, Exact, or ImplementationSpecific)." }
                       }
                     }
                   }
                 }
               }
             },
-            "tls": { "type": "array" }
+            "tls": { "type": "array", "description": "TLS blocks for the forwarder Ingress." }
           }
         }
       }
@@ -729,38 +796,43 @@
       "properties": {
         "communityResource": {
           "type": "object",
+          "description": "MongoDBCommunity custom resource settings.",
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean", "description": "Create a MongoDBCommunity custom resource (requires the MongoDB Kubernetes Operator)." }
           }
         },
-        "version": { "type": "string" },
-        "replicas": { "type": "integer" },
-        "arbiters": { "type": "integer" },
+        "version": { "type": "string", "description": "MongoDB server version." },
+        "replicas": { "type": "integer", "description": "Number of MongoDB replica set members." },
+        "arbiters": { "type": "integer", "description": "Number of arbiter members in the replica set." },
         "persistence": {
           "type": "object",
+          "description": "Persistent storage for MongoDB.",
           "properties": {
-            "storageClass": { "type": "string" },
+            "storageClass": { "type": "string", "description": "StorageClass for the MongoDB PVCs." },
             "size": {
               "type": "object",
+              "description": "Volume sizes for MongoDB.",
               "properties": {
-                "data": { "type": "string" },
-                "logs": { "type": "string" }
+                "data": { "type": "string", "description": "Size of the MongoDB data volume (e.g. \"10G\")." },
+                "logs": { "type": "string", "description": "Size of the MongoDB logs volume (e.g. \"2G\")." }
               }
             }
           }
         },
         "serviceAccount": {
           "type": "object",
+          "description": "ServiceAccount used by the MongoDB pods, with an optional RBAC Role.",
           "properties": {
-            "create": { "type": "boolean" },
-            "automount": { "type": "boolean" },
-            "annotations": { "type": "object" },
-            "nameOverride": { "type": "string" },
+            "create": { "type": "boolean", "description": "Create a ServiceAccount." },
+            "automount": { "type": "boolean", "description": "Automatically mount the ServiceAccount API token." },
+            "annotations": { "type": "object", "description": "Annotations added to the ServiceAccount." },
+            "nameOverride": { "type": "string", "description": "Use an existing ServiceAccount with this name instead of the generated one." },
             "role": {
               "type": "object",
+              "description": "Optional RBAC Role and RoleBinding for the ServiceAccount.",
               "properties": {
-                "create": { "type": "boolean" },
-                "rules": { "type": "array" }
+                "create": { "type": "boolean", "description": "Create the Role and RoleBinding." },
+                "rules": { "type": "array", "description": "RBAC policy rules for the Role." }
               }
             }
           }
