@@ -10,7 +10,7 @@
       "oneOf": [
         {
           "type": "string",
-          "enum": [ "aws", "aws-managed-sc", "azure", "gcp", "microk8s", "" ]
+          "enum": [ "aws", "azure", "gcp", "microk8s", "" ]
         },
         { "type": "null" }
       ]
@@ -29,16 +29,18 @@
     },
     "global": {
       "type": "object",
+      "description": "Values shared across the Graylog, Data Node, and MongoDB workloads.",
       "properties": {
         "imagePullSecrets": {
           "type": "array",
+          "description": "Image pull secret references used by all workloads to pull from private registries.",
           "items": {
             "type": "object",
-            "properties": { "name": { "type": "string" } },
+            "properties": { "name": { "type": "string", "description": "Name of the imagePullSecret." } },
             "required": ["name"]
           }
         },
-        "storageClass": { "type": "string" },
+        "storageClass": { "type": "string", "description": "Default StorageClass to apply to PersistentVolumeClaims when a workload does not set its own." },
         "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" }
       }
     },
@@ -46,52 +48,57 @@
       "type": "object",
       "description": "Graylog application values",
       "properties": {
-        "enabled": { "type": "boolean", "default": true },
-        "enterprise": { "type": "boolean", "default": true },
-        "replicas": { "type": "integer" },
+        "enabled": { "type": "boolean", "default": true, "description": "Deploy the Graylog server StatefulSet." },
+        "enterprise": { "type": "boolean", "default": true, "description": "Use the Graylog Enterprise image and features. Set to false for Graylog Open." },
+        "replicas": { "type": "integer", "minimum": 0, "description": "Number of Graylog server replicas (StatefulSet pods)." },
         "service": {
           "type": "object",
+          "description": "Kubernetes Service exposing the Graylog server.",
           "properties": {
-            "nameOverride": { "type": "string" },
-            "type": { "type": "string" },
+            "nameOverride": { "type": "string", "description": "Override the generated name of the Graylog Service." },
+            "type": { "type": "string", "enum": [ "ClusterIP", "NodePort", "LoadBalancer", "ExternalName" ], "description": "Kubernetes Service type." },
             "ports": {
               "type": "object",
+              "description": "Ports exposed by the Graylog Service.",
               "properties": {
-                "app": { "type": "integer" },
-                "metrics": { "type": "integer" }
+                "app": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Port for the Graylog web interface and REST API." },
+                "metrics": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Port exposing Graylog Prometheus metrics." }
               }
             },
             "metrics": {
               "type": "object",
+              "description": "Prometheus metrics exporter settings.",
               "properties": {
-                "enabled": { "type":  "boolean" }
+                "enabled": { "type":  "boolean", "description": "Expose the Prometheus metrics port on the Service." }
               }
             }
           }
         },
         "inputs": {
           "type": "array",
+          "description": "Graylog input ports to open on the Service. This only exposes the port; it does not create the input in Graylog.",
           "items": {
             "type": "object",
             "properties": {
-              "name": { "type": "string" },
-              "port": { "type": "integer" },
-              "targetPort": { "type": "integer" },
-              "protocol": { "type": "string" }
+              "name": { "type": "string", "description": "Name of the input port (used as the Service port name)." },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Service port to expose." },
+              "targetPort": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Container port the input listens on." },
+              "protocol": { "type": "string", "enum": [ "TCP", "UDP" ], "description": "Network protocol for the port (TCP or UDP)." }
             },
             "required": [ "name", "port", "protocol" ]
           }
         },
         "plugins": {
           "type": "array",
+          "description": "Graylog plugins to install at startup. Each entry must provide exactly one source: image, existingClaim, or url.",
           "items": {
             "type": "object",
             "properties": {
-              "name": { "type": "string" },
-              "image": { "type": "string" },
-              "existingClaim": { "type": "string" },
-              "url": { "type": "string" },
-              "checksum": { "type": "string" }
+              "name": { "type": "string", "description": "Plugin name (used to label the plugin volume/artifact)." },
+              "image": { "type": "string", "description": "Container image that provides the plugin .jar (mounted via an init container)." },
+              "existingClaim": { "type": "string", "description": "Name of an existing PVC that contains the plugin .jar." },
+              "url": { "type": "string", "description": "URL to download the plugin .jar from." },
+              "checksum": { "type": "string", "description": "Expected checksum of the downloaded plugin, verified after download (requires url)." }
             },
             "required": [ "name" ],
             "oneOf": [
@@ -127,128 +134,141 @@
           "type": "object",
           "description": "Graylog server configuration. These values can be found in server.conf",
           "properties": {
-            "rootUsername": { "type": "string" },
-            "rootPassword": { "type": "string" },
-            "customSecretPepper": { "type": "string" },
-            "timezone": { "type": "string" },
-            "selfSignedStartup": { "type": "string" },
-            "serverJavaOpts": { "type": "string" },
+            "rootUsername": { "type": "string", "description": "Username of the initial (root) Graylog admin user (server.conf: root_username)." },
+            "rootPassword": { "type": "string", "description": "Password for the initial admin user. Leave empty to auto-generate a randomized value." },
+            "customSecretPepper": { "type": "string", "description": "Secret used to salt/encrypt stored passwords (server.conf: password_secret). Auto-generated when empty; must be stable across all nodes." },
+            "timezone": { "type": "string", "description": "Default timezone for the root user (server.conf: root_timezone), e.g. UTC or Europe/Berlin." },
+            "selfSignedStartup": { "type": "string", "enum": [ "true", "false" ], "description": "Generate a self-signed certificate on startup when no TLS material is provided." },
+            "serverJavaOpts": { "type": "string", "description": "JVM options for the Graylog server process (sets the base -Xms/-Xmx heap)." },
             "extraServerJavaOpts": {
               "type": "array",
+              "description": "Additional JVM options appended to the Graylog server command.",
               "items": { "type": "string" }
             },
-            "leaderElectionMode": { "type": "string" },
-            "contentPacksAutoInstall": { "type": "string" },
-            "isCloud": { "type": "string" },
+            "leaderElectionMode": { "type": "string", "enum": [ "automatic", "static" ], "description": "Leader election mode (server.conf: leader_election_mode)." },
+            "contentPacksAutoInstall": { "type": "string", "enum": [ "true", "false" ], "description": "Automatically install bundled content packs on startup." },
+            "isCloud": { "type": "string", "enum": [ "true", "false" ], "description": "Enable Graylog Cloud mode (server.conf: is_cloud)." },
             "tls": {
               "type": "object",
+              "description": "TLS settings for the Graylog HTTP interface.",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "secretName": { "type": "string" },
-                "keyPassword": { "type": "string" },
-                "updateKeyStore": { "type": "boolean" },
-                "keyStorePass": { "type": "string" }
+                "enabled": { "type": "boolean", "description": "Enable TLS on the Graylog HTTP interface." },
+                "secretName": { "type": "string", "description": "Name of the TLS Secret containing the certificate and private key." },
+                "keyPassword": { "type": "string", "description": "Password protecting the private key, if any." },
+                "updateKeyStore": { "type": "boolean", "description": "Import the provided certificate into the Java keystore on startup." },
+                "keyStorePass": { "type": "string", "description": "Password for the Java keystore." }
               }
             },
             "mongodb": {
               "type": "object",
+              "description": "MongoDB connection settings for the Graylog server.",
               "properties": {
-                "customUri": { "type": "string" },
-                "maxConnections": { "type": "string" },
-                "versionProbeAttempts": { "type": "string" }
+                "customUri": { "type": "string", "description": "Full MongoDB connection URI overriding the generated one (server.conf: mongodb_uri)." },
+                "maxConnections": { "type": "string", "description": "Maximum size of the MongoDB connection pool (server.conf: mongodb_max_connections)." },
+                "versionProbeAttempts": { "type": "string", "description": "Number of attempts to probe the MongoDB version on startup (0 = retry indefinitely; server.conf: mongodb_version_probe_attempts)." }
               }
             },
             "messageJournal": {
               "type": "object",
+              "description": "On-disk message journal settings buffering messages before processing.",
               "properties": {
-                "enabled": { "type": "string" },
-                "flushAge": { "type": "string" },
-                "flushInterval": { "type": "string" },
-                "maxAge": { "type": "string" },
-                "segmentAge": { "type": "string" },
-                "segmentSize": { "type": "string" }
+                "enabled": { "type": "string", "enum": [ "true", "false" ], "description": "Enable the on-disk message journal (server.conf: message_journal_enabled)." },
+                "flushAge": { "type": "string", "description": "Maximum age before journal data is flushed to disk (server.conf: message_journal_flush_age)." },
+                "flushInterval": { "type": "string", "description": "Number of messages written before the journal is flushed to disk (server.conf: message_journal_flush_interval)." },
+                "maxAge": { "type": "string", "description": "Maximum age of messages retained in the journal (server.conf: message_journal_max_age)." },
+                "segmentAge": { "type": "string", "description": "Maximum age of a journal segment before a new one is created (server.conf: message_journal_segment_age)." },
+                "segmentSize": { "type": "string", "description": "Maximum size of a journal segment before a new one is created (server.conf: message_journal_segment_size)." }
               }
             },
             "network": {
               "type": "object",
+              "description": "HTTP interface network settings for the Graylog server.",
               "properties": {
-                "connectTimeout": { "type": "string" },
-                "enableCors": { "type": "string" },
-                "enableGzip": { "type": "string" },
-                "maxHeaderSize": { "type": "string" },
-                "readTimeout": { "type": "string" },
-                "threadPoolSize": { "type": "string" },
-                "externalUri": { "type": "string" }
+                "connectTimeout": { "type": "string", "description": "HTTP client connect timeout, e.g. \"5s\" (server.conf: http_connect_timeout)." },
+                "enableCors": { "type": "string", "enum": [ "true", "false" ], "description": "Enable CORS headers on the HTTP interface (server.conf: http_enable_cors)." },
+                "enableGzip": { "type": "string", "enum": [ "true", "false" ], "description": "Enable gzip compression of HTTP responses (server.conf: http_enable_gzip)." },
+                "maxHeaderSize": { "type": "string", "description": "Maximum size of an HTTP request header in bytes (server.conf: http_max_header_size)." },
+                "readTimeout": { "type": "string", "description": "HTTP client read timeout, e.g. \"10s\" (server.conf: http_read_timeout)." },
+                "threadPoolSize": { "type": "string", "description": "Size of the HTTP worker thread pool (server.conf: http_thread_pool_size)." },
+                "externalUri": { "type": "string", "description": "Public URI clients use to reach the Graylog web interface/API (server.conf: http_external_uri)." }
               }
             },
             "performance": {
               "type": "object",
+              "description": "Processing and output performance tuning for the Graylog server.",
               "properties": {
-                "asyncEventbusProcessors": { "type": "string" },
-                "autoRestartInputs": { "type": "string" },
-                "inputBufferProcessors": { "type": "string" },
-                "inputBufferRingSize": { "type": "string" },
-                "inputBufferWaitStrategy": { "type": "string" },
-                "jobSchedulerConcurrencyLimits": { "type": "string" },
-                "outputBatchSize": { "type": "string" },
-                "outputFaultCountThreshold": { "type": "string" },
-                "outputFaultPenaltySeconds": { "type": "string" },
-                "outputFlushInterval": { "type": "string" },
-                "outputBufferProcessorThreadsCorePoolSize": { "type": "string" },
-                "outputBufferProcessors": { "type": "string" },
-                "processBufferProcessors": { "type": "string" }
+                "asyncEventbusProcessors": { "type": "string", "description": "Number of threads dedicated to dispatching internal events (server.conf: async_eventbus_processors)." },
+                "autoRestartInputs": { "type": "string", "enum": [ "true", "false" ], "description": "Automatically restart failed inputs (server.conf: auto_restart_inputs)." },
+                "inputBufferProcessors": { "type": "string", "description": "Number of input buffer processor threads (server.conf: inputbuffer_processors)." },
+                "inputBufferRingSize": { "type": "string", "description": "Size of the input buffer ring; must be a power of two (server.conf: inputbuffer_ring_size)." },
+                "inputBufferWaitStrategy": { "type": "string", "enum": [ "blocking", "sleeping", "yielding", "busy_spinning" ], "description": "Disruptor wait strategy for the input buffer (server.conf: inputbuffer_wait_strategy)." },
+                "jobSchedulerConcurrencyLimits": { "type": "string", "description": "Concurrency limits for the job scheduler. Empty uses the Graylog default." },
+                "outputBatchSize": { "type": "string", "description": "Maximum number of messages written to the search backend in a single batch (server.conf: output_batch_size)." },
+                "outputFaultCountThreshold": { "type": "string", "description": "Number of faults an output may accumulate before it is paused (server.conf: output_fault_count_threshold)." },
+                "outputFaultPenaltySeconds": { "type": "string", "description": "Seconds to wait before retrying an output that hit the fault threshold (server.conf: output_fault_penalty_seconds)." },
+                "outputFlushInterval": { "type": "string", "description": "Maximum seconds between two batches written to the search backend (server.conf: output_flush_interval)." },
+                "outputBufferProcessorThreadsCorePoolSize": { "type": "string", "description": "Core pool size for output buffer processor threads (server.conf: outputbuffer_processor_threads_core_pool_size)." },
+                "outputBufferProcessors": { "type": "string", "description": "Number of output buffer processor threads (server.conf: outputbuffer_processors). Empty uses the Graylog default." },
+                "processBufferProcessors": { "type": "string", "description": "Number of process buffer processor threads (server.conf: processbuffer_processors). Empty uses the Graylog default." }
               }
             },
             "email": {
               "type": "object",
+              "description": "Outbound email (SMTP) transport settings for notifications.",
               "properties": {
-                "enabled": { "type": "string" },
-                "senderAddress": { "type": "string" },
-                "hostname": { "type": "string" },
-                "port": { "type": "string" },
-                "socketConnectionTimeout": { "type": "string" },
-                "socketTimeout": { "type": "string" },
-                "useAuth": { "type": "string" },
-                "useSsl": { "type": "string" },
-                "useTls": { "type": "string" },
-                "webInterfaceUrl": { "type": "string" }
+                "enabled": { "type": "string", "enum": [ "true", "false" ], "description": "Enable the email transport (server.conf: transport_email_enabled)." },
+                "senderAddress": { "type": "string", "description": "From address for emails sent by Graylog (server.conf: transport_email_from_email)." },
+                "hostname": { "type": "string", "description": "SMTP server hostname (server.conf: transport_email_hostname)." },
+                "port": { "type": "string", "description": "SMTP server port (server.conf: transport_email_port)." },
+                "socketConnectionTimeout": { "type": "string", "description": "SMTP socket connection timeout, e.g. \"10s\"." },
+                "socketTimeout": { "type": "string", "description": "SMTP socket read timeout, e.g. \"10s\"." },
+                "useAuth": { "type": "string", "enum": [ "true", "false" ], "description": "Authenticate against the SMTP server (server.conf: transport_email_use_auth)." },
+                "useSsl": { "type": "string", "enum": [ "true", "false" ], "description": "Connect to the SMTP server using SSL (server.conf: transport_email_use_ssl)." },
+                "useTls": { "type": "string", "enum": [ "true", "false" ], "description": "Use STARTTLS when connecting to the SMTP server (server.conf: transport_email_use_tls)." },
+                "webInterfaceUrl": { "type": "string", "description": "Base URL of the Graylog web interface used in email links (server.conf: transport_email_web_interface_url)." }
               }
             },
             "plugins": {
               "type": "object",
+              "description": "Graylog plugin system settings.",
               "properties": {
-                "enabled": { "type": "boolean" }
+                "enabled": { "type": "boolean", "description": "Enable the Graylog plugin system (mount the plugins volume and load installed plugins)." }
               }
             },
             "geolocation": {
               "type": "object",
+              "description": "IP geolocation processing settings.",
               "properties": {
-                "enabled": { "type": "boolean" },
+                "enabled": { "type": "boolean", "description": "Enable the Geolocation Processor." },
                 "maxmindGeoIp": {
                   "type": "object",
+                  "description": "MaxMind GeoIP database settings.",
                   "properties": {
-                    "enabled": { "type": "boolean" },
-                    "accountId": { "type": ["string", "integer", "null"] },
-                    "licenseKey": { "type": ["string", "null"] },
-                    "cronSchedule": { "type": "string" },
-                    "postInstallRun": { "type": "boolean" }
+                    "enabled": { "type": "boolean", "description": "Enable the MaxMind GeoIP update CronJob." },
+                    "accountId": { "type": ["string", "integer", "null"], "description": "MaxMind account ID used to download databases." },
+                    "licenseKey": { "type": ["string", "null"], "description": "MaxMind license key used to download databases." },
+                    "cronSchedule": { "type": "string", "description": "Cron schedule for periodic GeoIP database updates." },
+                    "postInstallRun": { "type": "boolean", "description": "Run a database download immediately after install via a post-install Helm hook Job." }
                   }
                 },
                 "mmdbSources": {
                   "type": "object",
+                  "description": "Sources for the initial geolocation database asset fetch.",
                   "properties": {
                     "city": {
                       "type": "object",
+                      "description": "Source for the GeoLite2-City.mmdb database.",
                       "properties": {
-                        "url": { "type": ["string", "null"] },
-                        "checksum": { "type": ["string", "null"] }
+                        "url": { "type": ["string", "null"], "description": "GeoLite2-City.mmdb URL (only used for the initial asset fetch)." },
+                        "checksum": { "type": ["string", "null"], "description": "GeoLite2-City.mmdb checksum (only used for the initial asset fetch)." }
                       }
                     },
                     "asn": {
                       "type": "object",
+                      "description": "Source for the GeoLite2-ASN.mmdb database.",
                       "properties": {
-                        "url": { "type": ["string", "null"] },
-                        "checksum": { "type": ["string", "null"] }
+                        "url": { "type": ["string", "null"], "description": "GeoLite2-ASN.mmdb URL (only used for the initial asset fetch)." },
+                        "checksum": { "type": ["string", "null"], "description": "GeoLite2-ASN.mmdb checksum (only used for the initial asset fetch)." }
                       }
                     }
                   }
@@ -257,25 +277,29 @@
             },
             "init": {
               "type": "object",
+              "description": "Init-container behavior for the Graylog server.",
               "properties": {
                 "assetFetch": {
                   "type": "object",
+                  "description": "Fetching of assets (plugins and geolocation databases) during init.",
                   "properties": {
-                    "enabled": { "type": "boolean" },
-                    "skipChecksum": { "type": "boolean" },
-                    "allowHttp": { "type": "boolean" },
+                    "enabled": { "type": "boolean", "description": "Enable fetching assets during init." },
+                    "skipChecksum": { "type": "boolean", "description": "Skip checksum verification of fetched assets." },
+                    "allowHttp": { "type": "boolean", "description": "Allow fetching assets over plain HTTP." },
                     "plugins": {
                       "type": "object",
+                      "description": "Plugin asset fetch settings.",
                       "properties": {
-                        "enabled": { "type": "boolean" },
-                        "baseUrl": { "type": ["string", "null"] }
+                        "enabled": { "type": "boolean", "description": "Fetch plugin assets during init." },
+                        "baseUrl": { "type": ["string", "null"], "description": "Base URL to fetch plugin assets from." }
                       }
                     },
                     "geolocation": {
                       "type": "object",
+                      "description": "Geolocation asset fetch settings.",
                       "properties": {
-                        "enabled": { "type": "boolean" },
-                        "baseUrl": { "type": ["string", "null"] }
+                        "enabled": { "type": "boolean", "description": "Fetch geolocation databases during init." },
+                        "baseUrl": { "type": ["string", "null"], "description": "Base URL to fetch geolocation databases from." }
                       }
                     }
                   }
@@ -286,15 +310,17 @@
         },
         "image": {
           "type": "object",
+          "description": "Graylog server container image settings.",
           "properties": {
-            "repository": { "type": "string" },
-            "tag": { "type": "string" },
-            "imagePullPolicy": { "type": "string" },
+            "repository": { "type": "string", "description": "Image repository. Leave empty to use the chart default for the selected edition." },
+            "tag": { "type": "string", "description": "Image tag. Leave empty to use the chart appVersion / .Values.version." },
+            "imagePullPolicy": { "type": "string", "enum": [ "Always", "IfNotPresent", "Never" ], "description": "Image pull policy." },
             "imagePullSecrets": {
               "type": "array",
+              "description": "Image pull secret references for the Graylog server image.",
               "items": {
                 "type": "object",
-                "properties": { "name": { "type": "string" } },
+                "properties": { "name": { "type": "string", "description": "Name of the imagePullSecret." } },
                 "required": ["name"]
               }
             }
@@ -302,84 +328,96 @@
         },
         "updateStrategy": {
           "type": "object",
+          "description": "StatefulSet update strategy for the Graylog server.",
           "properties": {
-            "type": { "type": ["string", "null"] },
+            "type": { "type": ["string", "null"], "enum": [ "RollingUpdate", "OnDelete", null ], "description": "Update strategy type." },
             "rollingUpdate": {
               "type": "object",
+              "description": "Tuning for the RollingUpdate strategy.",
               "properties": {
-                "maxUnavailable": { "type": [ "string", "integer", "null" ] },
-                "partition": { "type": [ "string", "null" ] }
+                "maxUnavailable": { "type": [ "string", "integer", "null" ], "description": "Maximum number of pods that can be unavailable during the update." },
+                "partition": { "type": [ "string", "null" ], "description": "Ordinal at which to partition the rolling update; pods with a lower ordinal are not updated." }
               }
             }
           }
         },
         "resources": {
           "type": "object",
+          "description": "Compute resource requests and limits for the Graylog server container.",
           "properties": {
             "limits": {
               "type": "object",
+              "description": "Resource limits.",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "CPU limit (e.g. \"2\" or \"500m\")." },
+                "memory": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Memory limit (e.g. \"2Gi\")." }
               }
             },
             "requests": {
               "type": "object",
+              "description": "Resource requests.",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "CPU request (e.g. \"1\" or \"500m\")." },
+                "memory": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Memory request (e.g. \"1Gi\")." }
               }
             }
           }
         },
         "persistence": {
           "type": "object",
+          "description": "Persistent storage for the Graylog server.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "storageClass": { "type": [ "string", "null" ] },
-            "volumeNameOverride": { "type": [ "string", "null" ] },
-            "existingClaim": { "type": [ "string", "null" ] },
-            "mountPath": { "type": [ "string", "null" ] },
-            "accessModes": { "type": "array" },
-            "size": { "type": [ "string", "null" ] },
+            "enabled": { "type": "boolean", "description": "Use a PersistentVolumeClaim for Graylog data. If false, an emptyDir is used." },
+            "storageClass": { "type": [ "string", "null" ], "description": "StorageClass for the PVC. Falls back to global.storageClass when unset." },
+            "volumeNameOverride": { "type": [ "string", "null" ], "description": "Bind the PVC to a specific PersistentVolume by name." },
+            "existingClaim": { "type": [ "string", "null" ], "description": "Use an existing PVC instead of creating one." },
+            "mountPath": { "type": [ "string", "null" ], "description": "Path where the volume is mounted in the container." },
+            "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
+            "size": { "type": [ "string", "null" ], "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Requested size of the PVC (e.g. \"10Gi\")." },
             "annotations": {
-              "type": "object"
+              "type": "object",
+              "description": "Annotations added to the PVC."
             },
             "labels": {
-              "type": "object"
+              "type": "object",
+              "description": "Labels added to the PVC."
             },
             "selector": {
-              "type": "object"
+              "type": "object",
+              "description": "Label selector used to bind the PVC to a matching PersistentVolume."
             }
           }
         },
         "livenessProbe": {
           "type": "object",
+          "description": "Liveness probe for the Graylog server container.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" },
-            "timeoutSeconds": { "type": "integer" },
-            "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Enable the liveness probe." },
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "minimum": 1, "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "readinessProbe": {
           "type": "object",
+          "description": "Readiness probe for the Graylog server container.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" },
-            "timeoutSeconds": { "type": "integer" },
-            "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Enable the readiness probe." },
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "minimum": 1, "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "podDisruptionBudget": {
           "type": "object",
+          "description": "PodDisruptionBudget for the Graylog server.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Create a PodDisruptionBudget." },
+            "minAvailable": { "type": "integer", "minimum": 0, "description": "Minimum number of pods that must remain available during voluntary disruptions." }
           }
         },
         "podSecurityContext": {
@@ -395,17 +433,21 @@
           "description": "Container securityContext applied to the graylog-app container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
         "podAnnotations": {
-          "type": "object"
+          "type": "object",
+          "description": "Annotations added to the Graylog server pods."
         },
         "nodeSelector": {
-          "type": "object"
+          "type": "object",
+          "description": "Node selector for scheduling the Graylog server pods."
         },
         "tolerations": {
           "type": "array",
+          "description": "Tolerations for scheduling the Graylog server pods.",
           "items": { "type": "object" }
         },
         "affinity": {
-          "type": "object"
+          "type": "object",
+          "description": "Affinity rules for scheduling the Graylog server pods."
         },
         "extraEnv": {
           "type": "array",
@@ -416,19 +458,21 @@
     },
     "datanode": {
       "type": "object",
-      "description": "Graylog Datanode configuration",
+      "description": "Graylog DataNode configuration",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "replicas": { "type": "integer" },
+        "enabled": { "type": "boolean", "description": "Deploy the Graylog Data Node StatefulSet." },
+        "replicas": { "type": "integer", "minimum": 0, "description": "Number of Data Node replicas (StatefulSet pods)." },
         "service": {
           "type": "object",
+          "description": "Kubernetes Service exposing the Data Node.",
           "properties": {
             "ports": {
               "type": "object",
+              "description": "Ports exposed by the Data Node Service.",
               "properties": {
-                "api": { "type": "integer" },
-                "data": { "type": "integer" },
-                "config": { "type": "integer" }
+                "api": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Data Node REST API port." },
+                "data": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "OpenSearch data/transport HTTP port." },
+                "config": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "OpenSearch cluster/transport port." }
               }
             }
           }
@@ -442,31 +486,34 @@
         },
         "config": {
           "type": "object",
+          "description": "Graylog Data Node configuration (rendered into datanode.conf).",
           "properties": {
-            "nodeIdFile": { "type": "string" },
-            "opensearchHeap": { "type": "string" },
-            "javaOpts": { "type": "string" },
-            "skipPreflightChecks": { "type": "string" },
-            "nodeSearchCacheSize": { "type": "string" },
-            "s3ClientDefaultSecretKey": { "type": "string" },
-            "s3ClientDefaultAccessKey": { "type": "string" },
-            "s3ClientDefaultEndpoint": { "type": "string" },
-            "s3ClientDefaultRegion": { "type": "string" },
-            "s3ClientDefaultProtocol": { "type": "string" },
-            "s3ClientDefaultPathStyleAccess": { "type": "string" }
+            "nodeIdFile": { "type": "string", "description": "Path to the file storing the Data Node's node ID (datanode.conf: node_id_file). Defaults to /var/lib/graylog-datanode/node-id when empty." },
+            "opensearchHeap": { "type": "string", "description": "Heap size for the embedded OpenSearch process, e.g. \"2g\" (datanode.conf: opensearch_heap)." },
+            "javaOpts": { "type": "string", "description": "JVM options for the Data Node process itself (sets -Xms/-Xmx heap)." },
+            "skipPreflightChecks": { "type": "string", "enum": [ "true", "false" ], "description": "Skip Data Node preflight checks on startup (datanode.conf: skip_preflight_checks)." },
+            "nodeSearchCacheSize": { "type": "string", "description": "Size of the OpenSearch search cache used for tiered/remote data, e.g. \"10gb\" (datanode.conf: node_search_cache_size)." },
+            "s3ClientDefaultSecretKey": { "type": "string", "description": "Secret key for the default S3 client used by data tiering/snapshots (datanode.conf: s3_client_default_secret_key). Stored in a Secret." },
+            "s3ClientDefaultAccessKey": { "type": "string", "description": "Access key for the default S3 client used by data tiering/snapshots (datanode.conf: s3_client_default_access_key). Stored in a Secret." },
+            "s3ClientDefaultEndpoint": { "type": "string", "description": "Endpoint for the default S3 client, e.g. an S3-compatible host (datanode.conf: s3_client_default_endpoint)." },
+            "s3ClientDefaultRegion": { "type": "string", "description": "Region for the default S3 client (datanode.conf: s3_client_default_region)." },
+            "s3ClientDefaultProtocol": { "type": "string", "enum": [ "http", "https" ], "description": "Protocol used to reach the S3 endpoint (datanode.conf: s3_client_default_protocol)." },
+            "s3ClientDefaultPathStyleAccess": { "type": "string", "enum": [ "true", "false" ], "description": "Use path-style access for the S3 client; required by some S3-compatible stores (datanode.conf: s3_client_default_path_style_access)." }
           }
         },
         "image": {
           "type": "object",
+          "description": "Graylog Data Node container image settings.",
           "properties": {
-            "repository": { "type": "string" },
-            "tag": { "type": "string" },
-            "imagePullPolicy": { "type": "string" },
+            "repository": { "type": "string", "description": "Image repository. Leave empty to use the chart default." },
+            "tag": { "type": "string", "description": "Image tag. Leave empty to use the chart appVersion / .Values.version." },
+            "imagePullPolicy": { "type": "string", "enum": [ "Always", "IfNotPresent", "Never" ], "description": "Image pull policy." },
             "imagePullSecrets": {
               "type": "array",
+              "description": "Image pull secret references for the Data Node image.",
               "items": {
                 "type": "object",
-                "properties": { "name": { "type": "string" } },
+                "properties": { "name": { "type": "string", "description": "Name of the imagePullSecret." } },
                 "required": ["name"]
               }
             }
@@ -474,80 +521,95 @@
         },
         "updateStrategy": {
           "type": "object",
+          "description": "StatefulSet update strategy for the Data Node.",
           "properties": {
-            "type": { "type": ["string", "null"] },
+            "type": { "type": ["string", "null"], "enum": [ "RollingUpdate", "OnDelete", null ], "description": "Update strategy type." },
             "rollingUpdate": {
               "type": "object",
+              "description": "Tuning for the RollingUpdate strategy.",
               "properties": {
-                "maxUnavailable": { "type": [ "string", "integer", "null" ] },
-                "partition": { "type": [ "string", "null" ] }
+                "maxUnavailable": { "type": [ "string", "integer", "null" ], "description": "Maximum number of pods that can be unavailable during the update." },
+                "partition": { "type": [ "string", "null" ], "description": "Ordinal at which to partition the rolling update; pods with a lower ordinal are not updated." }
               }
             }
           }
         },
         "resources": {
           "type": "object",
+          "description": "Compute resource requests and limits for the Data Node container.",
           "properties": {
             "limits": {
               "type": "object",
+              "description": "Resource limits.",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "CPU limit (e.g. \"1\" or \"500m\")." },
+                "memory": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Memory limit (e.g. \"5Gi\")." }
               }
             },
             "requests": {
               "type": "object",
+              "description": "Resource requests.",
               "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+                "cpu": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "CPU request (e.g. \"500m\")." },
+                "memory": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Memory request (e.g. \"3.5Gi\")." }
               }
             }
           }
         },
         "persistence": {
           "type": "object",
+          "description": "Persistent storage for the Data Node.",
           "properties": {
-            "enabled": { "type": "boolean" },
+            "enabled": { "type": "boolean", "description": "Use PersistentVolumeClaims for Data Node storage." },
             "data": {
               "type": "object",
+              "description": "Volume holding OpenSearch data.",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "storageClass": { "type": "string" },
-                "existingClaim": { "type": "string" },
-                "mountPath": { "type": "string" },
-                "accessModes": { "type": "array" },
-                "size": { "type": "string" },
+                "enabled": { "type": "boolean", "description": "Create the data PVC." },
+                "storageClass": { "type": "string", "description": "StorageClass for the data PVC. Falls back to global.storageClass when unset." },
+                "existingClaim": { "type": "string", "description": "Use an existing PVC instead of creating one." },
+                "mountPath": { "type": "string", "description": "Path where the data volume is mounted in the container." },
+                "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
+                "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Requested size of the data PVC (e.g. \"8Gi\")." },
                 "annotations": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Annotations added to the data PVC."
                 },
                 "labels": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Labels added to the data PVC."
                 },
                 "selector": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Label selector used to bind the data PVC to a matching PersistentVolume."
                 },
                 "dataSource": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "VolumeSource to populate the data PVC from (e.g. a VolumeSnapshot)."
                 }
               }
             },
             "nativeLibs": {
               "type": "object",
+              "description": "Optional separate volume for OpenSearch native libraries.",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "storageClass": { "type": "string" },
-                "existingClaim": { "type": "string" },
-                "mountPath": { "type": "string" },
-                "accessModes": { "type": "array" },
-                "size": { "type": "string" },
+                "enabled": { "type": "boolean", "description": "Create a dedicated PVC for native libraries." },
+                "storageClass": { "type": "string", "description": "StorageClass for the native libs PVC. Falls back to global.storageClass when unset." },
+                "existingClaim": { "type": "string", "description": "Use an existing PVC instead of creating one." },
+                "mountPath": { "type": "string", "description": "Path where the native libs volume is mounted in the container." },
+                "accessModes": { "type": "array", "description": "PVC access modes (e.g. ReadWriteOnce)." },
+                "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Requested size of the native libs PVC (e.g. \"2Gi\")." },
                 "annotations": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Annotations added to the native libs PVC."
                 },
                 "labels": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Labels added to the native libs PVC."
                 },
                 "selector": {
-                  "type": "object"
+                  "type": "object",
+                  "description": "Label selector used to bind the native libs PVC to a matching PersistentVolume."
                 }
               }
             }
@@ -555,31 +617,34 @@
         },
         "livenessProbe": {
           "type": "object",
+          "description": "Liveness probe for the Data Node container.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" },
-            "timeoutSeconds": { "type": "integer" },
-            "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Enable the liveness probe." },
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "minimum": 1, "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "readinessProbe": {
           "type": "object",
+          "description": "Readiness probe for the Data Node container.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "initialDelaySeconds": { "type": "integer" },
-            "periodSeconds": { "type": "integer" },
-            "timeoutSeconds": { "type": "integer" },
-            "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Enable the readiness probe." },
+            "initialDelaySeconds": { "type": "integer", "minimum": 0, "description": "Seconds to wait after container start before the first probe." },
+            "periodSeconds": { "type": "integer", "minimum": 1, "description": "How often (in seconds) to perform the probe." },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Seconds after which the probe times out." },
+            "failureThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive failures before the probe is considered failed." },
+            "successThreshold": { "type": "integer", "minimum": 1, "description": "Consecutive successes before the probe is considered successful." }
           }
         },
         "podDisruptionBudget": {
           "type": "object",
+          "description": "PodDisruptionBudget for the Data Node.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" }
+            "enabled": { "type": "boolean", "description": "Create a PodDisruptionBudget." },
+            "minAvailable": { "type": "integer", "minimum": 0, "description": "Minimum number of pods that must remain available during voluntary disruptions." }
           }
         },
         "podSecurityContext": {
@@ -591,17 +656,21 @@
           "description": "Container securityContext applied to the graylog-datanode container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
         "podAnnotations": {
-          "type": "object"
+          "type": "object",
+          "description": "Annotations added to the Data Node pods."
         },
         "nodeSelector": {
-          "type": "object"
+          "type": "object",
+          "description": "Node selector for scheduling the Data Node pods."
         },
         "tolerations": {
           "type": "array",
+          "description": "Tolerations for scheduling the Data Node pods.",
           "items": { "type": "object" }
         },
         "affinity": {
-          "type": "object"
+          "type": "object",
+          "description": "Affinity rules for scheduling the Data Node pods."
         },
         "extraEnv": {
           "type": "array",
@@ -612,51 +681,60 @@
     },
     "serviceAccount": {
       "type": "object",
+      "description": "ServiceAccount used by the Graylog server, with an optional RBAC Role.",
       "properties": {
-        "create": { "type": "boolean" },
-        "automount": { "type": "boolean" },
-        "annotations": { "type": "object" },
-        "nameOverride": { "type": "string" },
+        "create": { "type": "boolean", "description": "Create a ServiceAccount." },
+        "automount": { "type": "boolean", "description": "Automatically mount the ServiceAccount API token." },
+        "annotations": { "type": "object", "description": "Annotations added to the ServiceAccount." },
+        "nameOverride": { "type": "string", "description": "Use an existing ServiceAccount with this name instead of the generated one." },
         "role": {
           "type": "object",
+          "description": "Optional RBAC Role and RoleBinding for the ServiceAccount.",
           "properties": {
-            "create": { "type": "boolean" },
-            "rules": { "type": "array" }
+            "create": { "type": "boolean", "description": "Create the Role and RoleBinding." },
+            "rules": { "type": "array", "description": "RBAC policy rules for the Role." }
           }
         }
       }
     },
     "ingress": {
       "type": "object",
+      "description": "Ingress resources for the Graylog web interface and forwarder.",
       "properties": {
-        "enabled": { "type": "boolean" },
+        "enabled": { "type": "boolean", "description": "Create Ingress resources." },
         "config": {
           "type": "object",
+          "description": "Shared Ingress configuration.",
           "properties": {
             "defaultBackend": {
               "type": "object",
+              "description": "Default backend configuration for the Ingress.",
               "properties": {
-                "enabled": { "type": "boolean" }
+                "enabled": { "type": "boolean", "description": "Configure a default backend for the Ingress." }
               }
             },
             "tls": {
               "type": "object",
+              "description": "TLS configuration via cert-manager Issuer/ClusterIssuer.",
               "properties": {
                 "clusterIssuer": {
                   "type": "object",
+                  "description": "Use a cert-manager ClusterIssuer.",
                   "properties": {
-                    "existingName": { "type": ["string", "null"] }
+                    "existingName": { "type": ["string", "null"], "description": "Name of an existing cert-manager ClusterIssuer to use." }
                   }
                 },
                 "issuer": {
                   "type": "object",
+                  "description": "Use a cert-manager Issuer.",
                   "properties": {
-                    "existingName": { "type": ["string", "null"] },
+                    "existingName": { "type": ["string", "null"], "description": "Name of an existing cert-manager Issuer to use." },
                     "managed": {
                       "type": "object",
+                      "description": "Let the chart create a cert-manager Issuer (ACME/Let's Encrypt).",
                       "properties": {
-                        "enabled": { "type": "boolean" },
-                        "staging": { "type": "boolean" }
+                        "enabled": { "type": "boolean", "description": "Create a managed Issuer." },
+                        "staging": { "type": "boolean", "description": "Use the Let's Encrypt staging environment." }
                       }
                     }
                   }
@@ -667,58 +745,64 @@
         },
         "web": {
           "type": "object",
+          "description": "Ingress for the Graylog web interface / REST API.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "className": { "type": "string" },
-            "annotations": { "type": "object" },
+            "enabled": { "type": "boolean", "description": "Create the web Ingress." },
+            "className": { "type": "string", "description": "IngressClass name." },
+            "annotations": { "type": "object", "description": "Annotations added to the web Ingress." },
             "hosts": {
               "type": "array",
+              "description": "Host rules for the web Ingress.",
               "items": {
                 "type": "object",
                 "properties": {
-                  "host": { "type": "string" },
+                  "host": { "type": "string", "description": "Hostname for this rule." },
                   "paths": {
                     "type": "array",
+                    "description": "Path rules for the host.",
                     "items": {
                       "type": "object",
                       "properties": {
-                        "path": { "type": "string" },
-                        "pathType": { "type": "string" }
+                        "path": { "type": "string", "description": "URL path." },
+                        "pathType": { "type": "string", "enum": [ "Prefix", "Exact", "ImplementationSpecific" ], "description": "Path matching type." }
                       }
                     }
                   }
                 }
               }
             },
-            "tls": { "type": "array" }
+            "tls": { "type": "array", "description": "TLS blocks for the web Ingress." }
           }
         },
         "forwarder": {
           "type": "object",
+          "description": "Ingress for the Graylog Forwarder.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "className": { "type": "string" },
-            "annotations": { "type": "object" },
+            "enabled": { "type": "boolean", "description": "Create the forwarder Ingress." },
+            "className": { "type": "string", "description": "IngressClass name." },
+            "annotations": { "type": "object", "description": "Annotations added to the forwarder Ingress." },
             "hosts": {
               "type": "array",
+              "description": "Host rules for the forwarder Ingress.",
               "items": {
                 "type": "object",
                 "properties": {
-                  "host": { "type": "string" },
+                  "host": { "type": "string", "description": "Hostname for this rule." },
                   "paths": {
                     "type": "array",
+                    "description": "Path rules for the host.",
                     "items": {
                       "type": "object",
                       "properties": {
-                        "path": { "type": "string" },
-                        "pathType": { "type": "string" }
+                        "path": { "type": "string", "description": "URL path." },
+                        "pathType": { "type": "string", "enum": [ "Prefix", "Exact", "ImplementationSpecific" ], "description": "Path matching type." }
                       }
                     }
                   }
                 }
               }
             },
-            "tls": { "type": "array" }
+            "tls": { "type": "array", "description": "TLS blocks for the forwarder Ingress." }
           }
         }
       }
@@ -729,38 +813,43 @@
       "properties": {
         "communityResource": {
           "type": "object",
+          "description": "MongoDBCommunity custom resource settings.",
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean", "description": "Create a MongoDBCommunity custom resource (requires the MongoDB Kubernetes Operator)." }
           }
         },
-        "version": { "type": "string" },
-        "replicas": { "type": "integer" },
-        "arbiters": { "type": "integer" },
+        "version": { "type": "string", "description": "MongoDB server version." },
+        "replicas": { "type": "integer", "minimum": 1, "description": "Number of MongoDB replica set members." },
+        "arbiters": { "type": "integer", "minimum": 0, "description": "Number of arbiter members in the replica set." },
         "persistence": {
           "type": "object",
+          "description": "Persistent storage for MongoDB.",
           "properties": {
-            "storageClass": { "type": "string" },
+            "storageClass": { "type": "string", "description": "StorageClass for the MongoDB PVCs." },
             "size": {
               "type": "object",
+              "description": "Volume sizes for MongoDB.",
               "properties": {
-                "data": { "type": "string" },
-                "logs": { "type": "string" }
+                "data": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Size of the MongoDB data volume (e.g. \"10G\")." },
+                "logs": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$", "description": "Size of the MongoDB logs volume (e.g. \"2G\")." }
               }
             }
           }
         },
         "serviceAccount": {
           "type": "object",
+          "description": "ServiceAccount used by the MongoDB pods, with an optional RBAC Role.",
           "properties": {
-            "create": { "type": "boolean" },
-            "automount": { "type": "boolean" },
-            "annotations": { "type": "object" },
-            "nameOverride": { "type": "string" },
+            "create": { "type": "boolean", "description": "Create a ServiceAccount." },
+            "automount": { "type": "boolean", "description": "Automatically mount the ServiceAccount API token." },
+            "annotations": { "type": "object", "description": "Annotations added to the ServiceAccount." },
+            "nameOverride": { "type": "string", "description": "Use an existing ServiceAccount with this name instead of the generated one." },
             "role": {
               "type": "object",
+              "description": "Optional RBAC Role and RoleBinding for the ServiceAccount.",
               "properties": {
-                "create": { "type": "boolean" },
-                "rules": { "type": "array" }
+                "create": { "type": "boolean", "description": "Create the Role and RoleBinding." },
+                "rules": { "type": "array", "description": "RBAC policy rules for the Role." }
               }
             }
           }

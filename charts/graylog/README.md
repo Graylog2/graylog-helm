@@ -626,6 +626,9 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                  | `1`                             |
 | `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
 | `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                   | `1`                             |
+| `graylog.podSecurityContext`                                          | Pod-level security context for the Graylog StatefulSet. Free-form; set to `null` to omit, `{}` restores defaults.| <pre><code>runAsUser: 1100&#10;runAsGroup: 1100&#10;runAsNonRoot: true&#10;fsGroup: 1100&#10;seccompProfile:&#10;  type: RuntimeDefault</code></pre>|
+| `graylog.initContainerSecurityContext`                                | Container security context for the Graylog init containers. Free-form; set to `null` to omit, `{}` restores defaults.| <pre><code>runAsNonRoot: true&#10;allowPrivilegeEscalation: false&#10;capabilities:&#10;  drop: ["ALL"]&#10;seccompProfile:&#10;  type: RuntimeDefault</code></pre>|
+| `graylog.containerSecurityContext`                                    | Container security context for the `graylog-app` container. Free-form; set to `null` to omit, `{}` restores defaults.| <pre><code>runAsNonRoot: true&#10;allowPrivilegeEscalation: false&#10;capabilities:&#10;  drop: ["ALL"]&#10;  add: ["NET_BIND_SERVICE"]&#10;seccompProfile:&#10;  type: RuntimeDefault</code></pre>|
 | `graylog.podAnnotations`                                              | Additional pod annotations.                                 | `{}`                            |
 | `graylog.nodeSelector`                                                | Node selector for scheduling.                               | `{}`                            |
 | `graylog.tolerations`                                                 | Tolerations for scheduling.                                 | `[]`                            |
@@ -725,6 +728,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.readinessProbe.successThreshold`             | Success threshold for the readiness probe.      | `1`               |
 | `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
 | `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
+| `datanode.podSecurityContext`                          | Pod-level security context for the DataNode StatefulSet. Free-form; set to `null` to omit, `{}` restores defaults.| <pre><code>fsGroup: 999&#10;fsGroupChangePolicy: "OnRootMismatch"&#10;seccompProfile:&#10;  type: RuntimeDefault</code></pre>|
+| `datanode.containerSecurityContext`                    | Container security context for the `graylog-datanode` container. Free-form; set to `null` to omit, `{}` restores defaults.| <pre><code>allowPrivilegeEscalation: false&#10;capabilities:&#10;  drop: ["ALL"]&#10;  add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]&#10;seccompProfile:&#10;  type: RuntimeDefault</code></pre>|
 | `datanode.podAnnotations`                              | Additional pod annotations.                     | `{}`              |
 | `datanode.nodeSelector`                                | Node selector for scheduling datanode pods.     | `{}`              |
 | `datanode.tolerations`                                 | Tolerations for scheduling.                     | `[]`              |
