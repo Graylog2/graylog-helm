@@ -134,128 +134,141 @@
           "type": "object",
           "description": "Graylog server configuration. These values can be found in server.conf",
           "properties": {
-            "rootUsername": { "type": "string" },
-            "rootPassword": { "type": "string" },
-            "customSecretPepper": { "type": "string" },
-            "timezone": { "type": "string" },
-            "selfSignedStartup": { "type": "string", "enum": [ "true", "false" ] },
-            "serverJavaOpts": { "type": "string" },
+            "rootUsername": { "type": "string", "description": "Username of the initial (root) Graylog admin user (server.conf: root_username)." },
+            "rootPassword": { "type": "string", "description": "Password for the initial admin user. Stored in the Graylog secret; leave empty to supply it via global.existingSecretName." },
+            "customSecretPepper": { "type": "string", "description": "Secret used to salt/encrypt stored passwords (server.conf: password_secret). Auto-generated when empty; must be stable across all nodes." },
+            "timezone": { "type": "string", "description": "Default timezone for the root user (server.conf: root_timezone), e.g. UTC or Europe/Berlin." },
+            "selfSignedStartup": { "type": "string", "enum": [ "true", "false" ], "description": "Generate a self-signed certificate on startup when no TLS material is provided." },
+            "serverJavaOpts": { "type": "string", "description": "JVM options for the Graylog server process (sets the base -Xms/-Xmx heap)." },
             "extraServerJavaOpts": {
               "type": "array",
+              "description": "Additional JVM options appended to the Graylog server command.",
               "items": { "type": "string" }
             },
-            "leaderElectionMode": { "type": "string", "enum": [ "automatic", "static" ] },
-            "contentPacksAutoInstall": { "type": "string", "enum": [ "true", "false" ] },
-            "isCloud": { "type": "string", "enum": [ "true", "false" ] },
+            "leaderElectionMode": { "type": "string", "enum": [ "automatic", "static" ], "description": "Leader election mode (server.conf: leader_election_mode)." },
+            "contentPacksAutoInstall": { "type": "string", "enum": [ "true", "false" ], "description": "Automatically install bundled content packs on startup." },
+            "isCloud": { "type": "string", "enum": [ "true", "false" ], "description": "Enable Graylog Cloud mode (server.conf: is_cloud)." },
             "tls": {
               "type": "object",
+              "description": "TLS settings for the Graylog HTTP interface.",
               "properties": {
-                "enabled": { "type": "boolean" },
-                "secretName": { "type": "string" },
-                "keyPassword": { "type": "string" },
-                "updateKeyStore": { "type": "boolean" },
-                "keyStorePass": { "type": "string" }
+                "enabled": { "type": "boolean", "description": "Enable TLS on the Graylog HTTP interface." },
+                "secretName": { "type": "string", "description": "Name of the TLS Secret containing the certificate and private key." },
+                "keyPassword": { "type": "string", "description": "Password protecting the private key, if any." },
+                "updateKeyStore": { "type": "boolean", "description": "Import the provided certificate into the Java keystore on startup." },
+                "keyStorePass": { "type": "string", "description": "Password for the Java keystore." }
               }
             },
             "mongodb": {
               "type": "object",
+              "description": "MongoDB connection settings for the Graylog server.",
               "properties": {
-                "customUri": { "type": "string" },
-                "maxConnections": { "type": "string" },
-                "versionProbeAttempts": { "type": "string" }
+                "customUri": { "type": "string", "description": "Full MongoDB connection URI overriding the generated one (server.conf: mongodb_uri)." },
+                "maxConnections": { "type": "string", "description": "Maximum size of the MongoDB connection pool (server.conf: mongodb_max_connections)." },
+                "versionProbeAttempts": { "type": "string", "description": "Number of attempts to probe the MongoDB version on startup (0 = retry indefinitely; server.conf: mongodb_version_probe_attempts)." }
               }
             },
             "messageJournal": {
               "type": "object",
+              "description": "On-disk message journal settings buffering messages before processing.",
               "properties": {
-                "enabled": { "type": "string", "enum": [ "true", "false" ] },
-                "flushAge": { "type": "string" },
-                "flushInterval": { "type": "string" },
-                "maxAge": { "type": "string" },
-                "segmentAge": { "type": "string" },
-                "segmentSize": { "type": "string" }
+                "enabled": { "type": "string", "enum": [ "true", "false" ], "description": "Enable the on-disk message journal (server.conf: message_journal_enabled)." },
+                "flushAge": { "type": "string", "description": "Maximum age before journal data is flushed to disk (server.conf: message_journal_flush_age)." },
+                "flushInterval": { "type": "string", "description": "Number of messages written before the journal is flushed to disk (server.conf: message_journal_flush_interval)." },
+                "maxAge": { "type": "string", "description": "Maximum age of messages retained in the journal (server.conf: message_journal_max_age)." },
+                "segmentAge": { "type": "string", "description": "Maximum age of a journal segment before a new one is created (server.conf: message_journal_segment_age)." },
+                "segmentSize": { "type": "string", "description": "Maximum size of a journal segment before a new one is created (server.conf: message_journal_segment_size)." }
               }
             },
             "network": {
               "type": "object",
+              "description": "HTTP interface network settings for the Graylog server.",
               "properties": {
-                "connectTimeout": { "type": "string" },
-                "enableCors": { "type": "string", "enum": [ "true", "false" ] },
-                "enableGzip": { "type": "string", "enum": [ "true", "false" ] },
-                "maxHeaderSize": { "type": "string" },
-                "readTimeout": { "type": "string" },
-                "threadPoolSize": { "type": "string" },
-                "externalUri": { "type": "string" }
+                "connectTimeout": { "type": "string", "description": "HTTP client connect timeout, e.g. \"5s\" (server.conf: http_connect_timeout)." },
+                "enableCors": { "type": "string", "enum": [ "true", "false" ], "description": "Enable CORS headers on the HTTP interface (server.conf: http_enable_cors)." },
+                "enableGzip": { "type": "string", "enum": [ "true", "false" ], "description": "Enable gzip compression of HTTP responses (server.conf: http_enable_gzip)." },
+                "maxHeaderSize": { "type": "string", "description": "Maximum size of an HTTP request header in bytes (server.conf: http_max_header_size)." },
+                "readTimeout": { "type": "string", "description": "HTTP client read timeout, e.g. \"10s\" (server.conf: http_read_timeout)." },
+                "threadPoolSize": { "type": "string", "description": "Size of the HTTP worker thread pool (server.conf: http_thread_pool_size)." },
+                "externalUri": { "type": "string", "description": "Public URI clients use to reach the Graylog web interface/API (server.conf: http_external_uri)." }
               }
             },
             "performance": {
               "type": "object",
+              "description": "Processing and output performance tuning for the Graylog server.",
               "properties": {
-                "asyncEventbusProcessors": { "type": "string" },
-                "autoRestartInputs": { "type": "string", "enum": [ "true", "false" ] },
-                "inputBufferProcessors": { "type": "string" },
-                "inputBufferRingSize": { "type": "string" },
-                "inputBufferWaitStrategy": { "type": "string", "enum": [ "blocking", "sleeping", "yielding", "busy_spinning" ] },
-                "jobSchedulerConcurrencyLimits": { "type": "string" },
-                "outputBatchSize": { "type": "string" },
-                "outputFaultCountThreshold": { "type": "string" },
-                "outputFaultPenaltySeconds": { "type": "string" },
-                "outputFlushInterval": { "type": "string" },
-                "outputBufferProcessorThreadsCorePoolSize": { "type": "string" },
-                "outputBufferProcessors": { "type": "string" },
-                "processBufferProcessors": { "type": "string" }
+                "asyncEventbusProcessors": { "type": "string", "description": "Number of threads dedicated to dispatching internal events (server.conf: async_eventbus_processors)." },
+                "autoRestartInputs": { "type": "string", "enum": [ "true", "false" ], "description": "Automatically restart failed inputs (server.conf: auto_restart_inputs)." },
+                "inputBufferProcessors": { "type": "string", "description": "Number of input buffer processor threads (server.conf: inputbuffer_processors)." },
+                "inputBufferRingSize": { "type": "string", "description": "Size of the input buffer ring; must be a power of two (server.conf: inputbuffer_ring_size)." },
+                "inputBufferWaitStrategy": { "type": "string", "enum": [ "blocking", "sleeping", "yielding", "busy_spinning" ], "description": "Disruptor wait strategy for the input buffer (server.conf: inputbuffer_wait_strategy)." },
+                "jobSchedulerConcurrencyLimits": { "type": "string", "description": "Concurrency limits for the job scheduler. Empty uses the Graylog default." },
+                "outputBatchSize": { "type": "string", "description": "Maximum number of messages written to the search backend in a single batch (server.conf: output_batch_size)." },
+                "outputFaultCountThreshold": { "type": "string", "description": "Number of faults an output may accumulate before it is paused (server.conf: output_fault_count_threshold)." },
+                "outputFaultPenaltySeconds": { "type": "string", "description": "Seconds to wait before retrying an output that hit the fault threshold (server.conf: output_fault_penalty_seconds)." },
+                "outputFlushInterval": { "type": "string", "description": "Maximum seconds between two batches written to the search backend (server.conf: output_flush_interval)." },
+                "outputBufferProcessorThreadsCorePoolSize": { "type": "string", "description": "Core pool size for output buffer processor threads (server.conf: outputbuffer_processor_threads_core_pool_size)." },
+                "outputBufferProcessors": { "type": "string", "description": "Number of output buffer processor threads (server.conf: outputbuffer_processors). Empty uses the Graylog default." },
+                "processBufferProcessors": { "type": "string", "description": "Number of process buffer processor threads (server.conf: processbuffer_processors). Empty uses the Graylog default." }
               }
             },
             "email": {
               "type": "object",
+              "description": "Outbound email (SMTP) transport settings for notifications.",
               "properties": {
-                "enabled": { "type": "string", "enum": [ "true", "false" ] },
-                "senderAddress": { "type": "string" },
-                "hostname": { "type": "string" },
-                "port": { "type": "string" },
-                "socketConnectionTimeout": { "type": "string" },
-                "socketTimeout": { "type": "string" },
-                "useAuth": { "type": "string", "enum": [ "true", "false" ] },
-                "useSsl": { "type": "string", "enum": [ "true", "false" ] },
-                "useTls": { "type": "string", "enum": [ "true", "false" ] },
-                "webInterfaceUrl": { "type": "string" }
+                "enabled": { "type": "string", "enum": [ "true", "false" ], "description": "Enable the email transport (server.conf: transport_email_enabled)." },
+                "senderAddress": { "type": "string", "description": "From address for emails sent by Graylog (server.conf: transport_email_from_email)." },
+                "hostname": { "type": "string", "description": "SMTP server hostname (server.conf: transport_email_hostname)." },
+                "port": { "type": "string", "description": "SMTP server port (server.conf: transport_email_port)." },
+                "socketConnectionTimeout": { "type": "string", "description": "SMTP socket connection timeout, e.g. \"10s\"." },
+                "socketTimeout": { "type": "string", "description": "SMTP socket read timeout, e.g. \"10s\"." },
+                "useAuth": { "type": "string", "enum": [ "true", "false" ], "description": "Authenticate against the SMTP server (server.conf: transport_email_use_auth)." },
+                "useSsl": { "type": "string", "enum": [ "true", "false" ], "description": "Connect to the SMTP server using SSL (server.conf: transport_email_use_ssl)." },
+                "useTls": { "type": "string", "enum": [ "true", "false" ], "description": "Use STARTTLS when connecting to the SMTP server (server.conf: transport_email_use_tls)." },
+                "webInterfaceUrl": { "type": "string", "description": "Base URL of the Graylog web interface used in email links (server.conf: transport_email_web_interface_url)." }
               }
             },
             "plugins": {
               "type": "object",
+              "description": "Graylog plugin system settings.",
               "properties": {
-                "enabled": { "type": "boolean" }
+                "enabled": { "type": "boolean", "description": "Enable the Graylog plugin system (mount the plugins volume and load installed plugins)." }
               }
             },
             "geolocation": {
               "type": "object",
+              "description": "IP geolocation processing settings.",
               "properties": {
-                "enabled": { "type": "boolean" },
+                "enabled": { "type": "boolean", "description": "Enable the Geolocation Processor." },
                 "maxmindGeoIp": {
                   "type": "object",
+                  "description": "MaxMind GeoIP database settings.",
                   "properties": {
-                    "enabled": { "type": "boolean" },
-                    "accountId": { "type": ["string", "integer", "null"] },
-                    "licenseKey": { "type": ["string", "null"] },
-                    "cronSchedule": { "type": "string" },
-                    "postInstallRun": { "type": "boolean" }
+                    "enabled": { "type": "boolean", "description": "Enable the MaxMind GeoIP update CronJob." },
+                    "accountId": { "type": ["string", "integer", "null"], "description": "MaxMind account ID used to download databases." },
+                    "licenseKey": { "type": ["string", "null"], "description": "MaxMind license key used to download databases." },
+                    "cronSchedule": { "type": "string", "description": "Cron schedule for periodic GeoIP database updates." },
+                    "postInstallRun": { "type": "boolean", "description": "Run a database download immediately after install via a post-install Helm hook Job." }
                   }
                 },
                 "mmdbSources": {
                   "type": "object",
+                  "description": "Sources for the initial geolocation database asset fetch.",
                   "properties": {
                     "city": {
                       "type": "object",
+                      "description": "Source for the GeoLite2-City.mmdb database.",
                       "properties": {
-                        "url": { "type": ["string", "null"] },
-                        "checksum": { "type": ["string", "null"] }
+                        "url": { "type": ["string", "null"], "description": "GeoLite2-City.mmdb URL (only used for the initial asset fetch)." },
+                        "checksum": { "type": ["string", "null"], "description": "GeoLite2-City.mmdb checksum (only used for the initial asset fetch)." }
                       }
                     },
                     "asn": {
                       "type": "object",
+                      "description": "Source for the GeoLite2-ASN.mmdb database.",
                       "properties": {
-                        "url": { "type": ["string", "null"] },
-                        "checksum": { "type": ["string", "null"] }
+                        "url": { "type": ["string", "null"], "description": "GeoLite2-ASN.mmdb URL (only used for the initial asset fetch)." },
+                        "checksum": { "type": ["string", "null"], "description": "GeoLite2-ASN.mmdb checksum (only used for the initial asset fetch)." }
                       }
                     }
                   }
@@ -264,25 +277,29 @@
             },
             "init": {
               "type": "object",
+              "description": "Init-container behavior for the Graylog server.",
               "properties": {
                 "assetFetch": {
                   "type": "object",
+                  "description": "Fetching of assets (plugins and geolocation databases) during init.",
                   "properties": {
-                    "enabled": { "type": "boolean" },
-                    "skipChecksum": { "type": "boolean" },
-                    "allowHttp": { "type": "boolean" },
+                    "enabled": { "type": "boolean", "description": "Enable fetching assets during init." },
+                    "skipChecksum": { "type": "boolean", "description": "Skip checksum verification of fetched assets." },
+                    "allowHttp": { "type": "boolean", "description": "Allow fetching assets over plain HTTP." },
                     "plugins": {
                       "type": "object",
+                      "description": "Plugin asset fetch settings.",
                       "properties": {
-                        "enabled": { "type": "boolean" },
-                        "baseUrl": { "type": ["string", "null"] }
+                        "enabled": { "type": "boolean", "description": "Fetch plugin assets during init." },
+                        "baseUrl": { "type": ["string", "null"], "description": "Base URL to fetch plugin assets from." }
                       }
                     },
                     "geolocation": {
                       "type": "object",
+                      "description": "Geolocation asset fetch settings.",
                       "properties": {
-                        "enabled": { "type": "boolean" },
-                        "baseUrl": { "type": ["string", "null"] }
+                        "enabled": { "type": "boolean", "description": "Fetch geolocation databases during init." },
+                        "baseUrl": { "type": ["string", "null"], "description": "Base URL to fetch geolocation databases from." }
                       }
                     }
                   }
@@ -471,17 +488,17 @@
           "type": "object",
           "description": "Graylog Data Node configuration (rendered into datanode.conf).",
           "properties": {
-            "nodeIdFile": { "type": "string" },
-            "opensearchHeap": { "type": "string" },
-            "javaOpts": { "type": "string" },
-            "skipPreflightChecks": { "type": "string", "enum": [ "true", "false" ] },
-            "nodeSearchCacheSize": { "type": "string" },
-            "s3ClientDefaultSecretKey": { "type": "string" },
-            "s3ClientDefaultAccessKey": { "type": "string" },
-            "s3ClientDefaultEndpoint": { "type": "string" },
-            "s3ClientDefaultRegion": { "type": "string" },
-            "s3ClientDefaultProtocol": { "type": "string", "enum": [ "http", "https" ] },
-            "s3ClientDefaultPathStyleAccess": { "type": "string", "enum": [ "true", "false" ] }
+            "nodeIdFile": { "type": "string", "description": "Path to the file storing the Data Node's node ID (datanode.conf: node_id_file). Defaults to /var/lib/graylog-datanode/node-id when empty." },
+            "opensearchHeap": { "type": "string", "description": "Heap size for the embedded OpenSearch process, e.g. \"2g\" (datanode.conf: opensearch_heap)." },
+            "javaOpts": { "type": "string", "description": "JVM options for the Data Node process itself (sets -Xms/-Xmx heap)." },
+            "skipPreflightChecks": { "type": "string", "enum": [ "true", "false" ], "description": "Skip Data Node preflight checks on startup (datanode.conf: skip_preflight_checks)." },
+            "nodeSearchCacheSize": { "type": "string", "description": "Size of the OpenSearch search cache used for tiered/remote data, e.g. \"10gb\" (datanode.conf: node_search_cache_size)." },
+            "s3ClientDefaultSecretKey": { "type": "string", "description": "Secret key for the default S3 client used by data tiering/snapshots (datanode.conf: s3_client_default_secret_key). Stored in a Secret." },
+            "s3ClientDefaultAccessKey": { "type": "string", "description": "Access key for the default S3 client used by data tiering/snapshots (datanode.conf: s3_client_default_access_key). Stored in a Secret." },
+            "s3ClientDefaultEndpoint": { "type": "string", "description": "Endpoint for the default S3 client, e.g. an S3-compatible host (datanode.conf: s3_client_default_endpoint)." },
+            "s3ClientDefaultRegion": { "type": "string", "description": "Region for the default S3 client (datanode.conf: s3_client_default_region)." },
+            "s3ClientDefaultProtocol": { "type": "string", "enum": [ "http", "https" ], "description": "Protocol used to reach the S3 endpoint (datanode.conf: s3_client_default_protocol)." },
+            "s3ClientDefaultPathStyleAccess": { "type": "string", "enum": [ "true", "false" ], "description": "Use path-style access for the S3 client; required by some S3-compatible stores (datanode.conf: s3_client_default_path_style_access)." }
           }
         },
         "image": {
