@@ -30,6 +30,10 @@ spec:
           db: admin
         - name: userAdminAnyDatabase
           db: admin
+        - name: backup
+          db: admin
+        - name: restore
+          db: admin
       scramCredentialsSecretName: {{ include "graylog.mongodb.crName" . | printf "%s-admin" }}
     - name: {{ include "graylog.mongodb.crUsername" . }}
       db: {{ include "graylog.mongodb.crDatabase" . }}

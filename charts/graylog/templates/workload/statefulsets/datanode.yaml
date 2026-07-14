@@ -47,10 +47,18 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
+      {{- with .Values.datanode.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: graylog-datanode
           image: {{ include "graylog.datanode.image" . }}
           imagePullPolicy: {{ .Values.datanode.image.imagePullPolicy }}
+          {{- with .Values.datanode.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "graylog.datanode.configmap.name" . }}

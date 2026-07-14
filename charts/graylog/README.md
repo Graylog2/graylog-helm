@@ -26,6 +26,9 @@ Official Helm chart for Graylog.
 * [Using External Resources](#using-external-resources)
   * [Managing Secrets Externally](#managing-secrets-externally)
   * [Bring Your Own MongoDB](#bring-your-own-mongodb)
+* [Hardened Environments](#hardened-environments)
+* [Maintenance](#maintenance)
+  * [Back Up and Restore MongoDB](#back-up-and-restore-mongodb)
 * [Uninstall](#uninstall)
   * [Removing everything](#removing-everything)
 * [Debugging](#debugging)
@@ -426,6 +429,30 @@ helm upgrade --install graylog graylog/graylog --namespace graylog --reuse-value
   --set mongodb.communityResource.enabled=false \
   --set global.existingSecretName="<your secret name>"
 ```
+
+# Hardened Environments
+
+All workloads run with tightened pod and container security contexts by default (non-root where possible, dropped
+capabilities, and `seccompProfile: RuntimeDefault`). The Graylog application is compliant with the Kubernetes
+[`restricted` Pod Security Standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
+
+Two components cannot yet meet `restricted` and need an exemption if you enforce it:
+
+- **DataNode** must currently start as root to prepare its data directory before dropping privileges to a non-root
+  user. We are working on updating the entrypoint upstream to remove this requirement; until then, the DataNode
+  requires the `baseline` level (not `restricted`) or a namespace exemption.
+- **MongoDB**, when provisioned by the MCK operator, runs pods that are not `restricted`-compliant. Either exempt
+  them, or [bring your own MongoDB](#bring-your-own-mongodb) for hardened environments.
+
+If you enforce [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/), set the
+namespace to `baseline` rather than `restricted`, or apply the exemptions above.
+
+# Maintenance
+
+## Back Up and Restore MongoDB
+
+See [the included guide](../../docs/mongodb-backup-restore.md) if you need to take a manual `mongodump` backup of 
+Graylog's MongoDB database and restore it with `mongorestore`.
 
 # Uninstall
 ```sh
