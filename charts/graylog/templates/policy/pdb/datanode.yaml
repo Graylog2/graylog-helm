@@ -1,5 +1,9 @@
-{{- if .Values.datanode.podDisruptionBudget.enabled }}
-{{- if ge (include "graylog.datanode.replicas" . | int) 1 }}
+{{- if and .Values.datanode.enabled .Values.datanode.podDisruptionBudget.enabled }}
+{{- $replicas := include "graylog.datanode.replicas" . | int }}
+{{- $minAvailable := .Values.datanode.podDisruptionBudget.minAvailable | default 2 | int }}
+{{- if ge $minAvailable $replicas }}
+{{- printf "datanode.podDisruptionBudget.minAvailable (%d) must be less than datanode.replicas (%d); otherwise the PodDisruptionBudget permits no voluntary evictions and blocks node drains and autoscaler scale-down." $minAvailable $replicas | fail }}
+{{- end }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -9,10 +13,9 @@ metadata:
     app: graylog-datanode
     {{- include "graylog.labels" . | nindent 4 }}
 spec:
-  minAvailable: {{ .Values.datanode.podDisruptionBudget.minAvailable | default 3 | int }}
+  minAvailable: {{ $minAvailable }}
   selector:
     matchLabels:
       app: graylog-datanode
       {{- include "graylog.selectorLabels" . | nindent 6 }}
-{{- end }}
 {{- end }}
