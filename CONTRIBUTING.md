@@ -54,3 +54,19 @@ For more info on how to set up a local MicroK8s environment, see: [Setting up a 
 # keeps previously set values and overrides current "appVersion"
 helm upgrade graylog ./charts/graylog -n graylog --reuse-values --set version="7.1"
 ```
+
+## Releasing
+
+Releases are **version-driven** and automated: bumping `version:` in
+`charts/graylog/Chart.yaml` on `main` triggers the release workflow, which packages
+the chart, creates the `graylog-<version>` GitHub release, updates the Helm repository
+index on `gh-pages`, and publishes to Artifact Hub. The commit that bumps the chart
+version is the release.
+
+Before cutting a release, maintainers run the full pre-release testing on both a local
+MicroK8s cluster and an AWS EKS cluster, check for drift across `values.yaml`,
+`values.schema.json`, and the chart README values reference, and update `Chart.yaml`
+(chart version, `appVersion`/image tags if the Graylog version changed, and the
+`artifacthub.io/changes` changelog).
+
+For the full step-by-step process, see [docs/RELEASING.md](docs/RELEASING.md).
