@@ -51,6 +51,20 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        {{- if .Values.datanode.sysctlInit.enabled }}
+        - name: sysctl-init
+          image: "{{ .Values.datanode.sysctlInit.image.repository }}:{{ .Values.datanode.sysctlInit.image.tag }}"
+          imagePullPolicy: {{ .Values.datanode.sysctlInit.image.imagePullPolicy | default "IfNotPresent" }}
+          {{- with .Values.datanode.sysctlInit.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command:
+            - sh
+            - -c
+            - sysctl -w vm.max_map_count={{ .Values.datanode.sysctlInit.vmMaxMapCount }}
+        {{- end }}
       containers:
         - name: graylog-datanode
           image: {{ include "graylog.datanode.image" . }}

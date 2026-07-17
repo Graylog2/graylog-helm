@@ -40,6 +40,54 @@ Official Helm chart for Graylog.
 - Helm **v3.0+**
 - MongoDB Controllers for Kubernetes Operator **v1.6.1** (required unless a [user-provided MongoDB](#bring-your-own-mongodb) is supplied)
 
+## Prerequisites
+
+### Data Node
+
+#### Kernel Parameter: vm.max_map_count
+
+The Data Node component embeds OpenSearch, which requires the kernel parameter `vm.max_map_count` to be set to at least **262144**. 
+Most cloud-managed Kubernetes clusters (EKS, GKE, AKS) default to **65530**, which will cause the Data Node to fail at startup.
+
+**Check the current value on your cluster nodes:**
+```sh
+sysctl vm.max_map_count
+```
+
+**If the value is less than 262144, you have two options:**
+
+**Option 1: Manual cluster-wide fix (recommended for existing clusters)**
+```sh
+# Run on each node (or via a DaemonSet)
+sudo sysctl -w vm.max_map_count=262144
+
+# Make it permanent
+echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+**Option 2: Automatic fix via Helm (opt-in)**
+Enable the `sysctlInit` container when installing. This runs a privileged init container once during pod startup to set the kernel parameter.
+
+**Values file approach (recommended):**
+```yaml
+# values.yaml
+datanode:
+  sysctlInit:
+    enabled: true
+    vmMaxMapCount: 262144  # optional, defaults to 262144
+```
+
+Then install: `helm install graylog graylog/graylog -n graylog --create-namespace -f values.yaml`
+
+This runs a one-time privileged init container on each Data Node pod to adjust the kernel parameter. The container runs only during startup and does not affect the main application container.
+
+
+The default value is **262144** (the minimum required by OpenSearch). The value must be at least 262144.
+> [!NOTE]
+> This does not retroactively fix nodes that already exist in your cluster; existing nodes must be updated manually.
+
+
 ## External Dependencies
 
 This Helm chart is designed as a turnkey solution for quick demos and proofs of concept,
