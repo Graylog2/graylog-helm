@@ -57,7 +57,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Init script ConfigMap name
 */}}
 {{- define "graylog.cm.init.name" }}
-{{- include "graylog.fullname" . | printf "%s-init-cm" }}
+{{- include "graylog.fullname" . | printf "%s-init-cm" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -66,7 +66,7 @@ Service account name
 {{- define "graylog.serviceAccountName" }}
 {{- $defaultName := "default" }}
 {{- if .Values.serviceAccount.create }}
-{{- $defaultName = include "graylog.fullname" . | printf "%s-sa" }}
+{{- $defaultName = include "graylog.fullname" . | printf "%s-sa" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- .Values.serviceAccount.nameOverride | default $defaultName }}
 {{- end }}
@@ -77,7 +77,7 @@ MongoDB service account name
 {{- define "graylog.mongodb.serviceAccountName" }}
 {{- $defaultName := "default" }}
 {{- if .Values.mongodb.serviceAccount.create }}
-{{- $defaultName = include "graylog.fullname" . | printf "%s-mongo-sa" }}
+{{- $defaultName = include "graylog.fullname" . | printf "%s-mongo-sa" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- .Values.mongodb.serviceAccount.nameOverride | default $defaultName }}
 {{- end }}
@@ -195,7 +195,7 @@ Graylog secret pepper
 Graylog secret name
 */}}
 {{- define "graylog.secretsName" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-secrets" }}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-secrets" | trunc 63 | trimSuffix "-" }}
 {{- if .Values.global.existingSecretName }}
 {{- $defaultName = .Values.global.existingSecretName }}
 {{- end }}
@@ -206,21 +206,21 @@ Graylog secret name
 Graylog Datanode secret name
 */}}
 {{- define "graylog.datanode.secretsName" -}}
-{{- include "graylog.secretsName" . | printf "%s-datanode" }}
+{{- include "graylog.secretsName" . | printf "%s-datanode" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Graylog backup-secret name
 */}}
 {{- define "graylog.backupSecretName" -}}
-{{- include "graylog.fullname" . | printf "%s-backup-secret" }}
+{{- include "graylog.fullname" . | printf "%s-backup-secret" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 MongoDB Community Resource name
 */}}
 {{- define "graylog.mongodb.crName" -}}
-{{- include "graylog.fullname" . | printf "%s-mongo-rs" }}
+{{- include "graylog.fullname" . | printf "%s-mongo-rs" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -251,7 +251,7 @@ MongoDB Community Resource Secret name
 Graylog service name
 */}}
 {{- define "graylog.service.name" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-svc" }}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-svc" | trunc 63 | trimSuffix "-" }}
 {{- .Values.graylog.service.nameOverride | default $defaultName }}
 {{- end }}
 
@@ -266,14 +266,14 @@ Graylog service app port
 Graylog configmap name
 */}}
 {{- define "graylog.configmap.name" -}}
-{{- include "graylog.fullname" . | printf "%s-config" }}
+{{- include "graylog.fullname" . | printf "%s-config" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Graylog data PVC/volume name
 */}}
 {{- define "graylog.volume.name" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-data" }}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-data" | trunc 63 | trimSuffix "-" }}
 {{- .Values.graylog.persistence.volumeNameOverride | default $defaultName }}
 {{- end }}
 
@@ -281,14 +281,14 @@ Graylog data PVC/volume name
 Graylog Datanode pod prefix
 */}}
 {{- define "graylog.datanode.name" -}}
-{{- include "graylog.fullname" . | printf "%s-datanode" }}
+{{- include "graylog.fullname" . | printf "%s-datanode" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Graylog Datanode service name
 */}}
 {{- define "graylog.datanode.service.name" -}}
-{{- include "graylog.fullname" . | printf "%s-datanode-svc" }}
+{{- include "graylog.fullname" . | printf "%s-datanode-svc" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -306,7 +306,7 @@ Graylog Datanode hosts
 Datanode configmap name
 */}}
 {{- define "graylog.datanode.configmap.name" -}}
-{{- include "graylog.fullname" . | printf "%s-datanode-config" }}
+{{- include "graylog.fullname" . | printf "%s-datanode-config" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -314,7 +314,7 @@ Provider-defined Storage Class name
 */}}
 {{- define "graylog.provider.storageClassName" }}
 {{- $names := dict }}
-{{- $_ := include "graylog.fullname" . | printf "%s-gp3" | set $names "aws" -}}
+{{- $_ := include "graylog.fullname" . | printf "%s-gp3" | trunc 63 | trimSuffix "-" | set $names "aws" -}}
 {{/* add more entries here */}}
 {{- .Values.provider | default "" | get $names }}
 {{- end }}
@@ -498,14 +498,14 @@ Graylog Java Options
 Ingress name
 */}}
 {{- define "graylog.ingress.web.name" }}
-{{- include "graylog.fullname" . | printf "%s-web" }}
+{{- include "graylog.fullname" . | printf "%s-web" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Cert-manager issuer name
 */}}
 {{- define "graylog.cert-manager.issuer.name" }}
-{{- include "graylog.fullname" . | printf "%s-letsencrypt" }}
+{{- include "graylog.fullname" . | printf "%s-letsencrypt" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*

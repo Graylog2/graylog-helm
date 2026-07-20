@@ -11,7 +11,7 @@ metadata:
   {{- end }}
 automountServiceAccountToken: {{ if eq (.Values.mongodb.serviceAccount.automount | toString) "false" }}false{{ else }}true{{ end }}
 {{- if empty .Values.mongodb.serviceAccount.role.rules | not | and .Values.mongodb.serviceAccount.role.create }}
-{{- $roleName := include "graylog.mongodb.serviceAccountName" . | printf "%s-role" }}
+{{- $roleName := include "graylog.mongodb.serviceAccountName" . | printf "%s-role" | trunc 63 | trimSuffix "-" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -22,7 +22,7 @@ rules: {{ .Values.mongodb.serviceAccount.role.rules | toYaml | nindent 2 }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "graylog.mongodb.serviceAccountName" . | printf "%s-rb" }}
+  name: {{ include "graylog.mongodb.serviceAccountName" . | printf "%s-rb" | trunc 63 | trimSuffix "-" }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "graylog.mongodb.serviceAccountName" . }}
