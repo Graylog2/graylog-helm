@@ -110,10 +110,15 @@ graylog:
       enabled: false
       maxmindGeoIp:
         enabled: true
+        # MaxMind account credentials
+        # When using global.existingSecretName, the external secret must contain:
+        # - GEO_IP_MAXMIND_ACCOUNT_ID: base64-encoded MaxMind account ID
+        # - GEO_IP_MAXMIND_LICENSE_KEY: base64-encoded MaxMind license key
         accountId:
         licenseKey:
-        cronSchedule: "0 0 * * *"
-        postInstallRun: true
+        # Comma-separated list of MaxMind database editions to download
+        # Examples: "GeoLite2-City GeoLite2-ASN", "GeoIP2-City GeoIP2-ISP"
+        editionIds: "GeoLite2-City GeoLite2-ASN"
       mmdbSources:
         city:
           url:
@@ -121,6 +126,31 @@ graylog:
         asn:
           url:
           checksum:
+      # Sidecar container for GeoIP updates
+      sidecar:
+        enabled: true
+        image:
+          repository: maxmindinc
+          name: geoipupdate
+          tag: "7.1.1"
+        schedule: "0 0 * * *"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+          runAsUser: 0
+          seccompProfile:
+            type: RuntimeDefault
     init:
       assetFetch:
         enabled: false
