@@ -1,0 +1,115 @@
+{{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.geolocation.sidecar.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "graylog.fullname" . }}-geoip-entrypoint
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
+data:
+  entrypoint.sh: |
+    #!/bin/sh
+    set -e
+
+    # Parse cron schedule and run geoipupdate at scheduled times
+    # Expected format: "minute hour day month weekday"
+    # For simplicity, we support common patterns
+
+    SCHEDULE="${GEOIP_SCHEDULE:-0 0 * * *}"
+    TIMESTAMP_FORMAT="+%Y-%m-%d %H:%M:%S UTC"
+
+    # Extract fields from cron schedule
+    set -- $SCHEDULE
+    CRON_MINUTE="${1:-0}"
+    CRON_HOUR="${2:-0}"
+    CRON_DAY="${3:-*}"
+    CRON_MONTH="${4:-*}"
+    CRON_WEEKDAY="${5:-*}"
+
+    echo "[$(date "$TIMESTAMP_FORMAT")] GeoIP Sidecar started"
+    echo "[$(date "$TIMESTAMP_FORMAT")] Cron schedule: $SCHEDULE"
+    echo "[$(date "$TIMESTAMP_FORMAT")] Database directory: $GEOIPUPDATE_DB_DIR"
+
+    # Function to check if current time matches cron schedule
+    should_update() {
+        local now_min=$(date +%M | sed 's/^0*//')
+        local now_hour=$(date +%H | sed 's/^0*//')
+        local now_day=$(date +%d | sed 's/^0*//')
+        local now_month=$(date +%m | sed 's/^0*//')
+        local now_wday=$(date +%w)
+
+        # Simple check: only support common patterns
+        case "$CRON_MINUTE" in
+            '*') ;;
+            "$now_min") ;;
+            *) return 1 ;;
+        esac
+
+        case "$CRON_HOUR" in
+            '*') ;;
+            "$now_hour") ;;
+            *) return 1 ;;
+        esac
+
+        case "$CRON_DAY" in
+            '*') ;;
+            "$now_day") ;;
+            *) return 1 ;;
+        esac
+
+        case "$CRON_MONTH" in
+            '*') ;;
+            "$now_month") ;;
+            *) return 1 ;;
+        esac
+
+        case "$CRON_WEEKDAY" in
+            '*') ;;
+            "$now_wday") ;;
+            *) return 1 ;;
+        esac
+
+        return 0
+    }
+
+    # Track last run to avoid multiple runs in the same minute
+    LAST_RUN_FILE="/tmp/geoip-last-run"
+    LAST_RUN_TIME=""
+
+    # Trigger file for manual updates
+    TRIGGER_FILE="/tmp/geoip-update-trigger"
+
+    # Function to run the update
+    run_update() {
+        TIMESTAMP=$(date "$TIMESTAMP_FORMAT")
+        echo "[$TIMESTAMP] Starting GeoIP database update..."
+
+        if geoipupdate -v; then
+            TIMESTAMP=$(date "$TIMESTAMP_FORMAT")
+            echo "[$TIMESTAMP] GeoIP database update completed successfully"
+        else
+            TIMESTAMP=$(date "$TIMESTAMP_FORMAT")
+            echo "[$TIMESTAMP] ERROR: GeoIP database update failed (exit code: $?)"
+        fi
+    }
+
+    # Main loop - check every 60 seconds
+    while true; do
+        CURRENT_TIME=$(date +%Y%m%d%H%M)
+
+        # Check for manual trigger file
+        if [ -f "$TRIGGER_FILE" ]; then
+            TIMESTAMP=$(date "$TIMESTAMP_FORMAT")
+            echo "[$TIMESTAMP] Manual trigger detected - running update now"
+            run_update
+            rm -f "$TRIGGER_FILE"
+            LAST_RUN_TIME="$CURRENT_TIME"
+        # Only run once per minute based on cron schedule
+        elif [ "$CURRENT_TIME" != "$LAST_RUN_TIME" ] && should_update; then
+            run_update
+            LAST_RUN_TIME="$CURRENT_TIME"
+        fi
+
+        # Sleep for 60 seconds before checking again
+        sleep 60
+    done
+{{- end }}

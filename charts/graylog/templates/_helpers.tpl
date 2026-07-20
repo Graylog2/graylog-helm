@@ -382,46 +382,6 @@ Graylog External URI
 {{- end }}
 
 {{/*
-GeoIP update JobSpec
-usage: {{ list $geoSecretName $claimName $podIndex $podSecCtx $conSecCtx | include "graylog.geoip.job.spec" | indent }}
-*/}}
-{{- define "graylog.geoip.job.spec" }}
-backoffLimit: 2
-activeDeadlineSeconds: 900
-template:
-  spec:
-    {{- with index . 3 }}
-    securityContext:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-    containers:
-      - name: geoipupdate
-        image: maxmindinc/geoipupdate:latest
-        {{- with index . 4 }}
-        securityContext:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        envFrom:
-          - secretRef:
-              name: {{ index . 0 }}
-        env:
-          - name: GEOIPUPDATE_EDITION_IDS
-            value: "GeoLite2-City GeoLite2-ASN"
-          - name: GEOIPUPDATE_FREQUENCY
-            value: "0"
-          - name: GEOIPUPDATE_DB_DIR
-            value: "/usr/share/data/geolocation"
-        volumeMounts:
-          - name: geoip-db
-            mountPath: /usr/share/data
-    restartPolicy: OnFailure
-    volumes:
-      - name: geoip-db
-        persistentVolumeClaim:
-          claimName: {{ printf "%s-%d" (index . 1) (index . 2) }}
-{{- end }}
-
-{{/*
 Graylog plugin URLs
 */}}
 {{- define "graylog.plugin.URLs" }}

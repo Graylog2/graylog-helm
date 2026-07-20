@@ -230,8 +230,7 @@
                     "enabled": { "type": "boolean" },
                     "accountId": { "type": ["string", "integer", "null"] },
                     "licenseKey": { "type": ["string", "null"] },
-                    "cronSchedule": { "type": "string" },
-                    "postInstallRun": { "type": "boolean" }
+                    "editionIds": { "type": "string", "description": "Space-separated list of MaxMind database editions" }
                   }
                 },
                 "mmdbSources": {
@@ -250,6 +249,48 @@
                         "url": { "type": ["string", "null"] },
                         "checksum": { "type": ["string", "null"] }
                       }
+                    }
+                  }
+                },
+                "sidecar": {
+                  "type": "object",
+                  "description": "GeoIP sidecar container configuration",
+                  "properties": {
+                    "enabled": { "type": "boolean", "description": "Enable sidecar container for GeoIP updates" },
+                    "image": {
+                      "type": "object",
+                      "properties": {
+                        "repository": { "type": "string", "description": "Container image repository" },
+                        "name": { "type": "string", "description": "Container image name" },
+                        "tag": { "type": "string", "description": "Container image tag (pinned version)" }
+                      }
+                    },
+                    "schedule": {
+                      "type": "string",
+                      "description": "Cron schedule for GeoIP database updates (crontab format)"
+                    },
+                    "resources": {
+                      "type": "object",
+                      "properties": {
+                        "requests": {
+                          "type": "object",
+                          "properties": {
+                            "cpu": { "type": "string" },
+                            "memory": { "type": "string" }
+                          }
+                        },
+                        "limits": {
+                          "type": "object",
+                          "properties": {
+                            "cpu": { "type": "string" },
+                            "memory": { "type": "string" }
+                          }
+                        }
+                      }
+                    },
+                    "securityContext": {
+                      "type": "object",
+                      "description": "Security context for sidecar container"
                     }
                   }
                 }

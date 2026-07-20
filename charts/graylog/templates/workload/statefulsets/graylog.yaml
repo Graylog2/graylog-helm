@@ -182,6 +182,7 @@ spec:
             - name: init-plugins
               mountPath: /usr/share/graylog/plugin
             {{- end }}
+        {{- include "graylog.geolocation.sidecar" . | nindent 8 }}
       tolerations:
       {{- with .Values.graylog.tolerations }}
         {{- toYaml . | nindent 8 }}
@@ -195,6 +196,14 @@ spec:
         configMap:
           name: {{ include "graylog.cm.init.name" . }}
           defaultMode: 0755
+      {{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.geolocation.sidecar.enabled }}
+      - name: geoip-entrypoint
+        configMap:
+          name: {{ include "graylog.fullname" . }}-geoip-entrypoint
+          defaultMode: 0755
+      - name: geoip-tmp
+        emptyDir: {}
+      {{- end }}
       {{- if .Values.graylog.config.tls.enabled }}
       - name: tls-creds
         secret:
