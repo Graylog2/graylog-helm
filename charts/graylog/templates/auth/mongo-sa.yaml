@@ -9,7 +9,7 @@ metadata:
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-automountServiceAccountToken: {{ .Values.mongodb.serviceAccount.automount | default true }}
+automountServiceAccountToken: {{ if eq (.Values.mongodb.serviceAccount.automount | toString) "false" }}false{{ else }}true{{ end }}
 {{- if empty .Values.mongodb.serviceAccount.role.rules | not | and .Values.mongodb.serviceAccount.role.create }}
 {{- $roleName := include "graylog.mongodb.serviceAccountName" . | printf "%s-role" }}
 ---
