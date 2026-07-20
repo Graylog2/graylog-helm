@@ -1,40 +1,41 @@
-# This is an example on AWS, using an ACM certificate with ALB ingress controller with external-dns 
-# and gp3 storage.
+# Example: Graylog on AWS (EKS) using an ACM certificate with the AWS Load
+# Balancer Controller (ALB Ingress) + external-dns, backed by gp3 storage.
 #
-# ALB Ingress Controller: https://kubernetes-sigs.github.io/aws-load-balancer-controller/v1.1/
-# External DNS: https://kubernetes-sigs.github.io/external-dns/latest/docs/tutorials/aws/
+# AWS Load Balancer Controller: https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/
+# External DNS:                 https://kubernetes-sigs.github.io/external-dns/latest/docs/tutorials/aws/
 #
+# Notes:
+#   - Image tags are intentionally not pinned here; they default to the chart's
+#     appVersion so the example stays compatible with the chart it ships with.
+#   - "gp3" refers to a StorageClass you must have provisioned via the EBS CSI
+#     driver. Create one (e.g. with `type: gp3`) or change these to your own.
 
 graylog:
-  image:
-    tag: "6.2"
-    imagePullPolicy: Always
   persistence:
     enabled: true
-    journal:
-      enabled: true
-      storageClass: "gp3"
-      size: 5Gi
+    storageClass: "gp3"
+    size: 5Gi
   inputs:
-    - port: 12201
+    - name: gelf-tcp
+      port: 12201
       targetPort: 12201
       protocol: TCP
 
 datanode:
   replicas: 3
-  image:
-    tag: "6.2"
-    imagePullPolicy: Always
   persistence:
     enabled: true
     data:
       enabled: true
       storageClass: "gp3"
       size: 5Gi
+  # Prevent Karpenter from disrupting DataNodes (stateful search data).
   podAnnotations:
     karpenter.sh/do-not-disrupt: "true"
 
 ingress:
+  # Top-level switch must be on in addition to the per-ingress `web.enabled`.
+  enabled: true
   web:
     enabled: true
     className: "alb"
