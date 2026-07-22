@@ -17,6 +17,9 @@ tests:
       - equal:
           path: spec.template.spec.securityContext
           value:
+            runAsUser: 999
+            runAsGroup: 999
+            runAsNonRoot: true
             fsGroup: 999
             fsGroupChangePolicy: "OnRootMismatch"
             seccompProfile:
@@ -31,7 +34,7 @@ tests:
           path: spec.template.spec.securityContext
         template: workload/statefulsets/datanode.yaml
 
-  - it: renders containerSecurityContext with the startup capabilities on the datanode container
+  - it: renders the default non-root containerSecurityContext on the datanode container
     asserts:
       - equal:
           path: spec.template.spec.containers[0].name
@@ -40,10 +43,10 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].securityContext
           value:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
             seccompProfile:
               type: RuntimeDefault
         template: workload/statefulsets/datanode.yaml
@@ -55,3 +58,12 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].securityContext
         template: workload/statefulsets/datanode.yaml
+
+  # The non-root securityContext above only works if the entrypoint takes its
+  # non-root path, which it does when GDN_RUN_AS_NONROOT is set (graylog-docker #306).
+  - it: sets GDN_RUN_AS_NONROOT so the datanode entrypoint takes the non-root path
+    asserts:
+      - equal:
+          path: data.GDN_RUN_AS_NONROOT
+          value: "true"
+        template: config/datanode.yaml
