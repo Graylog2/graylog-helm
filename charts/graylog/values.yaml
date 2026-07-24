@@ -348,6 +348,36 @@ datanode:
   affinity: {}
   extraEnv: []
 
+# External OpenSearch
+# Point Graylog at an existing, self-managed OpenSearch cluster instead of the bundled
+# Graylog Data Node. Enable this AND set `datanode.enabled: false` (the two are mutually
+# exclusive). See docs/bring-your-own-opensearch.md.
+#
+# Requirements: OpenSearch must be a Graylog-supported version (2.x, <= 2.19.x; NOT 3.0+),
+# with `action.auto_create_index: false` on the backend.
+opensearch:
+  enabled: false
+  # One or more OpenSearch node REST URIs (scheme + host + port)
+  hosts: []
+    # - https://my-opensearch.my-namespace.svc.cluster.local:9200
+  auth:
+    # Reference an existing secret holding the username/password (e.g. the opensearch operator's
+    # "<cluster>-admin-password" / custom admin credentials secret). Read at template time.
+    existingSecret: ""
+    usernameKey: "username"
+    passwordKey: "password"
+    # OR provide credentials inline (takes precedence over existingSecret; dev/test only).
+    username: ""
+    password: ""
+  tls:
+    # Set false only if the OpenSearch HTTP layer is plaintext (hosts use http://).
+    enabled: true
+    # Secret containing the CA cert that signed the OpenSearch HTTP layer, imported into
+    # Graylog's Java truststore so it trusts the HTTPS endpoint. The operator stores it in
+    # "<cluster>-ca". Leave empty only if the CA is already trusted by the JVM by default.
+    caSecret: ""
+    caKey: "ca.crt"
+
 # Graylog service account
 serviceAccount:
   create: true

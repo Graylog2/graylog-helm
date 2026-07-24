@@ -62,6 +62,19 @@ data:
     {{- end }}
     fi
     {{- end }}
+    {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+    # Trust the BYO OpenSearch CA by importing it into the Graylog Java truststore.
+    CACERTS_DST="/mnt/data/cacerts"
+    mkdir -p "${CACERTS_DST}"
+    if [ ! -e "${CACERTS_DST}/graylog.jks" ]; then
+      JAVA_HOME_LOCAL=$(java -XshowSettings:properties -version 2>&1 > /dev/null | grep 'java.home' | grep '/.*' -o)
+      cp "${JAVA_HOME_LOCAL}/lib/security/cacerts" "${CACERTS_DST}/graylog.jks"
+    fi
+    # delete-then-import so a rotated CA is picked up on pod restart
+    keytool -delete -alias byo-opensearch-ca -keystore "${CACERTS_DST}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }} 2>/dev/null || true
+    keytool -importcert -noprompt -alias byo-opensearch-ca -file "/mnt/os-tls/{{ .Values.opensearch.tls.caKey }}" -keystore "${CACERTS_DST}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
+    echo "Imported OpenSearch CA into Graylog truststore."
+    {{- end }}
     {{- if .Values.graylog.config.plugins.enabled }}
     # copy plugins
     [ -d /mnt/shared/plugins ] && find /mnt/shared/plugins/ -type f -name '*.jar' -exec cp {} /mnt/plugins/ \;

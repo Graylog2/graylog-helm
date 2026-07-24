@@ -4,7 +4,12 @@ metadata:
   name: {{ include "graylog.configmap.name" . }}
 data:
   GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.service.metrics.enabled | ternary true false | quote }}
+  {{- if .Values.opensearch.enabled }}
+  {{/* Self-signed startup is required for Data Node feature; disable it so Graylog uses elasticsearch_hosts instead of datanode discovery */}}
+  GRAYLOG_SELFSIGNED_STARTUP: "false"
+  {{- else }}
   GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfSignedStartup | default true | quote }}
+  {{- end }}
   GRAYLOG_IS_CLOUD: {{ .Values.graylog.config.isCloud | default false | quote }}
   GRAYLOG_SERVER_JAVA_OPTS: {{ include "graylog.javaOpts" . | quote }}
   GRAYLOG_LEADER_ELECTION_MODE: {{ .Values.graylog.config.leaderElectionMode | quote }}
