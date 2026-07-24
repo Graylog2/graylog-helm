@@ -1,0 +1,123 @@
+suite: PodDisruptionBudgets
+templates:
+  - policy/pdb/graylog.yaml
+  - policy/pdb/datanode.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # --- Graylog PDB ---
+  - it: is not rendered by default (podDisruptionBudget disabled)
+    template: policy/pdb/graylog.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders when enabled and replicas >= 2
+    template: policy/pdb/graylog.yaml
+    set:
+      graylog.podDisruptionBudget.enabled: true
+      graylog.replicas: 2
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: apiVersion
+          value: policy/v1
+      - equal:
+          path: metadata.name
+          value: graylog-pdb
+      - equal:
+          path: metadata.namespace
+          value: graylog
+      - equal:
+          path: spec.minAvailable
+          value: 1
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: graylog-app
+
+  - it: is not rendered when enabled but replicas < 2
+    template: policy/pdb/graylog.yaml
+    set:
+      graylog.podDisruptionBudget.enabled: true
+      graylog.replicas: 1
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: honors graylog.podDisruptionBudget.minAvailable
+    template: policy/pdb/graylog.yaml
+    set:
+      graylog.podDisruptionBudget.enabled: true
+      graylog.replicas: 3
+      graylog.podDisruptionBudget.minAvailable: 2
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 2
+
+  - it: is not rendered when graylog.enabled is false
+    template: policy/pdb/graylog.yaml
+    set:
+      graylog.enabled: false
+      graylog.podDisruptionBudget.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Datanode PDB ---
+  - it: datanode PDB is not rendered by default (disabled)
+    template: policy/pdb/datanode.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: datanode PDB renders when enabled (default replicas 3)
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.enabled: true
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.name
+          value: graylog-pdb-datanode
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: graylog-datanode
+      # default minAvailable comes from values.yaml (2)
+      - equal:
+          path: spec.minAvailable
+          value: 2
+
+  - it: datanode PDB renders when enabled with a single replica
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.enabled: true
+      datanode.replicas: 1
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # KNOWN QUIRK: `datanode.replicas | default 3` coerces an explicit 0 back to 3,
+  # so the `ge replicas 1` guard can never be false via replicas:0 and the PDB
+  # still renders. Pins the actual behavior.
+  - it: datanode replicas 0 is coerced to the default, so PDB still renders
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.enabled: true
+      datanode.replicas: 0
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: honors datanode.podDisruptionBudget.minAvailable
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.enabled: true
+      datanode.podDisruptionBudget.minAvailable: 1
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 1

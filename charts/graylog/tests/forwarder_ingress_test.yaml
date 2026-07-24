@@ -1,0 +1,96 @@
+suite: graylog forwarder Ingress
+templates:
+  - service/ingress/graylog-forwarder.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: does not render when ingress is disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render when ingress enabled but forwarder disabled
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders when ingress and forwarder are enabled
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: apiVersion
+          value: networking.k8s.io/v1
+      - equal:
+          path: metadata.name
+          value: graylog-forwarder
+
+  - it: sets the ingressClassName when provided
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.className: nginx
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  - it: applies forwarder annotations
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.annotations:
+        nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/backend-protocol"]
+          value: HTTP
+
+  - it: renders host rules with the forwarder service backend
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.hosts:
+        - host: fwd.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: fwd.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: graylog-svc
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.name
+          value: input-forwarder
+
+  - it: renders TLS block when configured
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.tls:
+        - secretName: fwd-tls
+          hosts:
+            - fwd.example.com
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: fwd-tls
+      - contains:
+          path: spec.tls[0].hosts
+          content: fwd.example.com
