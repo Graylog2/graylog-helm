@@ -1,0 +1,56 @@
+suite: AWS gp3 StorageClass
+templates:
+  - config/sc/aws-gp3.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: is not rendered by default (no provider)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders for the aws provider
+    set:
+      provider: aws
+    asserts:
+      - isKind:
+          of: StorageClass
+      - equal:
+          path: metadata.name
+          value: graylog-gp3
+      - equal:
+          path: provisioner
+          value: ebs.csi.aws.com
+      - equal:
+          path: parameters.type
+          value: gp3
+      - equal:
+          path: volumeBindingMode
+          value: WaitForFirstConsumer
+      - equal:
+          path: allowVolumeExpansion
+          value: true
+
+  - it: is installed as a pre-install/pre-upgrade hook
+    set:
+      provider: aws
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-install,pre-upgrade
+
+  - it: is not rendered when a global storageClass is set
+    set:
+      provider: aws
+      global.storageClass: my-existing-sc
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: is not rendered for a non-aws provider
+    set:
+      provider: gcp
+    asserts:
+      - hasDocuments:
+          count: 0

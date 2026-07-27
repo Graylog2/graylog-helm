@@ -1,0 +1,100 @@
+suite: Ingress fallback (waiting-room)
+templates:
+  - service/fallback.yaml
+  - config/fallback.yaml
+  - workload/fallback.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # --- Default: nothing renders (ingress disabled) ---
+  - it: fallback Service does not render by default
+    template: service/fallback.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fallback ConfigMaps do not render by default
+    template: config/fallback.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fallback Deployment does not render by default
+    template: workload/fallback.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Not rendered when defaultBackend explicitly disabled ---
+  - it: does not render when defaultBackend is disabled even with ingress on
+    template: workload/fallback.yaml
+    set:
+      ingress.enabled: true
+      ingress.config.defaultBackend.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Rendered when ingress + defaultBackend enabled ---
+  - it: renders the fallback Service
+    template: service/fallback.yaml
+    set:
+      ingress.enabled: true
+      ingress.config.defaultBackend.enabled: true
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: graylog-waiting-room
+      - equal:
+          path: spec.selector.graylog-app
+          value: graylog-waiting-room
+      - contains:
+          path: spec.ports
+          content:
+            port: 80
+            targetPort: 3000
+
+  - it: renders both fallback ConfigMaps
+    template: config/fallback.yaml
+    set:
+      ingress.enabled: true
+      ingress.config.defaultBackend.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: graylog-waiting-room-config
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: graylog-waiting-room-content
+        documentIndex: 1
+      - equal:
+          path: data.readyz
+          value: "ok"
+        documentIndex: 1
+
+  - it: renders the fallback Deployment
+    template: workload/fallback.yaml
+    set:
+      ingress.enabled: true
+      ingress.config.defaultBackend.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: graylog-waiting-room
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: busybox
+      - equal:
+          path: spec.selector.matchLabels.graylog-app
+          value: graylog-waiting-room

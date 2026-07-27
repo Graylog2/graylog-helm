@@ -125,4 +125,17 @@ jobs:
       - name: Run ct install
         run: |
           ct install --config .github/ct.yaml --all \
-            --helm-extra-set-args "--set graylog.config.rootPassword=${{ steps.ci-root-password.outputs.value }}"
+            --helm-extra-set-args "\
+            --set graylog.config.rootPassword=${{ steps.ci-root-password.outputs.value }} \
+            --set graylog.replicas=1 \
+            --set datanode.replicas=1 \
+            --set mongodb.replicas=1 \
+            --set mongodb.arbiters=0 \
+            --set graylog.resources.requests.cpu=250m \
+            --set graylog.resources.requests.memory=512Mi \
+            --set-string graylog.resources.limits.cpu=1 \
+            --set graylog.resources.limits.memory=1Gi \
+            --set datanode.resources.requests.cpu=250m \
+            --set datanode.resources.requests.memory=1Gi \
+            --set-string datanode.resources.limits.cpu=1 \
+            --set datanode.resources.limits.memory=2Gi"
