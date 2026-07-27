@@ -1,12 +1,14 @@
 suite: GeoIP Sidecar Container Tests
 templates:
   - workload/statefulsets/graylog.yaml
+  - config/graylog.yaml # checksum/config dependency
   - config/geoip-sidecar-entrypoint.yaml
   - config/secret/secrets.yaml
 
 tests:
   # Test: Sidecar renders when geolocation enabled with credentials
   - it: should render sidecar when geolocation enabled with credentials
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -17,12 +19,14 @@ tests:
           path: spec.template.spec.containers
           content:
             name: geoip-updater
+          any: true
       - equal:
           path: spec.template.spec.containers[1].image
           value: "maxmindinc/geoipupdate:7.1.1"
 
   # Test: Sidecar not rendered when geolocation disabled
   - it: should not render sidecar when geolocation disabled
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: false
     asserts:
@@ -30,9 +34,11 @@ tests:
           path: spec.template.spec.containers
           content:
             name: geoip-updater
+          any: true
 
   # Test: Sidecar not rendered when explicitly disabled
   - it: should not render sidecar when sidecar.enabled is false
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: false
@@ -43,9 +49,11 @@ tests:
           path: spec.template.spec.containers
           content:
             name: geoip-updater
+          any: true
 
   # Test: Sidecar environment variables correct
   - it: should set correct environment variables
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -54,30 +62,52 @@ tests:
       graylog.config.geolocation.maxmindGeoIp.editionIds: "GeoIP2-City GeoIP2-ISP"
       graylog.config.geolocation.sidecar.schedule: "*/6 * * * *"
     asserts:
-      - equal:
-          path: spec.template.spec.containers[1].env[3].value
-          value: "GeoIP2-City GeoIP2-ISP"
-      - equal:
-          path: spec.template.spec.containers[1].env[6].value
-          value: "*/6 * * * *"
+      # Match by env var name rather than positional index so the assertions
+      # stay valid if the sidecar's env ordering changes.
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GEOIPUPDATE_EDITION_IDS
+            value: "GeoIP2-City GeoIP2-ISP"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GEOIP_SCHEDULE
+            value: "*/6 * * * *"
+          any: true
 
   # Test: Secret references correct key names
   - it: should reference correct secret keys in sidecar
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
       graylog.config.geolocation.maxmindGeoIp.accountId: "test-account"
       graylog.config.geolocation.maxmindGeoIp.licenseKey: "test-key"
     asserts:
-      - equal:
-          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.key
-          value: "GEO_IP_MAXMIND_ACCOUNT_ID"
-      - equal:
-          path: spec.template.spec.containers[1].env[1].valueFrom.secretKeyRef.key
-          value: "GEO_IP_MAXMIND_LICENSE_KEY"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GEOIPUPDATE_ACCOUNT_ID
+            valueFrom:
+              secretKeyRef:
+                key: GEO_IP_MAXMIND_ACCOUNT_ID
+                name: RELEASE-NAME-graylog-secrets
+          any: true
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GEOIPUPDATE_LICENSE_KEY
+            valueFrom:
+              secretKeyRef:
+                key: GEO_IP_MAXMIND_LICENSE_KEY
+                name: RELEASE-NAME-graylog-secrets
+          any: true
 
   # Test: Volume mounts present
   - it: should mount required volumes in sidecar
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -89,15 +119,18 @@ tests:
           content:
             name: geoip-tmp
             mountPath: /tmp
+          any: true
       - contains:
           path: spec.template.spec.containers[1].volumeMounts
           content:
             name: geoip-entrypoint
             mountPath: /geoip-scripts
             readOnly: true
+          any: true
 
   # Test: Security context applied
   - it: should apply security context to sidecar
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -113,6 +146,7 @@ tests:
 
   # Test: Resources configured
   - it: should set resource requests and limits
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -139,9 +173,9 @@ tests:
           of: ConfigMap
       - equal:
           path: metadata.name
-          value: "RELEASE-NAME-geoip-entrypoint"
+          value: "RELEASE-NAME-graylog-geoip-entrypoint"
       - isNotNull:
-          path: data.entrypoint.sh
+          path: data["entrypoint.sh"]
 
   # Test: Entrypoint ConfigMap not created when geolocation disabled
   - it: should not create entrypoint ConfigMap when geolocation disabled
@@ -160,24 +194,33 @@ tests:
       graylog.config.geolocation.maxmindGeoIp.accountId: "my-account"
       graylog.config.geolocation.maxmindGeoIp.licenseKey: "my-key"
     asserts:
+      # documentIndex 1 = the main graylog secret (index 0 is the backup secret)
       - isNotNull:
           path: data.GEO_IP_MAXMIND_ACCOUNT_ID
+        documentIndex: 1
       - isNotNull:
           path: data.GEO_IP_MAXMIND_LICENSE_KEY
+        documentIndex: 1
 
   # Test: Secret excludes MaxMind credentials when not provided
   - it: should not include MaxMind credentials when not provided
     template: config/secret/secrets.yaml
     set:
       graylog.config.geolocation.enabled: true
+      # sidecar disabled so the StatefulSet (also rendered by this suite) does
+      # not fail its credential validation while we assert on the secret
+      graylog.config.geolocation.sidecar.enabled: false
     asserts:
       - notExists:
           path: data.GEO_IP_MAXMIND_ACCOUNT_ID
+        documentIndex: 1
       - notExists:
           path: data.GEO_IP_MAXMIND_LICENSE_KEY
+        documentIndex: 1
 
   # Test: Volumes added to StatefulSet
   - it: should add geoip volumes to StatefulSet
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -188,14 +231,17 @@ tests:
           path: spec.template.spec.volumes
           content:
             name: geoip-entrypoint
+          any: true
       - contains:
           path: spec.template.spec.volumes
           content:
             name: geoip-tmp
             emptyDir: {}
+          any: true
 
   # Test: Custom schedule applied
   - it: should apply custom schedule to GEOIP_SCHEDULE env var
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -203,12 +249,16 @@ tests:
       graylog.config.geolocation.maxmindGeoIp.licenseKey: "test-key"
       graylog.config.geolocation.sidecar.schedule: "0 2 * * *"
     asserts:
-      - equal:
-          path: spec.template.spec.containers[1].env[6].value
-          value: "0 2 * * *"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GEOIP_SCHEDULE
+            value: "0 2 * * *"
+          any: true
 
   # Test: Command points to entrypoint script
   - it: should execute entrypoint.sh script
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -224,6 +274,7 @@ tests:
 
   # Test: External secret scenario works
   - it: should work with external secret
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
@@ -233,15 +284,17 @@ tests:
           path: spec.template.spec.containers
           content:
             name: geoip-updater
+          any: true
       - equal:
           path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.name
           value: "my-external-secret"
 
   # Test: Missing credentials causes validation failure
   - it: should fail when credentials missing
+    template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
     asserts:
       - failedTemplate:
-          errorMessage: "GeoIP sidecar is enabled but MaxMind credentials are not provided"
+          errorPattern: "GeoIP sidecar is enabled but MaxMind credentials are not provided"
