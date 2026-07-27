@@ -3,11 +3,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "graylog.datanode.name" . }}
-  labels:
-    app: graylog-datanode
-    {{- include "graylog.labels" . | nindent 4 }}
-  annotations:
-    {{- include "graylog.annotations" . | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.labels "fixed" (dict "app" "graylog-datanode") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.annotations "indent" 2) }}
 spec:
   replicas: {{ include "graylog.datanode.replicas" . | int }}
   serviceName: {{ include "graylog.datanode.service.name" . }}
@@ -26,23 +23,41 @@ spec:
     {{- end }}
   template:
     metadata:
-      labels:
-        app: graylog-datanode
-        {{- include "graylog.selectorLabels" . | nindent 8 }}
-      annotations:
-        checksum/config: {{ include "graylog.datanode.configChecksum" . }}
-        checksum/secret: {{ include "graylog.secretsChecksum" . }}
-      {{- with .Values.datanode.podAnnotations }}
+      {{- include "graylog.pod.labels" (dict "context" $ "labels" .Values.datanode.podLabels "fixed" (dict "app" "graylog-datanode") "indent" 6) }}
+      {{- $podAnnotations := dict "checksum/config" (include "graylog.datanode.configChecksum" .) "checksum/secret" (include "graylog.secretsChecksum" .) }}
+      {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.podAnnotations "fixed" $podAnnotations "indent" 6) }}
+    spec:
+      dnsPolicy: {{ .Values.datanode.dnsPolicy | default "ClusterFirst" }}
+      {{- with .Values.datanode.dnsConfig }}
+      dnsConfig:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-    spec:
-      dnsPolicy: ClusterFirst
+      {{- with .Values.datanode.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.datanode.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.datanode.schedulerName }}
+      schedulerName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.datanode.runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
+      {{- if not (kindIs "invalid" .Values.datanode.terminationGracePeriodSeconds) }}
+      terminationGracePeriodSeconds: {{ .Values.datanode.terminationGracePeriodSeconds | int }}
+      {{- end }}
       {{- with .Values.datanode.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.datanode.nodeSelector }}
       nodeSelector: {{ . | toYaml | nindent 8 }}
+      {{- end }}
+      {{- with .Values.datanode.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
@@ -51,6 +66,7 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if or .Values.datanode.sysctlInit.enabled .Values.datanode.extraInitContainers }}
       initContainers:
         {{- if .Values.datanode.sysctlInit.enabled }}
         - name: sysctl-init
@@ -65,6 +81,10 @@ spec:
             - -c
             - sysctl -w vm.max_map_count={{ .Values.datanode.sysctlInit.vmMaxMapCount }}
         {{- end }}
+        {{- with .Values.datanode.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
       containers:
         - name: graylog-datanode
           image: {{ include "graylog.datanode.image" . }}
@@ -113,6 +133,13 @@ spec:
               mountPath: {{ .Values.datanode.persistence.data.mountPath | default "/var/lib/graylog-datanode" | quote }}
             - name: native-libs
               mountPath: {{ .Values.datanode.persistence.nativeLibs.mountPath | default "/native_libs" | quote }}
+            {{- with .Values.datanode.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.datanode.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if .Values.datanode.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
@@ -137,6 +164,9 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- with .Values.datanode.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       tolerations:
       {{- with .Values.datanode.tolerations }}
         {{- toYaml . | nindent 8 }}
@@ -145,7 +175,7 @@ spec:
       {{- with .Values.datanode.affinity }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if and .Values.datanode.persistence.data.enabled .Values.datanode.persistence.nativeLibs.enabled | not }}
+      {{- if or (not (and .Values.datanode.persistence.data.enabled .Values.datanode.persistence.nativeLibs.enabled)) .Values.datanode.extraVolumes }}
       volumes:
         {{- if not .Values.datanode.persistence.nativeLibs.enabled }}
         - name: native-libs
@@ -155,12 +185,17 @@ spec:
         - name: data
           emptyDir: {}
         {{- end }}
+        {{- with .Values.datanode.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
   {{- if or .Values.datanode.persistence.data.enabled .Values.datanode.persistence.nativeLibs.enabled }}
   volumeClaimTemplates:
     {{- if .Values.datanode.persistence.data.enabled }}
     - metadata:
         name: data
+        {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.persistence.data.labels "indent" 8) }}
+        {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.persistence.data.annotations "indent" 8) }}
       spec:
         accessModes:
         {{- if .Values.datanode.persistence.data.accessModes }}
@@ -173,6 +208,14 @@ spec:
         {{- with (include "graylog.datanode.data.storageClassName" . ) }}
         storageClassName: {{ . | quote }}
         {{- end }}
+        {{- with .Values.datanode.persistence.data.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.datanode.persistence.data.dataSource }}
+        dataSource:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.datanode.persistence.data.size | default "8Gi" | quote }}
@@ -180,6 +223,8 @@ spec:
     {{- if .Values.datanode.persistence.nativeLibs.enabled }}
     - metadata:
         name: native-libs
+        {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.persistence.nativeLibs.labels "indent" 8) }}
+        {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.persistence.nativeLibs.annotations "indent" 8) }}
       spec:
         accessModes:
         {{- if .Values.datanode.persistence.nativeLibs.accessModes }}
@@ -191,6 +236,14 @@ spec:
         {{- end }}
         {{- with (include "graylog.datanode.nativeLibs.storageClassName" . ) }}
         storageClassName: {{ . | quote }}
+        {{- end }}
+        {{- with .Values.datanode.persistence.nativeLibs.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.datanode.persistence.nativeLibs.dataSource }}
+        dataSource:
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         resources:
           requests:

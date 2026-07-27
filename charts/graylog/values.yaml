@@ -17,6 +17,10 @@ global:
   imagePullSecrets: []
   existingSecretName: ""
   storageClass: ""
+  # Labels added to every object deployed by this chart
+  commonLabels: {}
+  # Annotations added to every object deployed by this chart
+  commonAnnotations: {}
 
 # Graylog application
 graylog:
@@ -26,6 +30,8 @@ graylog:
   service:
     nameOverride: ""
     type: ClusterIP
+    annotations: {}
+    labels: {}
     ports:
       app: 9000
       metrics: 9833
@@ -190,6 +196,7 @@ graylog:
     annotations: {}
     labels: {}
     selector: {}
+    dataSource: {}
   livenessProbe:
     enabled: true
     initialDelaySeconds: 60
@@ -207,6 +214,8 @@ graylog:
   podDisruptionBudget:
     enabled: false
     minAvailable: 1
+    annotations: {}
+    labels: {}
   podSecurityContext:
     # fsGroup is required to make mounted volumes writable
     runAsUser: 1100
@@ -230,17 +239,44 @@ graylog:
       add: ["NET_BIND_SERVICE"]
     seccompProfile:
       type: RuntimeDefault
+  # Annotations and labels for the StatefulSet object
+  annotations: {}
+  labels: {}
+  # Annotations and labels for the Graylog pods
   podAnnotations: {}
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  schedulerName: ""
+  runtimeClassName: ""
+  terminationGracePeriodSeconds:
+  dnsPolicy: ClusterFirst
+  dnsConfig: {}
+  hostAliases: []
+  # Lifecycle hooks for the graylog-app container
+  lifecycle: {}
   extraEnv: []
+  # Additional volumes for the Graylog pods
+  extraVolumes: []
+  # Additional volume mounts for the graylog-app container
+  extraVolumeMounts: []
+  # Additional volume mounts for the chart's copy-data init container
+  extraInitVolumeMounts: []
+  # Additional init containers, rendered after the chart's own init containers
+  extraInitContainers: []
+  # Additional sidecar containers
+  extraContainers: []
 
 # Graylog Datanode
 datanode:
   enabled: true
   replicas: 3
   service:
+    annotations: {}
+    labels: {}
     ports:
       api: 8999
       data: 9200
@@ -307,6 +343,7 @@ datanode:
       annotations: {}
       labels: {}
       selector: {}
+      dataSource: {}
   livenessProbe:
     enabled: true
     initialDelaySeconds: 30
@@ -324,6 +361,8 @@ datanode:
   podDisruptionBudget:
     enabled: false
     minAvailable: 2
+    annotations: {}
+    labels: {}
   podSecurityContext:
     fsGroup: 999
     fsGroupChangePolicy: "OnRootMismatch"
@@ -336,20 +375,46 @@ datanode:
       add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
     seccompProfile:
       type: RuntimeDefault
+  # Annotations and labels for the StatefulSet object
+  annotations: {}
+  labels: {}
+  # Annotations and labels for the Data Node pods
   podAnnotations: {}
+  podLabels: {}
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  schedulerName: ""
+  runtimeClassName: ""
+  terminationGracePeriodSeconds:
+  dnsPolicy: ClusterFirst
+  dnsConfig: {}
+  hostAliases: []
+  # Lifecycle hooks for the graylog-datanode container
+  lifecycle: {}
   extraEnv: []
+  # Additional volumes for the Data Node pods
+  extraVolumes: []
+  # Additional volume mounts for the graylog-datanode container
+  extraVolumeMounts: []
+  # Additional init containers, rendered after the chart's own init containers
+  extraInitContainers: []
+  # Additional sidecar containers
+  extraContainers: []
 
 # Graylog service account
 serviceAccount:
   create: true
   automount: true
   annotations: {}
+  labels: {}
   nameOverride: ""
   role:
     create: false
+    annotations: {}
+    labels: {}
     rules: []
 #      - apiGroups: [ "" ]
 #        resources: [ "pods" ]
@@ -367,6 +432,9 @@ ingress:
         existingName:
       issuer:
         existingName:
+        # Annotations and labels for the chart-managed cert-manager Issuer
+        annotations: {}
+        labels: {}
         managed:
           enabled: false
           staging: true
@@ -374,6 +442,7 @@ ingress:
     enabled: false
     className: ""
     annotations: {}
+    labels: {}
     hosts:
       - host: ""
         paths:
@@ -387,6 +456,7 @@ ingress:
     enabled: false
     className: ""
     annotations: {}
+    labels: {}
     hosts:
       - host: chart-example.local
         paths:
@@ -402,18 +472,32 @@ mongodb:
   version: "7.0.25"
   replicas: 2
   arbiters: 1
+  # Annotations and labels for the MongoDBCommunity object
+  annotations: {}
+  labels: {}
+  # Annotations and labels for the MongoDB pods, applied via the operator
+  podAnnotations: {}
+  podLabels: {}
+  # Additional MongoDB users, appended to the chart-managed ones
+  users: []
   persistence:
     storageClass: ""
     size:
       data: "10G"
       logs: "2G"
+    # Annotations and labels for the MongoDB volume claim templates
+    annotations: {}
+    labels: {}
   serviceAccount:
     create: true
     automount: true
     annotations: {}
+    labels: {}
     nameOverride: ""
     role:
       create: true
+      annotations: {}
+      labels: {}
       rules:
         - apiGroups: [""]
           resources: ["secrets"]

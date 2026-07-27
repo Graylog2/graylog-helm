@@ -42,7 +42,13 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
+{{/*
+Common annotations
+*/}}
 {{- define "graylog.annotations" -}}
+{{- with .Values.global.commonAnnotations }}
+{{- toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -52,6 +58,59 @@ Selector labels
 app.kubernetes.io/name: {{ include "graylog.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Object metadata labels block.
+Merges, from lowest to highest precedence: global.commonLabels, the object's own
+labels from values, the common chart labels, and chart-owned labels that must not
+be overridden.
+The block is indented by "indent" spaces and brings its own leading newline, so
+call it left-trimmed ({{- include ... }}) and it lines up on its own.
+Usage:
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.labels "fixed" (dict "app" "graylog-app") "indent" 2) }}
+*/}}
+{{- define "graylog.metadata.labels" -}}
+{{- $ctx := .context -}}
+{{- $indent := .indent | default 2 | toString | atoi -}}
+{{- $subIndent := add $indent 2 | toString | atoi -}}
+{{- $merged := merge (dict) (.fixed | default dict) (include "graylog.labels" $ctx | fromYaml) (.labels | default dict) ($ctx.Values.global.commonLabels | default dict) -}}
+{{- printf "labels:" | nindent $indent -}}
+{{- toYaml $merged | nindent $subIndent -}}
+{{- end -}}
+
+{{/*
+Object metadata annotations block. Renders nothing when there is nothing to set.
+Merges, from lowest to highest precedence: global.commonAnnotations, the object's
+own annotations from values, and chart-owned annotations that must not be
+overridden (Helm hooks, resource policies).
+Usage:
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.annotations "indent" 2) }}
+*/}}
+{{- define "graylog.metadata.annotations" -}}
+{{- $ctx := .context -}}
+{{- $indent := .indent | default 2 | toString | atoi -}}
+{{- $subIndent := add $indent 2 | toString | atoi -}}
+{{- $merged := merge (dict) (.fixed | default dict) (.annotations | default dict) ($ctx.Values.global.commonAnnotations | default dict) -}}
+{{- with $merged -}}
+{{- printf "annotations:" | nindent $indent -}}
+{{- toYaml . | nindent $subIndent -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Pod template labels block. Same precedence rules as "graylog.metadata.labels",
+but built on the selector labels so pods always match their workload selector.
+Usage:
+  {{- include "graylog.pod.labels" (dict "context" $ "labels" .Values.graylog.podLabels "fixed" (dict "app" "graylog-app") "indent" 6) }}
+*/}}
+{{- define "graylog.pod.labels" -}}
+{{- $ctx := .context -}}
+{{- $indent := .indent | default 2 | toString | atoi -}}
+{{- $subIndent := add $indent 2 | toString | atoi -}}
+{{- $merged := merge (dict) (.fixed | default dict) (include "graylog.selectorLabels" $ctx | fromYaml) (.labels | default dict) ($ctx.Values.global.commonLabels | default dict) -}}
+{{- printf "labels:" | nindent $indent -}}
+{{- toYaml $merged | nindent $subIndent -}}
+{{- end -}}
 
 {{/*
 Init script ConfigMap name

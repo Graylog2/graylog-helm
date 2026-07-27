@@ -3,12 +3,8 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "graylog.fullname" . | printf "%s-forwarder" }}
-  labels:
-    {{- include "graylog.labels" . | nindent 4 }}
-  {{- with .Values.ingress.forwarder.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.ingress.forwarder.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.ingress.forwarder.annotations "indent" 2) }}
 spec:
   {{- with .Values.ingress.forwarder.className }}
   ingressClassName: {{ . }}

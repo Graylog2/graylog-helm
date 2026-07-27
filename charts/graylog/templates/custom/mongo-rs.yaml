@@ -3,6 +3,8 @@ apiVersion: mongodbcommunity.mongodb.com/v1
 kind: MongoDBCommunity
 metadata:
   name: {{ include "graylog.mongodb.crName" . }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.mongodb.labels "fixed" (dict "app" "graylog-mongodb") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.mongodb.annotations "indent" 2) }}
 spec:
   {{- $replicas := .Values.mongodb.replicas | default 2 | int }}
   {{- $arbiters := .Values.mongodb.arbiters | default 0 | int }}
@@ -50,11 +52,16 @@ spec:
   statefulSet:
     spec:
       template:
+        metadata:
+          {{- include "graylog.pod.labels" (dict "context" $ "labels" .Values.mongodb.podLabels "fixed" (dict "app" "graylog-mongodb") "indent" 10) }}
+          {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.mongodb.podAnnotations "indent" 10) }}
         spec:
           serviceAccountName: {{ include "graylog.mongodb.serviceAccountName" . }}
       volumeClaimTemplates:
         - metadata:
             name: data-volume
+            {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.mongodb.persistence.labels "indent" 12) }}
+            {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.mongodb.persistence.annotations "indent" 12) }}
           spec:
             accessModes: ["ReadWriteOnce"]
             {{- with (include "graylog.mongodb.storageClassName" .) }}
@@ -65,6 +72,8 @@ spec:
                 storage: {{ .Values.mongodb.persistence.size.data | default "10G" | quote }}
         - metadata:
             name: logs-volume
+            {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.mongodb.persistence.labels "indent" 12) }}
+            {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.mongodb.persistence.annotations "indent" 12) }}
           spec:
             accessModes: [ "ReadWriteOnce" ]
             {{- with (include "graylog.mongodb.storageClassName" .) }}

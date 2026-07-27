@@ -3,6 +3,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "graylog.fallback.name" . }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "fixed" (dict "graylog-app" (include "graylog.fallback.name" .)) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "indent" 2) }}
 spec:
   replicas: 1
   selector:
@@ -10,8 +12,8 @@ spec:
       graylog-app: {{ include "graylog.fallback.name" . }}
   template:
     metadata:
-      labels:
-        graylog-app: {{ include "graylog.fallback.name" . }}
+      {{- include "graylog.pod.labels" (dict "context" $ "fixed" (dict "graylog-app" (include "graylog.fallback.name" .)) "indent" 6) }}
+      {{- include "graylog.metadata.annotations" (dict "context" $ "indent" 6) }}
     spec:
       containers:
         - name: busybox

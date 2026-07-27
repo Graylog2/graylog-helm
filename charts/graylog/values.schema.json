@@ -39,7 +39,9 @@
           }
         },
         "storageClass": { "type": "string" },
-        "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" }
+        "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" },
+        "commonLabels": { "type": "object", "description": "Labels added to every object deployed by this chart" },
+        "commonAnnotations": { "type": "object", "description": "Annotations added to every object deployed by this chart" }
       }
     },
     "graylog": {
@@ -54,6 +56,8 @@
           "properties": {
             "nameOverride": { "type": "string" },
             "type": { "type": "string" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "ports": {
               "type": "object",
               "properties": {
@@ -391,6 +395,9 @@
             },
             "selector": {
               "type": "object"
+            },
+            "dataSource": {
+              "type": "object"
             }
           }
         },
@@ -420,7 +427,9 @@
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" }
+            "minAvailable": { "type": "integer" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" }
           }
         },
         "podSecurityContext": {
@@ -435,9 +444,12 @@
           "type": ["object", "null"],
           "description": "Container securityContext applied to the graylog-app container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
+        "annotations": { "type": "object", "description": "Annotations for the StatefulSet object" },
+        "labels": { "type": "object", "description": "Labels for the StatefulSet object" },
         "podAnnotations": {
           "type": "object"
         },
+        "podLabels": { "type": "object" },
         "nodeSelector": {
           "type": "object"
         },
@@ -448,10 +460,50 @@
         "affinity": {
           "type": "object"
         },
+        "topologySpreadConstraints": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "priorityClassName": { "type": [ "string", "null" ] },
+        "schedulerName": { "type": [ "string", "null" ] },
+        "runtimeClassName": { "type": [ "string", "null" ] },
+        "terminationGracePeriodSeconds": { "type": [ "integer", "null" ] },
+        "dnsPolicy": { "type": [ "string", "null" ] },
+        "dnsConfig": { "type": "object" },
+        "hostAliases": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "lifecycle": { "type": "object", "description": "Lifecycle hooks for the main container" },
         "extraEnv": {
           "type": "array",
           "items": { "type": "object" },
           "description": "Full EnvVar objects (supports valueFrom)"
+        },
+        "extraVolumes": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volumes for the pod"
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volume mounts for the main container"
+        },
+        "extraInitVolumeMounts": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volume mounts for the chart's copy-data init container"
+        },
+        "extraInitContainers": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional init containers, rendered after the chart's own init containers"
+        },
+        "extraContainers": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional sidecar containers"
         }
       }
     },
@@ -464,6 +516,8 @@
         "service": {
           "type": "object",
           "properties": {
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "ports": {
               "type": "object",
               "properties": {
@@ -609,6 +663,9 @@
                 },
                 "selector": {
                   "type": "object"
+                },
+                "dataSource": {
+                  "type": "object"
                 }
               }
             }
@@ -640,7 +697,9 @@
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" }
+            "minAvailable": { "type": "integer" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" }
           }
         },
         "podSecurityContext": {
@@ -651,9 +710,12 @@
           "type": ["object", "null"],
           "description": "Container securityContext applied to the graylog-datanode container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
+        "annotations": { "type": "object", "description": "Annotations for the StatefulSet object" },
+        "labels": { "type": "object", "description": "Labels for the StatefulSet object" },
         "podAnnotations": {
           "type": "object"
         },
+        "podLabels": { "type": "object" },
         "nodeSelector": {
           "type": "object"
         },
@@ -664,10 +726,45 @@
         "affinity": {
           "type": "object"
         },
+        "topologySpreadConstraints": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "priorityClassName": { "type": [ "string", "null" ] },
+        "schedulerName": { "type": [ "string", "null" ] },
+        "runtimeClassName": { "type": [ "string", "null" ] },
+        "terminationGracePeriodSeconds": { "type": [ "integer", "null" ] },
+        "dnsPolicy": { "type": [ "string", "null" ] },
+        "dnsConfig": { "type": "object" },
+        "hostAliases": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "lifecycle": { "type": "object", "description": "Lifecycle hooks for the main container" },
         "extraEnv": {
           "type": "array",
           "items": { "type": "object" },
           "description": "Full EnvVar objects (supports valueFrom)"
+        },
+        "extraVolumes": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volumes for the pod"
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volume mounts for the main container"
+        },
+        "extraInitContainers": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional init containers, rendered after the chart's own init containers"
+        },
+        "extraContainers": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional sidecar containers"
         }
       }
     },
@@ -677,11 +774,14 @@
         "create": { "type": "boolean" },
         "automount": { "type": "boolean" },
         "annotations": { "type": "object" },
+        "labels": { "type": "object" },
         "nameOverride": { "type": "string" },
         "role": {
           "type": "object",
           "properties": {
             "create": { "type": "boolean" },
+            "annotations": { "type": "object", "description": "Annotations for the Role and RoleBinding objects" },
+            "labels": { "type": "object", "description": "Labels for the Role and RoleBinding objects" },
             "rules": { "type": "array" }
           }
         }
@@ -713,6 +813,8 @@
                   "type": "object",
                   "properties": {
                     "existingName": { "type": ["string", "null"] },
+                    "annotations": { "type": "object", "description": "Annotations for the chart-managed cert-manager Issuer" },
+                    "labels": { "type": "object", "description": "Labels for the chart-managed cert-manager Issuer" },
                     "managed": {
                       "type": "object",
                       "properties": {
@@ -732,6 +834,7 @@
             "enabled": { "type": "boolean" },
             "className": { "type": "string" },
             "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "hosts": {
               "type": "array",
               "items": {
@@ -760,6 +863,7 @@
             "enabled": { "type": "boolean" },
             "className": { "type": "string" },
             "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "hosts": {
               "type": "array",
               "items": {
@@ -797,6 +901,11 @@
         "version": { "type": "string" },
         "replicas": { "type": "integer" },
         "arbiters": { "type": "integer" },
+        "annotations": { "type": "object", "description": "Annotations for the MongoDBCommunity object" },
+        "labels": { "type": "object", "description": "Labels for the MongoDBCommunity object" },
+        "podAnnotations": { "type": "object" },
+        "podLabels": { "type": "object" },
+        "users": { "type": "array", "items": { "type": "object" } },
         "persistence": {
           "type": "object",
           "properties": {
@@ -807,7 +916,9 @@
                 "data": { "type": "string" },
                 "logs": { "type": "string" }
               }
-            }
+            },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" }
           }
         },
         "serviceAccount": {
@@ -816,11 +927,14 @@
             "create": { "type": "boolean" },
             "automount": { "type": "boolean" },
             "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "nameOverride": { "type": "string" },
             "role": {
               "type": "object",
               "properties": {
                 "create": { "type": "boolean" },
+                "annotations": { "type": "object", "description": "Annotations for the Role and RoleBinding objects" },
+                "labels": { "type": "object", "description": "Labels for the Role and RoleBinding objects" },
                 "rules": { "type": "array" }
               }
             }

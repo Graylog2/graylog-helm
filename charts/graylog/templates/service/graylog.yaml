@@ -3,8 +3,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "graylog.service.name" . }}
-  labels:
-    {{- include "graylog.labels" . | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.service.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.service.annotations "indent" 2) }}
 spec:
   type: {{ .Values.graylog.service.type | default "ClusterIP" }}
   ports:

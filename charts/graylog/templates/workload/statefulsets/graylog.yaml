@@ -4,11 +4,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "graylog.fullname" . }}
-  labels:
-    app: graylog-app
-    {{- include "graylog.labels" . | nindent 4 }}
-  annotations:
-    {{- include "graylog.annotations" . | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.labels "fixed" (dict "app" "graylog-app") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.annotations "indent" 2) }}
 spec:
   replicas: {{ include "graylog.replicas" . | default 2 | int }}
   serviceName: {{ include "graylog.service.name" . }}
@@ -27,23 +24,41 @@ spec:
     {{- end }}
   template:
     metadata:
-      labels:
-        app: graylog-app
-        {{- include "graylog.selectorLabels" . | nindent 8 }}
-      annotations:
-        checksum/config: {{ include "graylog.configChecksum" . }}
-        checksum/secret: {{ include "graylog.secretsChecksum" . }}
-      {{- with .Values.graylog.podAnnotations }}
+      {{- include "graylog.pod.labels" (dict "context" $ "labels" .Values.graylog.podLabels "fixed" (dict "app" "graylog-app") "indent" 6) }}
+      {{- $podAnnotations := dict "checksum/config" (include "graylog.configChecksum" .) "checksum/secret" (include "graylog.secretsChecksum" .) }}
+      {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.podAnnotations "fixed" $podAnnotations "indent" 6) }}
+    spec:
+      dnsPolicy: {{ .Values.graylog.dnsPolicy | default "ClusterFirst" }}
+      {{- with .Values.graylog.dnsConfig }}
+      dnsConfig:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-    spec:
-      dnsPolicy: ClusterFirst
+      {{- with .Values.graylog.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.graylog.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.graylog.schedulerName }}
+      schedulerName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.graylog.runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
+      {{- if not (kindIs "invalid" .Values.graylog.terminationGracePeriodSeconds) }}
+      terminationGracePeriodSeconds: {{ .Values.graylog.terminationGracePeriodSeconds | int }}
+      {{- end }}
       {{- with .Values.graylog.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.graylog.nodeSelector }}
       nodeSelector: {{ . | toYaml | nindent 8 }}
+      {{- end }}
+      {{- with .Values.graylog.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
@@ -82,6 +97,9 @@ spec:
               subPath: tls.crt
               readOnly: true
             {{- end }}
+            {{- with .Values.graylog.extraInitVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
         {{- if .Values.graylog.config.plugins.enabled }}
             - name: init-plugins
               mountPath: /mnt/plugins
@@ -108,6 +126,9 @@ spec:
               mountPath: /mnt/plugins
         {{- end }}
         {{- end }}
+        {{- end }}
+        {{- with .Values.graylog.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       containers:
         - name: graylog-app
@@ -182,7 +203,19 @@ spec:
             - name: init-plugins
               mountPath: /usr/share/graylog/plugin
             {{- end }}
-        {{- include "graylog.geolocation.sidecar" . | nindent 8 }}
+            {{- with .Values.graylog.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.graylog.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- with (include "graylog.geolocation.sidecar" . | trim) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.graylog.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       tolerations:
       {{- with .Values.graylog.tolerations }}
         {{- toYaml . | nindent 8 }}
@@ -196,6 +229,9 @@ spec:
         configMap:
           name: {{ include "graylog.cm.init.name" . }}
           defaultMode: 0755
+      {{- with .Values.graylog.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
       {{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.geolocation.sidecar.enabled }}
       - name: geoip-entrypoint
         configMap:
@@ -235,17 +271,19 @@ spec:
       kind: PersistentVolumeClaim
       metadata:
         name: {{ include "graylog.volume.name" . }}
-        {{- with .Values.graylog.persistence.annotations }}
-        annotations:
-          {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.graylog.persistence.labels }}
-        labels:
-          {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.persistence.labels "indent" 8) }}
+        {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.persistence.annotations "indent" 8) }}
       spec:
         {{- with (include "graylog.storageClassName" .) }}
         storageClassName: {{ . | quote }}
+        {{- end }}
+        {{- with .Values.graylog.persistence.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.graylog.persistence.dataSource }}
+        dataSource:
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         accessModes:
         {{- if .Values.graylog.persistence.accessModes }}
