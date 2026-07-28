@@ -188,8 +188,24 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       affinity:
-      {{- with .Values.graylog.affinity }}
-        {{- toYaml . | nindent 8 }}
+      {{- if .Values.graylog.affinity }}
+        {{- toYaml .Values.graylog.affinity | nindent 8 }}
+      {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/instance
+                      operator: In
+                      values:
+                        - {{ .Release.Name }}
+                    - key: app
+                      operator: In
+                      values:
+                        - graylog-app
+                topologyKey: kubernetes.io/hostname
       {{- end }}
       volumes:
       - name: init-script

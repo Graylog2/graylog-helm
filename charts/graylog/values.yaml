@@ -204,8 +204,11 @@ graylog:
     timeoutSeconds: 5
     failureThreshold: 6
     successThreshold: 1
+  # PodDisruptionBudgets are enabled by default for production deployments
+  # They prevent cluster upgrades and maintenance from disrupting all instances
+  # Set enabled: false only for non-production clusters or single-replica deployments
   podDisruptionBudget:
-    enabled: false
+    enabled: true
     minAvailable: 1
   podSecurityContext:
     # fsGroup is required to make mounted volumes writable
@@ -321,8 +324,11 @@ datanode:
     timeoutSeconds: 5
     failureThreshold: 6
     successThreshold: 1
+  # PodDisruptionBudgets are enabled by default for production deployments
+  # They prevent cluster upgrades and maintenance from disrupting all instances
+  # Set enabled: false only for non-production clusters or single-replica deployments
   podDisruptionBudget:
-    enabled: false
+    enabled: true
     minAvailable: 2
   podSecurityContext:
     fsGroup: 999
@@ -400,8 +406,12 @@ mongodb:
   communityResource:
     enabled: true
   version: "7.0.25"
-  replicas: 2
-  arbiters: 1
+  # For production deployments, use 3 data-bearing replicas with no arbiters.
+  # This configuration supports w:majority writes even with one replica down.
+  # For cost-optimized test/staging environments, use the PSA topology instead:
+  # replicas: 2, arbiters: 1
+  replicas: 3
+  arbiters: 0
   persistence:
     storageClass: ""
     size:
