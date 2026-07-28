@@ -29,6 +29,7 @@ Official Helm chart for Graylog.
 * [Using External Resources](#using-external-resources)
   * [Managing Secrets Externally](#managing-secrets-externally)
   * [Bring Your Own MongoDB](#bring-your-own-mongodb)
+  * [Bring Your Own OpenSearch](#bring-your-own-opensearch)
 * [Hardened Environments](#hardened-environments)
 * [Maintenance](#maintenance)
   * [Back Up and Restore MongoDB](#back-up-and-restore-mongodb)
@@ -110,6 +111,14 @@ overall production readiness.
 
 You may also choose to [bring your own MongoDB](#bring-your-own-mongodb), but for ease of deployment as well as
 improved reliability the MCK Operator remains the preferred way to deploy MongoDB and is therefore enabled by default.
+
+### OpenSearch
+
+The chart deploys the Graylog **Data Node** by default, which manages its own embedded OpenSearch, so no external
+search backend is required. If you would rather run OpenSearch yourself — for example with the
+[OpenSearch Kubernetes Operator](https://github.com/opensearch-project/opensearch-k8s-operator) — you can
+[bring your own OpenSearch](#bring-your-own-opensearch) instead. The cluster must run a Graylog-supported OpenSearch
+version (**2.x, up to 2.19.x** for Graylog 7.x; **3.0+ is not supported**).
 
 ### Ingress Controller
 
@@ -560,6 +569,54 @@ helm upgrade --install graylog graylog/graylog --namespace graylog --reuse-value
   --set global.existingSecretName="<your secret name>"
 ```
 
+## Bring Your Own OpenSearch
+
+By default, this chart deploys the **Graylog Data Node**, which manages an embedded OpenSearch for you. If you already
+run — or prefer to manage separately — an OpenSearch cluster, you can disable the Data Node and point Graylog directly
+at that cluster instead.
+
+Your cluster must run a version Graylog supports (see the
+[compatibility matrix](https://go2docs.graylog.org/current/downloading_and_installing_graylog/compatibility_matrix.htm)):
+for Graylog 7.x that is OpenSearch **2.x, up to 2.19.x**. **OpenSearch 3.0+ is not supported.** Graylog manages its own
+indices, so the cluster should be configured with `action.auto_create_index: false`. MongoDB is still required, either
+bundled or [your own](#bring-your-own-mongodb).
+
+```yaml
+# disable the bundled Data Node...
+datanode:
+  enabled: false
+
+# ...and point Graylog at your own OpenSearch cluster instead
+opensearch:
+  enabled: true
+  hosts:
+    - https://opensearch.my-namespace.svc.cluster.local:9200
+  auth:
+    existingSecret: my-opensearch-credentials
+    usernameKey: username
+    passwordKey: password
+  tls:
+    enabled: true
+    caSecret: my-opensearch-ca
+    caKey: ca.crt
+```
+
+The chart assembles `GRAYLOG_ELASTICSEARCH_HOSTS` (with the credentials injected into each host URI) into a dedicated
+`<release>-graylog-opensearch` secret, and imports the CA from `opensearch.tls.caSecret` into Graylog's Java truststore
+so the HTTPS endpoint is trusted. Because the connection lives in its own secret, this works whether or not you also
+[manage secrets externally](#managing-secrets-externally).
+
+`datanode.enabled` and `opensearch.enabled` are mutually exclusive: enabling both, enabling neither, or enabling
+OpenSearch without any `hosts` is rejected at render time. All `datanode.*` values are ignored in this mode.
+
+> [!IMPORTANT]
+> `opensearch.auth.existingSecret` is resolved with Helm's `lookup`, so the secret must already exist in the release
+> namespace when you install or upgrade. It cannot be read during `helm template` or `--dry-run` — including GitOps
+> rendering — where the resulting host URIs will not contain credentials.
+
+See the [Bring Your Own OpenSearch guide](../../docs/bring-your-own-opensearch.md) for credential and CA handling,
+certificate rotation, and caveats.
+
 # Hardened Environments
 
 All workloads run with tightened pod and container security contexts by default (non-root where possible, dropped
@@ -860,6 +917,24 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.tolerations`                                 | Tolerations for scheduling.                     | `[]`              |
 | `datanode.affinity`                                    | Affinity rules for scheduling.                  | `{}`              |
 | `datanode.extraEnv`                                    | Custom EnvVar environment variables.            | `[]`              |
+
+
+## OpenSearch
+Connect Graylog to an external, self-managed OpenSearch cluster instead of the bundled Data Node.
+Mutually exclusive with `datanode.enabled`. See [Bring Your Own OpenSearch](#bring-your-own-opensearch).
+
+| Key Path                         | Description                                                                                             | Default      |
+|----------------------------------|---------------------------------------------------------------------------------------------------------|--------------|
+| `opensearch.enabled`             | Enable external OpenSearch mode. Requires `datanode.enabled=false`.                                     | `false`      |
+| `opensearch.hosts`               | OpenSearch node REST URIs (scheme, host and port), without credentials.                                 | `[]`         |
+| `opensearch.auth.existingSecret` | Secret holding the OpenSearch username and password, read at install/upgrade time.                      | `""`         |
+| `opensearch.auth.usernameKey`    | Key within `existingSecret` holding the username.                                                       | `"username"` |
+| `opensearch.auth.passwordKey`    | Key within `existingSecret` holding the password.                                                       | `"password"` |
+| `opensearch.auth.username`       | Inline username. Takes precedence over `existingSecret`; intended for development and testing.          | `""`         |
+| `opensearch.auth.password`       | Inline password. Takes precedence over `existingSecret`; intended for development and testing.          | `""`         |
+| `opensearch.tls.enabled`         | Whether the OpenSearch HTTP layer uses TLS. Set to `false` for plaintext (`http://`) hosts.             | `true`       |
+| `opensearch.tls.caSecret`        | Secret containing the CA certificate for the OpenSearch HTTP layer, imported into Graylog's truststore. | `""`         |
+| `opensearch.tls.caKey`           | Key within `caSecret` holding the CA certificate.                                                       | `"ca.crt"`   |
 
 
 ## Service Account
