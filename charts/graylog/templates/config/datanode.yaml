@@ -2,6 +2,9 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "graylog.datanode.configmap.name" . }}
+  labels:
+    app.kubernetes.io/component: datanode
+    {{- include "graylog.labels" . | nindent 4 }}
 data:
   JAVA_OPTS: {{ .Values.datanode.config.javaOpts | quote }}
   GRAYLOG_DATANODE_NODE_ID_FILE: {{ .Values.datanode.config.nodeIdFile | default "/var/lib/graylog-datanode/node-id" | quote }}
