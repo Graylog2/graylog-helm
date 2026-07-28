@@ -4,6 +4,7 @@ kind: Service
 metadata:
   name: {{ include "graylog.service.name" . }}
   labels:
+    app.kubernetes.io/component: server
     {{- include "graylog.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.graylog.service.type | default "ClusterIP" }}

@@ -9,6 +9,7 @@ kind: Ingress
 metadata:
   name: {{ include "graylog.ingress.web.name" . }}
   labels:
+    app.kubernetes.io/component: server
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
   {{- $clusterissuer := .Values.ingress.config.tls.clusterIssuer.existingName }}

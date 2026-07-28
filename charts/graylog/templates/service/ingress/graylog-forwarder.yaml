@@ -4,6 +4,7 @@ kind: Ingress
 metadata:
   name: {{ include "graylog.fullname" . | printf "%s-forwarder" }}
   labels:
+    app.kubernetes.io/component: forwarder
     {{- include "graylog.labels" . | nindent 4 }}
   {{- with .Values.ingress.forwarder.annotations }}
   annotations:
