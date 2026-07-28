@@ -57,6 +57,14 @@ data:
   {{/* http_publish_uri is rendered directly on the PodSpec for each Graylog node based on $POD_NAME */}}
   # GRAYLOG_HTTP_PUBLISH_URI: ""
 
+  {{- if include "graylog.forwarder.enabled" . | eq "true" }}
+  # Forwarder
+  {{/* Without a bind address Graylog never listens on 13301/13302, so forwarders
+       cannot connect no matter how the ingest endpoint is exposed. */}}
+  GRAYLOG_FORWARDER_BIND_ADDRESS: {{ .Values.graylog.config.forwarder.bindAddress | quote }}
+  GRAYLOG_FORWARDER_GRPC_ENABLE_TLS: {{ .Values.graylog.config.forwarder.grpcEnableTls | quote }}
+  {{- end }}
+
   # Performance Tuning
   GRAYLOG_ASYNC_EVENTBUS_PROCESSORS: {{ .Values.graylog.config.performance.asyncEventbusProcessors | int | quote }}
   GRAYLOG_AUTO_RESTART_INPUTS: {{ .Values.graylog.config.performance.autoRestartInputs | quote }}

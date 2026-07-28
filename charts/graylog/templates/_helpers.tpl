@@ -263,6 +263,40 @@ Graylog service app port
 {{- end }}
 
 {{/*
+Whether the Graylog server should listen for forwarder connections.
+
+Defaults to ingress.forwarder.enabled so that exposing the ingest endpoint also
+binds the ports behind it; set graylog.config.forwarder.enabled explicitly to
+override (e.g. to bind the ports without creating an Ingress).
+Returns the string "true" or "false".
+Usage: if include "graylog.forwarder.enabled" . | eq "true" ...
+*/}}
+{{- define "graylog.forwarder.enabled" -}}
+{{- $configured := .Values.graylog.config.forwarder.enabled -}}
+{{- if kindIs "bool" $configured -}}
+{{- $configured -}}
+{{- else -}}
+{{- .Values.ingress.forwarder.enabled | ternary true false -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Graylog service port name for the forwarder message channel (default 13301).
+Sourced from graylog.inputs, so it must stay in sync with that entry's name.
+*/}}
+{{- define "graylog.service.port.forwarder.message" -}}
+{{- print "input-forwarder" }}
+{{- end }}
+
+{{/*
+Graylog service port name for the forwarder configuration channel (13302).
+Always exposed by the service; the forwarder polls it for configuration updates.
+*/}}
+{{- define "graylog.service.port.forwarder.config" -}}
+{{- print "input-fwd-conf" }}
+{{- end }}
+
+{{/*
 Graylog configmap name
 */}}
 {{- define "graylog.configmap.name" -}}
@@ -579,6 +613,20 @@ Ingress name
 */}}
 {{- define "graylog.ingress.web.name" }}
 {{- include "graylog.fullname" . | printf "%s-web" }}
+{{- end }}
+
+{{/*
+Forwarder message channel ingress name
+*/}}
+{{- define "graylog.ingress.forwarder.message.name" }}
+{{- include "graylog.fullname" . | printf "%s-forwarder-message-channel" }}
+{{- end }}
+
+{{/*
+Forwarder configuration channel ingress name
+*/}}
+{{- define "graylog.ingress.forwarder.config.name" }}
+{{- include "graylog.fullname" . | printf "%s-forwarder-config-channel" }}
 {{- end }}
 
 {{/*

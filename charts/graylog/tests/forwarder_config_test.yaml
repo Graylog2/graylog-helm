@@ -1,0 +1,62 @@
+suite: graylog forwarder server configuration
+templates:
+  - config/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: omits forwarder settings by default
+    asserts:
+      - notExists:
+          path: data.GRAYLOG_FORWARDER_BIND_ADDRESS
+      - notExists:
+          path: data.GRAYLOG_FORWARDER_GRPC_ENABLE_TLS
+
+  - it: binds the forwarder ports when the forwarder ingress is enabled
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+    asserts:
+      - equal:
+          path: data.GRAYLOG_FORWARDER_BIND_ADDRESS
+          value: "0.0.0.0"
+      - equal:
+          path: data.GRAYLOG_FORWARDER_GRPC_ENABLE_TLS
+          value: "false"
+
+  - it: binds the forwarder ports when enabled explicitly without an ingress
+    set:
+      graylog.config.forwarder.enabled: true
+    asserts:
+      - equal:
+          path: data.GRAYLOG_FORWARDER_BIND_ADDRESS
+          value: "0.0.0.0"
+
+  - it: an explicit false overrides the forwarder ingress default
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      graylog.config.forwarder.enabled: false
+    asserts:
+      - notExists:
+          path: data.GRAYLOG_FORWARDER_BIND_ADDRESS
+      - notExists:
+          path: data.GRAYLOG_FORWARDER_GRPC_ENABLE_TLS
+
+  - it: honours a custom bind address
+    set:
+      graylog.config.forwarder.enabled: true
+      graylog.config.forwarder.bindAddress: "127.0.0.1"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_FORWARDER_BIND_ADDRESS
+          value: "127.0.0.1"
+
+  - it: enables gRPC TLS when requested
+    set:
+      graylog.config.forwarder.enabled: true
+      graylog.config.forwarder.grpcEnableTls: true
+    asserts:
+      - equal:
+          path: data.GRAYLOG_FORWARDER_GRPC_ENABLE_TLS
+          value: "true"

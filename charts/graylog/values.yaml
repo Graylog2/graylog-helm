@@ -60,6 +60,18 @@ graylog:
       keyPassword: ""
       updateKeyStore: true
       keyStorePass: "changeit"
+    # Graylog Forwarder ingest (enterprise feature).
+    # Graylog only listens on 13301/13302 when a bind address is configured AND a
+    # Forwarder input exists. Self-managed deployments must create that input
+    # manually under System > Inputs; Graylog Cloud provisions it automatically.
+    forwarder:
+      # Unset defaults to ingress.forwarder.enabled. Set true to bind the ports
+      # without an Ingress (e.g. when fronting them with your own load balancer).
+      enabled:
+      bindAddress: "0.0.0.0"
+      # Transport encryption between the forwarder and Graylog. Leave false when
+      # a load balancer terminates TLS and speaks cleartext HTTP/2 to Graylog.
+      grpcEnableTls: false
     mongodb:
       customUri: ""
       maxConnections: "1000"
@@ -419,16 +431,33 @@ ingress:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
+  # Graylog Forwarder ingest. A forwarder requires BOTH gRPC channels to be
+  # reachable: the message channel (13301) it ships log data on, and the
+  # configuration channel (13302) it polls for configuration updates.
+  # Each channel is a separate Ingress resource because they listen on
+  # different ports and an Ingress routes on host/path, not listener port.
   forwarder:
     enabled: false
-    className: ""
-    annotations: {}
-    hosts:
-      - host: chart-example.local
-        paths:
-          - path: /
-            pathType: ImplementationSpecific
-    tls: []
+    messageChannel:
+      enabled: true
+      className: ""
+      annotations: {}
+      hosts:
+        - host: ""
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+    configChannel:
+      enabled: true
+      className: ""
+      annotations: {}
+      hosts:
+        - host: ""
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
 
 # MongoDB Community Resource configuration
 # Requires MongoDB Kubernetes Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
