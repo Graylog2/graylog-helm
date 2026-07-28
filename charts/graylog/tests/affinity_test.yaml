@@ -1,0 +1,157 @@
+suite: Pod anti-affinity defaults
+templates:
+  # Both StatefulSets' pod-spec annotations reference checksum helpers that
+  # `include` other templates by path, so those dependencies must be listed here
+  # for the includes to resolve. Every assert below is scoped with `template:`.
+  - workload/statefulsets/graylog.yaml
+  - workload/statefulsets/datanode.yaml
+  - custom/mongo-rs.yaml
+  - config/graylog.yaml           # checksum/config dependency (graylog)
+  - config/datanode.yaml          # checksum/config dependency (datanode)
+  - config/secret/secrets.yaml    # checksum/secret dependency (both)
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # --- Graylog ---
+  - it: applies soft pod anti-affinity to graylog by default
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight
+          value: 100
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey
+          value: kubernetes.io/hostname
+      # The term must be `preferred`, not `required`, or single-node clusters
+      # would never schedule.
+      - isNull:
+          path: spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution
+
+  # The selector is only useful if it actually matches the pods it is meant to
+  # spread. Pin it against the pod template labels on the same document.
+  - it: graylog anti-affinity selector matches the graylog pod labels
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions
+          value:
+            - key: app.kubernetes.io/instance
+              operator: In
+              values:
+                - graylog
+            - key: app
+              operator: In
+              values:
+                - graylog-app
+      - equal:
+          path: spec.template.metadata.labels["app"]
+          value: graylog-app
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: graylog
+
+  - it: graylog.affinity replaces the chart default entirely
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: disktype
+                    operator: In
+                    values: ["ssd"]
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity.podAntiAffinity
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: disktype
+
+  # --- Datanode ---
+  - it: applies soft pod anti-affinity to datanode by default
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight
+          value: 100
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey
+          value: kubernetes.io/hostname
+      - isNull:
+          path: spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution
+
+  - it: datanode anti-affinity selector matches the datanode pod labels
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions
+          value:
+            - key: app.kubernetes.io/instance
+              operator: In
+              values:
+                - graylog
+            - key: app
+              operator: In
+              values:
+                - graylog-datanode
+      - equal:
+          path: spec.template.metadata.labels["app"]
+          value: graylog-datanode
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: graylog
+
+  - it: datanode.affinity replaces the chart default entirely
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: disktype
+                    operator: In
+                    values: ["ssd"]
+    asserts:
+      - isNull:
+          path: spec.template.spec.affinity.podAntiAffinity
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: disktype
+
+  # --- MongoDB ---
+  # The MongoDB Community operator labels these pods itself, with `app: <svc>`
+  # and nothing else — none of the chart's own labels are present. Selecting on
+  # `app.kubernetes.io/instance` or a bare `app: mongodb` matches zero pods and
+  # silently disables spreading, so pin the exact operator-applied value.
+  - it: passes soft pod anti-affinity through the MongoDBCommunity CR
+    template: custom/mongo-rs.yaml
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight
+          value: 100
+      - equal:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey
+          value: kubernetes.io/hostname
+      - equal:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchLabels["app"]
+          value: graylog-mongo-rs-svc
+      - isNull:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions
+
+  # The selector must track the CR name, since the operator derives the service
+  # name from it.
+  - it: mongodb anti-affinity selector tracks the release name
+    template: custom/mongo-rs.yaml
+    release:
+      name: prod
+      namespace: graylog
+    asserts:
+      - equal:
+          path: metadata.name
+          value: prod-graylog-mongo-rs
+      - equal:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchLabels["app"]
+          value: prod-graylog-mongo-rs-svc

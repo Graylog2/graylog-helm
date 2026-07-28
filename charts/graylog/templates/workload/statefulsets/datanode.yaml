@@ -142,8 +142,24 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       affinity:
-      {{- with .Values.datanode.affinity }}
-        {{- toYaml . | nindent 8 }}
+      {{- if .Values.datanode.affinity }}
+        {{- toYaml .Values.datanode.affinity | nindent 8 }}
+      {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/instance
+                      operator: In
+                      values:
+                        - {{ .Release.Name }}
+                    - key: app
+                      operator: In
+                      values:
+                        - graylog-datanode
+                topologyKey: kubernetes.io/hostname
       {{- end }}
       {{- if and .Values.datanode.persistence.data.enabled .Values.datanode.persistence.nativeLibs.enabled | not }}
       volumes:

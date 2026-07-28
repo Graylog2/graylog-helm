@@ -52,6 +52,18 @@ spec:
       template:
         spec:
           serviceAccountName: {{ include "graylog.mongodb.serviceAccountName" . }}
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchLabels:
+                        # The MongoDB Community operator is the only thing that labels
+                        # these pods, and it sets `app: <service name>` and nothing else.
+                        # The chart's own labels are not present here.
+                        app: {{ include "graylog.mongodb.crName" . | printf "%s-svc" }}
+                    topologyKey: kubernetes.io/hostname
       volumeClaimTemplates:
         - metadata:
             name: data-volume

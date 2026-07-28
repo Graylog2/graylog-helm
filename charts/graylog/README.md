@@ -18,7 +18,10 @@ Official Helm chart for Graylog.
 * [Usage](#usage)
   * [Scale Graylog](#scale-graylog)
   * [Scale DataNode](#scale-datanode)
+  * [Data Node Replicas and Data Redundancy](#data-node-replicas-and-data-redundancy)
+  * [High Availability Defaults](#high-availability-defaults)
   * [Scale MongoDB](#scale-mongodb)
+  * [MongoDB Topology](#mongodb-topology)
   * [Modify Graylog `server.conf` parameters](#modify-graylog-serverconf-parameters)
   * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
   * [Add inputs](#add-inputs)
@@ -257,11 +260,87 @@ helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=1 --reuse
 helm upgrade graylog graylog/graylog -n graylog --set datanode.replicas=5 --reuse-values
 ```
 
+### Data Node Replicas and Data Redundancy
+
+> [!IMPORTANT]
+> Adding Data Nodes does not by itself make your log data redundant. Index set
+> replicas control that, and they are configured in Graylog, not in this chart.
+
+An index set with 0 replicas stores exactly one copy of each shard. If the Data
+Node holding that shard is lost, the data is **permanently gone** — this is data
+loss, not a temporary outage that resolves when the pod reschedules.
+
+To survive the loss of a single Data Node, run at least 2 Data Nodes and set at
+least 1 replica on every index set:
+
+- **Per index set** — *System / Indices*, select the index set, then set
+  *Index replicas* to `1` or higher. This applies to new indices; existing
+  indices keep the replica count they were created with.
+- **Default for new index sets** — set `elasticsearch_replicas` in
+  `graylog.config`:
+
+  ```yaml
+  graylog:
+    replicas: 2
+    config:
+      elasticsearch_replicas: 1
+  ```
+
+Each replica multiplies storage consumption, so size
+`datanode.persistence.data.size` accordingly: N replicas means N+1 copies of
+your data.
+
+## High Availability Defaults
+
+The chart applies these by default. Both are safe on single-node development
+clusters and need no configuration for the common case.
+
+- **Soft pod anti-affinity** on Graylog, Data Node and MongoDB pods, spreading
+  each tier across nodes by `kubernetes.io/hostname`. It is
+  `preferredDuringSchedulingIgnoredDuringExecution`, so pods still schedule when
+  there aren't enough nodes to spread across. Setting `graylog.affinity` or
+  `datanode.affinity` replaces the chart default entirely for that tier.
+- **PodDisruptionBudgets** for Graylog (`minAvailable: 1`) and Data Node
+  (`minAvailable: 2`), which keep node drains and cluster upgrades from evicting
+  a whole tier at once. The Graylog PDB only renders at `replicas >= 2`. Disable
+  with `graylog.podDisruptionBudget.enabled=false` /
+  `datanode.podDisruptionBudget.enabled=false`.
+
+> [!NOTE]
+> A PDB makes node drains block rather than proceed destructively. On a cluster
+> with too few nodes to satisfy `minAvailable`, a drain will wait instead of
+> completing — this is the intended protection, not a failure.
+
 ## Scale MongoDB
 ```sh
 # scaling out: add more MongoDB nodes to your replica set
 helm upgrade graylog graylog/graylog -n graylog --set mongodb.replicas=4 --reuse-values
 ```
+
+### MongoDB Topology
+
+By default, the chart deploys MongoDB with a **production-recommended topology**: 3 data-bearing replicas with no arbiters. This configuration:
+- Supports `w:majority` writes even with one replica down
+- Handles rolling upgrades and maintenance gracefully
+- Provides true high availability without cost overhead
+
+**Example: Default production topology**
+```yaml
+mongodb:
+  replicas: 3
+  arbiters: 0
+```
+
+For **cost-optimized test/staging environments**, you may use the Primary-Secondary-Arbiter (PSA) topology instead. However, be aware that this topology is not recommended by MongoDB for production use:
+
+```yaml
+mongodb:
+  replicas: 2
+  arbiters: 1
+```
+
+> [!WARNING]
+> With PSA topology, if one data-bearing replica fails, `w:majority` writes will stall until the member recovers.
 
 ## Modify Graylog `server.conf` parameters
 

@@ -34,6 +34,16 @@ tests:
           path: spec.version
           value: "8.0.23"
 
+  # C-07: the PSA topology (2 data + 1 arbiter) stalls w:majority writes when a
+  # data member is down, so the default is 3 data-bearing members and no arbiter.
+  - it: defaults to 3 data-bearing members with no arbiters
+    asserts:
+      - equal:
+          path: spec.members
+          value: 3
+      - isNull:
+          path: spec.arbiters
+
   - it: configures members count from mongodb.replicas
     set:
       mongodb.communityResource.enabled: true
