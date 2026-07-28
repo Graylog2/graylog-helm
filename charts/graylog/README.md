@@ -1155,15 +1155,50 @@ Mutually exclusive with `datanode.enabled`. See [Bring Your Own OpenSearch](#bri
 
 ### Forwarder Ingress
 
-| Key Path                                       | Description                           | Default                  |
-|------------------------------------------------|---------------------------------------|--------------------------|
-| `ingress.forwarder.enabled`                    | Enable ingress for Graylog Forwarder. | `false`                  |
-| `ingress.forwarder.className`                  | Ingress class name.                   | `""`                     |
-| `ingress.forwarder.annotations`                | Annotations for ingress resource.     | `{}`                     |
-| `ingress.forwarder.hosts[0].host`              | Hostname for ingress.                 | `chart-example.local`    |
-| `ingress.forwarder.hosts[0].paths[0].path`     | Path for routing.                     | `/`                      |
-| `ingress.forwarder.hosts[0].paths[0].pathType` | Path matching type.                   | `ImplementationSpecific` |
-| `ingress.forwarder.tls`                        | TLS configuration.                    | `[]`                     |
+A [Graylog Forwarder](https://go2docs.graylog.org/current/getting_in_log_data/forwarder.html) requires **both**
+gRPC channels to be reachable: the message channel (port `13301`) it ships log data on, and the configuration
+channel (port `13302`) it polls for configuration updates. Because the two channels listen on different ports
+and an Ingress routes on host/path rather than listener port, each channel is rendered as its own Ingress
+resource — `<release>-forwarder-message-channel` and `<release>-forwarder-config-channel`.
+
+Setting `ingress.forwarder.enabled: true` enables both channels; disable one with
+`ingress.forwarder.<channel>.enabled: false`.
+
+The Forwarder is an enterprise feature and requires a valid license. Enabling the ingress also sets
+`GRAYLOG_FORWARDER_BIND_ADDRESS` (see `graylog.config.forwarder` below) — without it Graylog never listens on
+`13301`/`13302` and forwarders fail with `Code=<UNAVAILABLE>` no matter how the endpoint is exposed.
+
+In addition, a **Forwarder input** must exist. Graylog Cloud provisions it automatically; self-managed
+deployments must create it manually under **System > Inputs**. Creating a forwarder token under
+**System > Forwarders** is not sufficient — until the input exists, the ports stay closed and load balancer
+targets remain unhealthy.
+
+| Key Path                                  | Description                                                                                    | Default     |
+|-------------------------------------------|------------------------------------------------------------------------------------------------|-------------|
+| `graylog.config.forwarder.enabled`        | Listen for forwarder connections. Unset defaults to `ingress.forwarder.enabled`.                | `null`      |
+| `graylog.config.forwarder.bindAddress`    | `GRAYLOG_FORWARDER_BIND_ADDRESS`.                                                              | `0.0.0.0`   |
+| `graylog.config.forwarder.grpcEnableTls`  | Encrypt forwarder&nbsp;→&nbsp;Graylog transport. Leave `false` when a load balancer terminates TLS. | `false` |
+
+| Key Path                                                      | Description                                     | Default                  |
+|---------------------------------------------------------------|-------------------------------------------------|--------------------------|
+| `ingress.forwarder.enabled`                                   | Enable ingress for Graylog Forwarder ingest.    | `false`                  |
+| `ingress.forwarder.messageChannel.enabled`                    | Expose the message channel (port `13301`).      | `true`                   |
+| `ingress.forwarder.messageChannel.className`                  | Ingress class name.                             | `""`                     |
+| `ingress.forwarder.messageChannel.annotations`                | Annotations for ingress resource.               | `{}`                     |
+| `ingress.forwarder.messageChannel.hosts[0].host`              | Hostname for ingress (optional).                | `""`                     |
+| `ingress.forwarder.messageChannel.hosts[0].paths[0].path`     | Path for routing.                               | `/`                      |
+| `ingress.forwarder.messageChannel.hosts[0].paths[0].pathType` | Path matching type.                             | `ImplementationSpecific` |
+| `ingress.forwarder.messageChannel.tls`                        | TLS configuration.                              | `[]`                     |
+| `ingress.forwarder.configChannel.enabled`                     | Expose the configuration channel (port `13302`).| `true`                   |
+| `ingress.forwarder.configChannel.className`                   | Ingress class name.                             | `""`                     |
+| `ingress.forwarder.configChannel.annotations`                 | Annotations for ingress resource.               | `{}`                     |
+| `ingress.forwarder.configChannel.hosts[0].host`               | Hostname for ingress (optional).                | `""`                     |
+| `ingress.forwarder.configChannel.hosts[0].paths[0].path`      | Path for routing.                               | `/`                      |
+| `ingress.forwarder.configChannel.hosts[0].paths[0].pathType`  | Path matching type.                             | `ImplementationSpecific` |
+| `ingress.forwarder.configChannel.tls`                         | TLS configuration.                              | `[]`                     |
+
+See [`examples/forwarder-ingress.yaml`](../../examples/forwarder-ingress.yaml) for a worked AWS ALB
+configuration.
 
 ## MongoDB
 MongoDB Community Resource configuration.
