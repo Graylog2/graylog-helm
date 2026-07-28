@@ -132,7 +132,7 @@ graylog:
         image:
           repository: maxmindinc
           name: geoipupdate
-          tag: "7.1.1"
+          tag: "v7.1.1"
         schedule: "0 0 * * *"
         resources:
           requests:
