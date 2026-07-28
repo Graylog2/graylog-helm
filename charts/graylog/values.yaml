@@ -240,6 +240,8 @@ graylog:
 datanode:
   enabled: true
   replicas: 3
+  # Empty = default roles: cluster_manager,data,ingest,remote_cluster_client (search is auto-added with a snapshot repo).
+  roles: []
   service:
     ports:
       api: 8999
@@ -341,7 +343,10 @@ datanode:
   tolerations: []
   affinity: {}
   extraEnv: []
-
+  extraNodeGroups: {}
+  #  search:
+  #    roles: [search]
+  #    replicas: 2
 # Graylog service account
 serviceAccount:
   create: true

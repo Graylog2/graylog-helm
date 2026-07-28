@@ -1,18 +1,27 @@
 {{- if .Values.datanode.podDisruptionBudget.enabled }}
-{{- if ge (include "graylog.datanode.replicas" . | int) 1 }}
+{{- range include "graylog.datanode.groups" $ | fromYamlArray }}
+{{- if ge (.replicas | int) 1 }}
+---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "graylog.fullname" . | printf "%s-pdb-datanode" }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ .pdbName }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     app: graylog-datanode
-    {{- include "graylog.labels" . | nindent 4 }}
+    {{- with .groupLabel }}
+    graylog-datanode-group: {{ . }}
+    {{- end }}
+    {{- include "graylog.labels" $ | nindent 4 }}
 spec:
-  minAvailable: {{ .Values.datanode.podDisruptionBudget.minAvailable | default 3 | int }}
+  minAvailable: {{ .podDisruptionBudget.minAvailable | default 3 | int }}
   selector:
     matchLabels:
       app: graylog-datanode
-      {{- include "graylog.selectorLabels" . | nindent 6 }}
+      {{- with .groupLabel }}
+      graylog-datanode-group: {{ . }}
+      {{- end }}
+      {{- include "graylog.selectorLabels" $ | nindent 6 }}
+{{- end }}
 {{- end }}
 {{- end }}

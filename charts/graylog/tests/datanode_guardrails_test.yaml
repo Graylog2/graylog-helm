@@ -1,0 +1,78 @@
+suite: datanode node-group guardrails
+templates:
+  # StatefulSet (where the hard-fail validation is included) plus its checksum
+  # dependencies, and NOTES.txt where the soft warnings are emitted.
+  - workload/statefulsets/datanode.yaml
+  - config/datanode.yaml
+  - config/secret/secrets.yaml
+  - NOTES.txt
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # Hard fail: no cluster_manager-eligible group.
+  - it: renders by default (all-default roles cover cluster_manager)
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: workload/statefulsets/datanode.yaml
+
+  - it: fails when no node group is eligible to be a cluster_manager
+    set:
+      datanode.roles: [data, ingest]
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - failedTemplate:
+          errorMessage: "datanode: no node group is eligible to be a cluster_manager. Add 'cluster_manager' to datanode.roles or to at least one datanode.extraNodeGroups entry's roles."
+        template: workload/statefulsets/datanode.yaml
+
+  - it: does not fail when the primary keeps default roles
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+
+  # Soft warning: no data-eligible group.
+  - it: warns when no node group is eligible to hold data
+    set:
+      datanode.roles: [cluster_manager, ingest]
+    asserts:
+      - matchRegexRaw:
+          pattern: "no Data Node group is eligible to hold data"
+        template: NOTES.txt
+
+  - it: emits no data warning with default roles
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "no Data Node group is eligible to hold data"
+        template: NOTES.txt
+
+  # Soft warning: search role without a snapshot repository.
+  - it: warns when a search group has no snapshot repository
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - matchRegexRaw:
+          pattern: "node group\\(s\\) search declare the 'search' role but no snapshot repository"
+        template: NOTES.txt
+
+  - it: emits no search warning when a repository is configured
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.example.com"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "declare the 'search' role but no snapshot repository"
+        template: NOTES.txt
