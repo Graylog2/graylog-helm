@@ -279,6 +279,11 @@ tests:
       graylog.config.geolocation.enabled: true
       graylog.config.geolocation.sidecar.enabled: true
       global.existingSecretName: "my-external-secret"
+      # An external secret requires external MongoDB too — the chart rejects
+      # pairing it with the chart-managed MongoDB CR, since the CR would
+      # reference a backup secret that is never created (C-06).
+      mongodb.communityResource.enabled: false
+      graylog.config.mongodb.customUri: "mongodb://user:pass@host:27017/graylog"
     asserts:
       - contains:
           path: spec.template.spec.containers

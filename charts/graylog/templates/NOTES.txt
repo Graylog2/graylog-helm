@@ -37,7 +37,15 @@ EXTERNAL ACCESS
   {{- if empty .Values.global.existingSecretName }}:
 
   - username: {{ .Values.graylog.config.rootUsername | quote }}
+  {{- if and (include "graylog.storedRootPasswordSha" .) (empty .Values.graylog.config.rootPassword) }}
+  - password: unchanged from the initial install, and cannot be shown here.
+
+  Only the SHA-256 hash of a generated root password is stored, so the password
+  itself cannot be recovered from the cluster. If you no longer have it, set a new
+  one with the `helm upgrade` command shown under ADDITIONAL NOTES below.
+  {{- else }}
   - password: {{ include "graylog.rootPassword" .  | quote }}
+  {{- end }}
   {{- else -}}
     {{ .Values.global.existingSecretName | quote | print " managed externally using the existing secret " }}.
   {{- end }}
@@ -115,7 +123,17 @@ ADDITIONAL NOTES
     - graylog.config.tls.keyPassword
 {{- else if empty .Values.graylog.config.rootPassword }}
 
-· IMPORTANT: You are currently using a randomly generated password: {{ include "graylog.rootPassword" . | quote }}, which will NOT persist across upgrades. Please run the following command to set a persistent password:
+{{- if include "graylog.storedRootPasswordSha" . }}
+· IMPORTANT: This release uses a randomly generated root password, set when the release
+  was first installed. It persists across upgrades, but only its SHA-256 hash is stored,
+  so it cannot be shown here or recovered from the cluster. To set a password you
+  control — which also makes the release reproducible from your values file — run:
+{{- else }}
+· IMPORTANT: You are using a randomly generated root password. It persists across
+  upgrades, but only its SHA-256 hash is stored, so the chart cannot show it to you
+  again after this release. Record it now, or set a password you control — which also
+  makes the release reproducible from your values file:
+{{- end }}
 
     echo "Enter your new password and press return:" && read -s pass && echo "Upgrading helm release {{ squote .Release.Name }}..." && helm upgrade {{ .Release.Name }} graylog/graylog --namespace {{ .Release.Namespace }} --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 {{- end }}
