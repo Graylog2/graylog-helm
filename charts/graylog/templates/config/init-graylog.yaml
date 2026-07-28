@@ -42,7 +42,7 @@ data:
         echo "The certificate passed does not contain a root CA. Only this certificate will be added to the truststore."
         echo "Make sure to add a new certificate when performing certificate rotation."
       fi
-      # update java key store
+      # Update Java keystore for BYO Graylog application certs
       CACERTS_SRC="/usr/share/graylog/data/cacerts"
       CACERTS_DST="/mnt/data/cacerts"
       mkdir -p "${CACERTS_SRC}" "${CACERTS_DST}"
@@ -64,15 +64,11 @@ data:
     {{- end }}
     {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
     # Trust the BYO OpenSearch CA by importing it into the Graylog Java truststore.
-    CACERTS_DST="/mnt/data/cacerts"
-    mkdir -p "${CACERTS_DST}"
-    if [ ! -e "${CACERTS_DST}/graylog.jks" ]; then
-      JAVA_HOME_LOCAL=$(java -XshowSettings:properties -version 2>&1 > /dev/null | grep 'java.home' | grep '/.*' -o)
-      cp "${JAVA_HOME_LOCAL}/lib/security/cacerts" "${CACERTS_DST}/graylog.jks"
-    fi
+    CACERTS_SRC="/usr/share/graylog/data/cacerts"
+    mkdir -p "${CACERTS_SRC}"
     # delete-then-import so a rotated CA is picked up on pod restart
-    keytool -delete -alias byo-opensearch-ca -keystore "${CACERTS_DST}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }} 2>/dev/null || true
-    keytool -importcert -noprompt -alias byo-opensearch-ca -file "/mnt/os-tls/{{ .Values.opensearch.tls.caKey }}" -keystore "${CACERTS_DST}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
+    keytool -delete -alias byo-opensearch-ca -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }} 2>/dev/null || true
+    keytool -importcert -noprompt -alias byo-opensearch-ca -file "/mnt/os-tls/{{ .Values.opensearch.tls.caKey }}" -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
     echo "Imported OpenSearch CA into Graylog truststore."
     {{- end }}
     {{- if .Values.graylog.config.plugins.enabled }}
