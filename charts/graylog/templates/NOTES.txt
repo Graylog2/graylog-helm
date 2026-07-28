@@ -27,6 +27,15 @@ SUMMARY
   volume ownership (e.g. AWS EBS). See the "Hardened Environments" section of the README before opting out.
   {{- end }}
 
+  {{- $cache := .Values.datanode.config.nodeSearchCacheSize | regexFind "^[0-9]+" | int }}
+  {{- $disk := .Values.datanode.persistence.data.size | regexFind "^[0-9]+" | int }}
+  {{- if and .Values.datanode.config.s3ClientDefaultEndpoint (not .Values.datanode.persistence.data.existingClaim) (ge $cache $disk) }}
+
+  WARNING: nodeSearchCacheSize ({{ .Values.datanode.config.nodeSearchCacheSize }}) does not fit in the Datanode
+  data volume ({{ .Values.datanode.persistence.data.size }}). Increase datanode.persistence.data.size, or the
+  Datanode will fail preflight when data tiering is enabled.
+  {{- end }}
+
   Use the following command to list all the resources deployed with this release:
 
     helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}
