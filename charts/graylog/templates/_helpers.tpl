@@ -180,6 +180,29 @@ nothing, which correctly matches the secret being (re)generated in that render.
 {{- end }}
 
 {{/*
+Generated root password already stored in the cluster, base64-encoded, or "" if none.
+
+The plaintext of a generated root password lives in the backup secret so users can
+retrieve it after install. It is only returned when its SHA-256 matches the stored
+hash: a stale value left behind by an explicit password reset is never surfaced.
+Returns "" when the user manages the password themselves (rootPassword set or
+global.existingSecretName in use).
+*/}}
+{{- define "graylog.storedRootPassword" -}}
+{{- if and (not .Values.global.existingSecretName) (empty .Values.graylog.config.rootPassword) }}
+{{- $backup := lookup "v1" "Secret" .Release.Namespace (include "graylog.backupSecretName" .) }}
+{{- $plain := "" }}
+{{- if $backup }}
+{{- $plain = index $backup.data "graylog-root-password" | default "" }}
+{{- end }}
+{{- $sha := include "graylog.storedRootPasswordSha" . }}
+{{- if and $plain $sha (eq ($plain | b64dec | sha256sum | b64enc) $sha) }}
+{{- $plain }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
 Graylog secret pepper
 */}}
 {{- define "graylog.secretPepper" }}
