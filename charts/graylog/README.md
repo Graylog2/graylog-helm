@@ -14,6 +14,7 @@ Official Helm chart for Graylog.
   * [Installing on AWS EKS](#installing-on-aws-eks)
 * [Post-installation](#post-installation)
   * [Set root Graylog password](#set-root-graylog-password)
+  * [Reset a lost root password](#reset-a-lost-root-password)
   * [Set external access](#set-external-access)
 * [Usage](#usage)
   * [Scale Graylog](#scale-graylog)
@@ -214,6 +215,25 @@ the following command:
 echo "Enter your new password and press return:" && read -s pass
 helm upgrade graylog graylog/graylog --namespace graylog --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 ```
+
+## Reset a lost root password
+
+If the password is lost and you cannot set a new one through Helm (for example when
+your values are managed by GitOps), patch the new password's SHA-256 into both
+Secrets and restart Graylog:
+
+```sh
+PASS="your-new-password"
+SHA=$(printf '%s' "$PASS" | sha256sum | awk '{print $1}')
+SHA64=$(printf '%s' "$SHA" | base64 -w0)
+kubectl patch secret graylog-secrets --namespace graylog -p "{\"data\":{\"GRAYLOG_ROOT_PASSWORD_SHA2\":\"$SHA64\"}}"
+kubectl patch secret graylog-backup-secret --namespace graylog -p "{\"data\":{\"graylog-root-password-sha2\":\"$SHA64\"}}"
+kubectl rollout restart statefulset graylog --namespace graylog
+```
+
+Do not delete the Secrets to force a reset. The backup Secret also holds the
+password pepper (`graylog-secret`), and losing that invalidates every stored
+user credential.
 
 ## Set external access
 
