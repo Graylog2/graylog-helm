@@ -266,14 +266,12 @@ graylog:
     # existingClaim mounts a pre-provisioned PVC instead of using a
     # volumeClaimTemplate.
     existingClaim:
-    mountPath:
     # accessModes defaults to ["ReadWriteOnce"] when empty.
     accessModes: []
     # size is the requested volume size (default 8Gi).
     size:
     annotations: {}
     labels: {}
-    selector: {}
   # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
   # for the Graylog container (TCP checks against the app port).
   livenessProbe:
@@ -407,36 +405,22 @@ datanode:
     requests:
       cpu: "500m"
       memory: "3.5Gi"
-  # persistence configures the Datanode volumes. Each volume consumes its
-  # enabled, storageClass, mountPath, accessModes, and size fields; the
-  # remaining fields (existingClaim, annotations, labels, selector,
-  # dataSource) and the parent enabled flag are currently not consumed by
-  # the templates.
+  # persistence configures the Datanode volumes.
   persistence:
-    enabled: true
     # data is the OpenSearch data volume.
     data:
       enabled: true
       storageClass: ""
-      existingClaim: ""
       mountPath: ""
       accessModes: []
       size: "8Gi"
-      annotations: {}
-      labels: {}
-      selector: {}
-      dataSource: {}
     # nativeLibs is an optional volume for OpenSearch native libraries.
     nativeLibs:
       enabled: false
       storageClass: ""
-      existingClaim: ""
       mountPath: ""
       accessModes: []
       size: "2Gi"
-      annotations: {}
-      labels: {}
-      selector: {}
   # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
   # for the Datanode container.
   livenessProbe:

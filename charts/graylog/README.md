@@ -822,12 +822,10 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.persistence.storageClass`                                    | Storage class for the persistent volume.                    | `""`                            |
 | `graylog.persistence.volumeNameOverride`                              | Override name of the persistent volume.                     | `""`                            |
 | `graylog.persistence.existingClaim`                                   | Use an existing PVC.                                        | `""`                            |
-| `graylog.persistence.mountPath`                                       | Path where volume will be mounted.                          | `""`                            |
 | `graylog.persistence.accessModes`                                     | Access modes for the persistent volume.                     | `[]`                            |
 | `graylog.persistence.size`                                            | Size of the persistent volume.                              | `""`                            |
 | `graylog.persistence.annotations`                                     | Annotations for the persistent volume claim.                | `{}`                            |
 | `graylog.persistence.labels`                                          | Labels for the persistent volume claim.                     | `{}`                            |
-| `graylog.persistence.selector`                                        | Selector for the persistent volume.                         | `{}`                            |
 | `graylog.livenessProbe.enabled`                                       | Enable liveness probe.                                      | `true`                          |
 | `graylog.livenessProbe.initialDelaySeconds`                           | Initial delay for liveness probe.                           | `60`                            |
 | `graylog.livenessProbe.periodSeconds`                                 | Period between liveness probe checks.                       | `10`                            |
@@ -907,26 +905,16 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.resources.limits.memory`                     | Memory limit for the datanode pod.              | `"5Gi"`           |
 | `datanode.resources.requests.cpu`                      | CPU request for the datanode pod.               | `"500m"`          |
 | `datanode.resources.requests.memory`                   | Memory request for the datanode pod.            | `"3.5Gi"`         |
-| `datanode.persistence.enabled`                         | Enable persistence.                             | `true`            |
 | `datanode.persistence.data.enabled`                    | Enable persistent volume for data.              | `true`            |
 | `datanode.persistence.data.storageClass`               | Storage class for data PVC.                     | `""`              |
-| `datanode.persistence.data.existingClaim`              | Use existing PVC for data.                      | `""`              |
 | `datanode.persistence.data.mountPath`                  | Mount path for data volume.                     | `""`              |
 | `datanode.persistence.data.accessModes`                | Access modes for data PVC.                      | `[]`              |
 | `datanode.persistence.data.size`                       | Size of the data volume.                        | `"8Gi"`           |
-| `datanode.persistence.data.annotations`                | Annotations for data PVC.                       | `{}`              |
-| `datanode.persistence.data.labels`                     | Labels for data PVC.                            | `{}`              |
-| `datanode.persistence.data.selector`                   | Selector for data PVC.                          | `{}`              |
-| `datanode.persistence.data.dataSource`                 | Data source for data PVC.                       | `{}`              |
 | `datanode.persistence.nativeLibs.enabled`              | Enable persistence for native libraries.        | `false`           |
 | `datanode.persistence.nativeLibs.storageClass`         | Storage class for native libs PVC.              | `""`              |
-| `datanode.persistence.nativeLibs.existingClaim`        | Use existing PVC for native libs.               | `""`              |
 | `datanode.persistence.nativeLibs.mountPath`            | Mount path for native libs volume.              | `""`              |
 | `datanode.persistence.nativeLibs.accessModes`          | Access modes for native libs PVC.               | `[]`              |
 | `datanode.persistence.nativeLibs.size`                 | Size of the native libs volume.                 | `"2Gi"`           |
-| `datanode.persistence.nativeLibs.annotations`          | Annotations for native libs PVC.                | `{}`              |
-| `datanode.persistence.nativeLibs.labels`               | Labels for native libs PVC.                     | `{}`              |
-| `datanode.persistence.nativeLibs.selector`             | Selector for native libs PVC.                   | `{}`              |
 | `datanode.livenessProbe.enabled`                       | Enable liveness probe.                          | `true`            |
 | `datanode.livenessProbe.initialDelaySeconds`           | Initial delay for liveness probe.               | `30`              |
 | `datanode.livenessProbe.periodSeconds`                 | Period between liveness probe checks.           | `10`              |
