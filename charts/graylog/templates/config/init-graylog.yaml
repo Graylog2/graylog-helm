@@ -63,12 +63,23 @@ data:
     fi
     {{- end }}
     {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
-    # Trust the BYO OpenSearch CA by importing it into the Graylog Java truststore.
-    CACERTS_SRC="/usr/share/graylog/data/cacerts"
-    mkdir -p "${CACERTS_SRC}"
+    # Trust the BYO OpenSearch CA. The truststore must live on the data volume
+    # (/mnt/data here, /usr/share/graylog/data in the main container) and is seeded
+    # from the JDK CA bundle so public CAs (license checks, GeoIP, notifications)
+    # stay trusted. Built in a temp file and mv'd so a failed init can't leave a
+    # half-built store behind.
+    CACERTS_DST="/mnt/data/cacerts"
+    mkdir -p "${CACERTS_DST}"
+    TRUSTSTORE_TMP="${CACERTS_DST}/graylog.jks.tmp"
+    if [ -f "${CACERTS_DST}/graylog.jks" ]; then
+      cp "${CACERTS_DST}/graylog.jks" "${TRUSTSTORE_TMP}"
+    else
+      cp "${JAVA_HOME}/lib/security/cacerts" "${TRUSTSTORE_TMP}"
+    fi
     # delete-then-import so a rotated CA is picked up on pod restart
-    keytool -delete -alias byo-opensearch-ca -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }} 2>/dev/null || true
-    keytool -importcert -noprompt -alias byo-opensearch-ca -file "/mnt/os-tls/{{ .Values.opensearch.tls.caKey }}" -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
+    keytool -delete -alias byo-opensearch-ca -keystore "${TRUSTSTORE_TMP}" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }} >/dev/null 2>&1 || true
+    keytool -importcert -noprompt -alias byo-opensearch-ca -file "/mnt/os-tls/{{ .Values.opensearch.tls.caKey }}" -keystore "${TRUSTSTORE_TMP}" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
+    mv "${TRUSTSTORE_TMP}" "${CACERTS_DST}/graylog.jks"
     echo "Imported OpenSearch CA into Graylog truststore."
     {{- end }}
     {{- if .Values.graylog.config.plugins.enabled }}
