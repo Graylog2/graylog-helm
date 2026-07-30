@@ -671,6 +671,39 @@
         }
       }
     },
+    "opensearch": {
+      "type": "object",
+      "description": "Bring Your Own OpenSearch: connect Graylog to an external OpenSearch cluster instead of the bundled Data Node. Mutually exclusive with datanode.enabled.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable external OpenSearch mode. Requires datanode.enabled=false."
+        },
+        "hosts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "OpenSearch node REST URIs (scheme + host + port), without credentials."
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "existingSecret": { "type": "string", "description": "Secret holding OpenSearch username/password, read at template/install time." },
+            "usernameKey": { "type": "string" },
+            "passwordKey": { "type": "string" },
+            "username": { "type": "string", "description": "Inline username (takes precedence over existingSecret; dev/test only)." },
+            "password": { "type": "string", "description": "Inline password (takes precedence over existingSecret; dev/test only)." }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "description": "Set false if the OpenSearch HTTP layer is plaintext." },
+            "caSecret": { "type": "string", "description": "Secret with the CA cert for the OpenSearch HTTP layer, imported into Graylog's truststore." },
+            "caKey": { "type": "string", "description": "Key within caSecret holding the CA cert (default ca.crt)." }
+          }
+        }
+      }
+    },
     "serviceAccount": {
       "type": "object",
       "properties": {
