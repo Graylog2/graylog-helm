@@ -412,6 +412,27 @@
             "successThreshold": { "type": "integer" }
           }
         },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Seconds Kubernetes allows for shutdown before SIGKILL. Covers the preStop hook and the SIGTERM that follows it."
+        },
+        "lifecycle": {
+          "type": "object",
+          "properties": {
+            "preStopDrain": {
+              "type": "object",
+              "description": "Hold pod termination while the on-disk journal drains, so scaling in does not strand unprocessed messages. Requires graylog.service.metrics.enabled.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "endpointPropagationDelaySeconds": { "type": "integer", "minimum": 0 },
+                "pollIntervalSeconds": { "type": "integer", "minimum": 1 },
+                "shutdownReserveSeconds": { "type": "integer", "minimum": 0 },
+                "stallPolls": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        },
         "podDisruptionBudget": {
           "type": "object",
           "properties": {

@@ -18,6 +18,7 @@ Official Helm chart for Graylog.
   * [Set external access](#set-external-access)
 * [Usage](#usage)
   * [Scale Graylog](#scale-graylog)
+  * [Message Journal Lifecycle](#message-journal-lifecycle)
   * [Scale DataNode](#scale-datanode)
   * [Data Node Replicas and Data Redundancy](#data-node-replicas-and-data-redundancy)
   * [High Availability Defaults](#high-availability-defaults)
@@ -287,10 +288,121 @@ kubectl port-forward service/graylog-svc 9000:9000 -n graylog
 ```sh
 # scaling out: add more Graylog nodes to your cluster
 helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=3 --reuse-values
+```
 
+Scaling **out** is safe and needs no procedure. Scaling **in** can lose buffered
+messages — read [Message Journal Lifecycle](#message-journal-lifecycle) before you
+do it.
+
+```sh
 # scaling in: remove Graylog nodes from your cluster
+# WARNING: drain first. See "Message Journal Lifecycle" below.
 helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=1 --reuse-values
 ```
+
+## Message Journal Lifecycle
+
+Each Graylog node writes incoming messages to an on-disk **journal** on its own
+PersistentVolumeClaim, then works them off into the indexer. The journal is what
+makes Graylog durable across restarts — and it is why scaling in is not a routine
+operation.
+
+### Why upgrades are safe but scale-in is not
+
+A StatefulSet guarantees **identity**, not data migration. On a rolling upgrade,
+`graylog-app-2` is replaced by a new `graylog-app-2` that re-binds the *same* PVC,
+finds the same journal, and carries on — nothing is lost, and no procedure is
+needed.
+
+On scale-in, that ordinal stops existing. Its PVC is retained but no pod will ever
+mount it again, so anything still in that journal is unreachable. Graylog's
+graceful shutdown flushes in-memory buffers **into** the journal; it never drains
+the journal **out**. Draining is the *replacement pod's* job, and on scale-in there
+is no replacement pod.
+
+Two consequences worth knowing:
+
+- Scaling back up later re-binds the old PVC and **replays days-old messages** into
+  the pipeline. Late arrivals will hit alerts, dashboards, and index retention.
+- The data is not destroyed, just unreachable. See [Recovering an orphaned
+  journal](#recovering-an-orphaned-journal).
+
+### Automatic drain on shutdown
+
+The chart can hold pod termination while the journal is worked off:
+
+```sh
+helm upgrade graylog graylog/graylog -n graylog \
+  --set graylog.lifecycle.preStopDrain.enabled=true --reuse-values
+```
+
+This installs a `preStop` hook that polls journal depth
+(`gl_journal_entries_uncommitted`) from Graylog's Prometheus exporter on
+`localhost` and returns once the journal is empty. It needs **no credentials** —
+the exporter answers unauthenticated on the pod itself, unlike
+`GET /api/system/journal`. It does require `graylog.service.metrics.enabled`
+(the default); the chart refuses to render otherwise.
+
+It is **off by default** because it slows every rolling upgrade by the drain time.
+
+**It is best-effort, not a guarantee.** Understand these limits before relying on it:
+
+| Limit | Consequence |
+|---|---|
+| Bounded by `terminationGracePeriodSeconds` | The hook always yields in time for SIGTERM (see below). If the journal is still full, termination proceeds anyway. |
+| Only sheds *newly established* connections | Kubernetes removes the terminating pod from Service endpoints, but long-lived TCP inputs and UDP senders keep writing. Against those the journal may never reach zero, and the hook gives up after `stallPolls` samples with no decrease. |
+| Does not stop inputs | Stopping inputs requires an authenticated API call. Only the manual runbook can guarantee an empty journal. |
+
+#### The grace-period budget
+
+`terminationGracePeriodSeconds` is a hard ceiling covering the `preStop` hook **and**
+the SIGTERM that follows it. If the hook is still running when it expires, the
+container is SIGKILLed, Graylog never receives SIGTERM, and the in-memory buffers
+this feature exists to protect are lost — strictly worse than no hook at all.
+
+So the drain never uses the whole grace period:
+
+```
+drain budget = terminationGracePeriodSeconds
+             - endpointPropagationDelaySeconds   # wait for endpoint removal
+             - shutdownReserveSeconds            # left for Graylog's own shutdown
+```
+
+With the defaults that is `300 - 15 - 45 = 240s`. The chart fails to render if the
+budget is not positive, so raising the reserve means raising the grace period too.
+
+The Kubernetes default grace period is 30s, which is not enough to flush buffers
+under load. The chart sets `300` explicitly.
+
+### Recovering an orphaned journal
+
+If a node was scaled in without draining, its claim is still there:
+
+```sh
+kubectl get pvc -n graylog          # e.g. graylog-app-data-graylog-app-2
+```
+
+Two options:
+
+- **Replay it** — scale back up to the original replica count. The ordinal returns,
+  re-binds the claim, and Graylog replays the journal. Then drain properly and scale
+  in again. Note the late-arrival side effects above.
+- **Discard it** — once you have confirmed the journal is empty (or that you do not
+  want its contents), delete the claim:
+
+  ```sh
+  kubectl delete pvc graylog-app-data-graylog-app-2 -n graylog
+  ```
+
+### Inspecting journal depth manually
+
+```sh
+kubectl port-forward -n graylog pod/graylog-app-2 9833:9833
+curl -s localhost:9833/metrics | grep '^gl_journal_entries_uncommitted'
+```
+
+Port-forward the **pod**, not the Service — the Service would answer from an
+arbitrary node. `0` means that node's journal is fully worked off.
 
 ## Scale DataNode
 ```sh
@@ -838,6 +950,12 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.readinessProbe.timeoutSeconds`                               | Timeout for the readiness probe.                            | `5`                             |
 | `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                  | `6`                             |
 | `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                  | `1`                             |
+| `graylog.terminationGracePeriodSeconds`                               | Shutdown budget before SIGKILL. Covers the preStop hook and Graylog's own graceful shutdown. | `300`  |
+| `graylog.lifecycle.preStopDrain.enabled`                              | Hold termination while the journal drains. See [Message Journal Lifecycle](#message-journal-lifecycle). | `false` |
+| `graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds`      | Wait for EndpointSlice removal to reach kube-proxy before sampling. | `15`                     |
+| `graylog.lifecycle.preStopDrain.pollIntervalSeconds`                  | Seconds between journal-depth samples.                      | `2`                             |
+| `graylog.lifecycle.preStopDrain.shutdownReserveSeconds`               | Seconds reserved out of the grace period for Graylog's own shutdown. | `45`                   |
+| `graylog.lifecycle.preStopDrain.stallPolls`                           | Give up after this many polls with no decrease in journal depth. | `10`                       |
 | `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
 | `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                   | `1`                             |
 | `graylog.podAnnotations`                                              | Additional pod annotations.                                 | `{}`                            |

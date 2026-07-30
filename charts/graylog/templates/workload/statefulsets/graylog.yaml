@@ -40,6 +40,9 @@ spec:
       {{- end }}
     spec:
       dnsPolicy: ClusterFirst
+      {{- with .Values.graylog.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ int . }}
+      {{- end }}
       {{- with .Values.graylog.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -182,6 +185,7 @@ spec:
             failureThreshold: {{ .Values.graylog.readinessProbe.failureThreshold | int }}
             successThreshold: {{ .Values.graylog.readinessProbe.successThreshold | int }}
           {{- end }}
+          {{- include "graylog.lifecycle" . | nindent 10 }}
           {{- with .Values.graylog.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

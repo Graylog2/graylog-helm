@@ -1,0 +1,146 @@
+suite: graylog preStop journal drain
+templates:
+  # The StatefulSet's pod-spec annotations reference two checksum helpers that
+  # `include` other templates by path. helm-unittest's `templates:` filter must
+  # list those dependencies so the includes resolve.
+  - workload/statefulsets/graylog.yaml
+  - config/graylog.yaml         # checksum/config dependency
+  - config/secret/secrets.yaml  # checksum/secret dependency
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: sets terminationGracePeriodSeconds on the pod spec, not the container
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 300
+        template: workload/statefulsets/graylog.yaml
+      # Regression guard: this used to render as a misspelled container-level
+      # "terminationGracePeriodSecond", which the API server silently dropped.
+      - notExists:
+          path: spec.template.spec.containers[0].terminationGracePeriodSecond
+        template: workload/statefulsets/graylog.yaml
+      - notExists:
+          path: spec.template.spec.containers[0].terminationGracePeriodSeconds
+        template: workload/statefulsets/graylog.yaml
+
+  - it: honours an overridden terminationGracePeriodSeconds
+    set:
+      graylog.terminationGracePeriodSeconds: 600
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 600
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits the lifecycle block when the drain is disabled (the default)
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+        template: workload/statefulsets/graylog.yaml
+
+  - it: renders a preStop exec hook when the drain is enabled
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[0]
+          value: /bin/sh
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[1]
+          value: -c
+        template: workload/statefulsets/graylog.yaml
+
+  - it: reads the unauthenticated journal gauge from the metrics port
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.service.ports.metrics: 9999
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'URL="http://127\.0\.0\.1:9999/metrics"'
+        template: workload/statefulsets/graylog.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "gl_journal_entries_uncommitted"
+        template: workload/statefulsets/graylog.yaml
+
+  - it: derives the drain budget as grace minus settle minus reserve
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.terminationGracePeriodSeconds: 120
+      graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds: 15
+      graylog.lifecycle.preStopDrain.shutdownReserveSeconds: 45
+    asserts:
+      # 120 - 15 - 45 = 60. The budget must never be the full grace period, or
+      # the hook gets SIGKILLed before Graylog can flush its in-memory buffers.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "(?m)^BUDGET=60$"
+        template: workload/statefulsets/graylog.yaml
+
+  - it: passes the tuning values through to the script
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStopDrain.pollIntervalSeconds: 7
+      graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds: 3
+      graylog.lifecycle.preStopDrain.stallPolls: 4
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "(?m)^POLL=7$"
+        template: workload/statefulsets/graylog.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "(?m)^SETTLE=3$"
+        template: workload/statefulsets/graylog.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "(?m)^STALL_LIMIT=4$"
+        template: workload/statefulsets/graylog.yaml
+
+  - it: bounds the drain by wall clock rather than by poll count
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # Counting poll ticks would let a slow metrics endpoint overrun the budget
+      # by curl-timeout per iteration and defeat the shutdown reserve.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'deadline=\$\(\(started \+ BUDGET\)\)'
+        template: workload/statefulsets/graylog.yaml
+
+  - it: fails when the drain is enabled without the metrics exporter
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.service.metrics.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "The drain reads journal depth from the Prometheus exporter"
+
+  - it: fails when the reserve leaves no room to drain
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.terminationGracePeriodSeconds: 30
+      graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds: 15
+      graylog.lifecycle.preStopDrain.shutdownReserveSeconds: 45
+    asserts:
+      - failedTemplate:
+          errorPattern: "The drain budget must be positive"
+
+  - it: does not validate the drain budget when the drain is disabled
+    set:
+      graylog.terminationGracePeriodSeconds: 30
+      graylog.service.metrics.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+        template: workload/statefulsets/graylog.yaml
+

@@ -288,6 +288,42 @@ graylog:
     timeoutSeconds: 5
     failureThreshold: 6
     successThreshold: 1
+  # Time Kubernetes allows for shutdown before SIGKILL. This budget covers the
+  # preStop hook AND the SIGTERM that follows it — Graylog's graceful shutdown
+  # (flip lb_status to DEAD, stop inputs, flush in-memory buffers into the
+  # journal) has to finish inside whatever is left. The Kubernetes default of
+  # 30s is not enough under load, which is why this is set explicitly.
+  terminationGracePeriodSeconds: 300
+  lifecycle:
+    # Hold pod termination while the on-disk journal is worked off.
+    #
+    # Scaling in is the case that matters: the ordinal stops existing, so its
+    # journal is stranded in an orphaned PVC and nothing will ever replay it.
+    # Graceful shutdown flushes buffers *into* the journal, never *out* of it.
+    # This hook gives the doomed pod a chance to finish processing first.
+    #
+    # Off by default because it slows every rolling upgrade by the drain time.
+    # It is best-effort, not a guarantee — see the Message Journal Lifecycle
+    # runbook in the README for the drain procedure it does not replace.
+    preStopDrain:
+      enabled: false
+      # Requires graylog.service.metrics.enabled: journal depth is read from the
+      # unauthenticated Prometheus exporter, so no admin token is needed.
+      #
+      # Seconds to wait for EndpointSlice removal to reach kube-proxy before
+      # sampling. Measuring earlier reads traffic that is already going away.
+      endpointPropagationDelaySeconds: 15
+      pollIntervalSeconds: 2
+      # Reserved out of terminationGracePeriodSeconds for Graylog's own shutdown.
+      # The drain never runs past
+      #   terminationGracePeriodSeconds - endpointPropagationDelaySeconds - shutdownReserveSeconds
+      # because a hook that eats the whole grace period gets the container
+      # SIGKILLed with its in-memory buffers unflushed.
+      shutdownReserveSeconds: 45
+      # Give up once journal depth stops falling for this many polls. Endpoint
+      # removal only sheds new connections; long-lived TCP and UDP senders keep
+      # writing, and against those the journal never reaches zero.
+      stallPolls: 10
   # PodDisruptionBudgets are enabled by default for production deployments
   # They prevent cluster upgrades and maintenance from disrupting all instances
   # Set enabled: false only for non-production clusters or single-replica deployments
