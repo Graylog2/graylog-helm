@@ -55,3 +55,23 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].securityContext
         template: workload/statefulsets/datanode.yaml
+
+  # Service account (chart best practices): create=false + nameOverride means
+  # "use this existing, externally managed ServiceAccount"
+  - it: uses an existing service account when create is false and nameOverride is set
+    set:
+      serviceAccount.create: false
+      serviceAccount.nameOverride: existing-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: existing-sa
+        template: workload/statefulsets/datanode.yaml
+
+  - it: omits serviceAccountName when create is false and no nameOverride is set
+    set:
+      serviceAccount.create: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+        template: workload/statefulsets/datanode.yaml

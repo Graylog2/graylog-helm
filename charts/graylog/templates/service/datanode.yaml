@@ -4,8 +4,11 @@ kind: Service
 metadata:
   name: {{ include "graylog.datanode.service.name" . }}
   labels:
-    {{- include "graylog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: datanode
+    # Deprecated: kept for backward compatibility with external selectors
+    # (e.g. ServiceMonitors); use app.kubernetes.io/component instead.
     app.kubernetes.io/app-name: graylog-datanode
+    {{- include "graylog.labels" . | nindent 4 }}
 spec:
   clusterIP: None
   ports:

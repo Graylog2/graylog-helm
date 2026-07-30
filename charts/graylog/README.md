@@ -217,8 +217,17 @@ helm install graylog graylog/graylog --namespace graylog --create-namespace --se
 # Post-Installation
 
 ## Set root Graylog password
-Graylog is installed with a random password by default. We recommend setting a persistent password once all pods achieve the `RUNNING` state using 
-the following command:
+Graylog is installed with a random password by default. It is stored in the release's
+backup Secret, which survives upgrades and uninstalls, and can be printed at any time:
+
+```sh
+kubectl get secret graylog-backup-secret --namespace graylog -o jsonpath="{.data.graylog-root-password}" | base64 -d
+```
+
+If you set `graylog.config.rootPassword` (or use `global.existingSecretName`), the
+chart stores only the SHA-256 hash of the password and you are responsible for keeping
+the plaintext. We recommend setting a persistent password once all pods achieve the
+`RUNNING` state using the following command:
 
 ```sh
 echo "Enter your new password and press return:" && read -s pass

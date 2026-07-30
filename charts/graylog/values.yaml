@@ -1,36 +1,56 @@
 # Default values for Graylog.
 
-# Kubernetes provider (optional)
+# provider enables provider-specific defaults (currently only "aws", which
+# provisions a gp3 StorageClass). Leave empty for provider-agnostic behavior.
 provider: ""
 
-# Override Graylog and Graylog Data Node version (optional)
+# version overrides the Graylog and Graylog Data Node image tag for both
+# workloads at once. Defaults to the chart's appVersion when empty.
 version: ""
 
-# Override the chart name (optional)
+# nameOverride replaces the chart name used in resource names and labels.
 nameOverride: ""
 
-# Override the (fully qualified) app name (optional)
+# fullnameOverride replaces the fully qualified app name used as the prefix
+# for all resource names.
 fullnameOverride: ""
 
-# Overrides values for Graylog, Datanode, and MongoDB
+# global values are shared by the Graylog, Datanode, and MongoDB workloads.
 global:
+  # imagePullSecrets is applied to the Graylog and Datanode pods unless
+  # overridden per image (MongoDB images are pulled by the operator).
   imagePullSecrets: []
+  # existingSecretName points at an externally managed Secret holding all
+  # Graylog credentials. When set, the chart does not create or manage secrets.
   existingSecretName: ""
+  # storageClass is the default StorageClass for all persistent volumes.
   storageClass: ""
 
-# Graylog application
+# graylog configures the Graylog server application.
 graylog:
+  # enabled toggles the Graylog server StatefulSet, Service, PDB, and init
+  # ConfigMap (the server ConfigMap and Secret are not gated by this flag).
   enabled: true
+  # enterprise selects the graylog/graylog-enterprise image instead of the
+  # open-source image.
   enterprise: true
+  # replicas is the number of Graylog server pods.
   replicas: 2
   service:
+    # nameOverride replaces the generated Service name.
     nameOverride: ""
+    # type is the Kubernetes Service type (ClusterIP, NodePort, LoadBalancer).
     type: ClusterIP
     ports:
+      # app is the port serving the Graylog web interface and REST API.
       app: 9000
+      # metrics is the port serving Prometheus metrics.
       metrics: 9833
     metrics:
+      # enabled exposes the Prometheus metrics port on the Service.
       enabled: true
+  # inputs declares Graylog inputs to expose as Service/container ports.
+  # Each entry needs a name, port, and protocol; targetPort defaults to port.
   inputs:
     - name: input-gelf
       port: 12201
@@ -40,30 +60,58 @@ graylog:
       port: 13301
       targetPort: 13301
       protocol: TCP
+  # plugins lists Graylog plugins to install at startup. Entries reference a
+  # download url (+ checksum), an OCI image, or an existingClaim with the jar.
   plugins: []
+  # env sets additional environment variables on the Graylog container as a
+  # simple key/value map.
   env: {}
-  # Graylog server configuration (server.conf)
+  # config maps to Graylog server configuration (server.conf) settings.
   config:
+    # rootUsername is the login of the Graylog root user.
     rootUsername: "admin"
+    # rootPassword is the root user's password. Leave empty to have the chart
+    # generate one on install (shown once in the install notes).
     rootPassword: ""
+    # customSecretPepper is the secret used to pepper stored user data
+    # (password_secret). Minimum 64 characters; generated when empty.
     customSecretPepper: ""
+    # timezone is the root user's timezone.
     timezone: "UTC"
+    # selfSignedStartup allows Graylog to boot with self-signed certificates.
     selfSignedStartup: "true"
+    # serverJavaOpts sets the JVM options for the Graylog server process.
     serverJavaOpts: "-Xms1g -Xmx1g"
+    # extraServerJavaOpts appends additional JVM options to serverJavaOpts.
     extraServerJavaOpts: []
+    # leaderElectionMode controls how the leader node is chosen.
     leaderElectionMode: "automatic"
+    # contentPacksAutoInstall installs bundled content packs on first boot.
     contentPacksAutoInstall: "true"
+    # isCloud enables Graylog Cloud mode.
     isCloud: "false"
     tls:
+      # enabled turns on TLS for the Graylog HTTP interface.
       enabled: false
+      # secretName is a kubernetes.io/tls Secret with the certificate and key.
       secretName: ""
+      # keyPassword is the password protecting the TLS private key, if any.
       keyPassword: ""
+      # updateKeyStore imports the certificate into the JVM trust store.
       updateKeyStore: true
+      # keyStorePass is the password of the JVM trust store.
       keyStorePass: "changeit"
     mongodb:
+      # customUri is a full MongoDB connection string for an externally
+      # managed MongoDB. Required when mongodb.communityResource.enabled=false.
       customUri: ""
+      # maxConnections caps the MongoDB connection pool size.
       maxConnections: "1000"
+      # versionProbeAttempts is the number of MongoDB version probe retries
+      # at startup ("0" retries forever).
       versionProbeAttempts: "0"
+    # messageJournal configures the on-disk message journal; fields map to
+    # the message_journal_* settings in server.conf.
     messageJournal:
       enabled: "true"
       flushAge: "1m"
@@ -71,6 +119,7 @@ graylog:
       maxAge: "12h"
       segmentAge: "1h"
       segmentSize: "100mb"
+    # network configures the HTTP interface of the Graylog server.
     network:
       connectTimeout: "5s"
       enableCors: "false"
@@ -78,7 +127,10 @@ graylog:
       maxHeaderSize: "8192"
       readTimeout: "10s"
       threadPoolSize: "64"
+      # externalUri is the public URI of the Graylog web interface, used when
+      # it cannot be derived from the Service, Ingress, or TLS configuration.
       externalUri: ""
+    # performance maps to the processing/buffer tuning knobs of server.conf.
     performance:
       asyncEventbusProcessors: "2"
       autoRestartInputs: "false"
@@ -93,6 +145,7 @@ graylog:
       outputBufferProcessorThreadsCorePoolSize: "3"
       outputBufferProcessors: ""
       processBufferProcessors: ""
+    # email configures the SMTP transport for notifications.
     email:
       enabled: "false"
       senderAddress: "graylog@example.com"
@@ -103,12 +156,19 @@ graylog:
       useAuth: "true"
       useSsl: "false"
       useTls: "true"
+      # webInterfaceUrl is the base URL used to build links in notification
+      # emails.
       webInterfaceUrl: "https://graylog.example.com"
     plugins:
+      # enabled turns on plugin installation via init containers.
       enabled: false
+    # geolocation configures GeoIP databases for the Graylog geolocation
+    # processor.
     geolocation:
       enabled: false
       maxmindGeoIp:
+        # enabled wires the MaxMind credentials below into the chart-managed
+        # Secret, where the GeoIP update sidecar reads them.
         enabled: true
         # MaxMind account credentials
         # When using global.existingSecretName, the external secret must contain:
@@ -119,6 +179,8 @@ graylog:
         # Comma-separated list of MaxMind database editions to download
         # Examples: "GeoLite2-City GeoLite2-ASN", "GeoIP2-City GeoIP2-ISP"
         editionIds: "GeoLite2-City GeoLite2-ASN"
+      # mmdbSources provides direct download URLs (and checksums) for the
+      # city/asn mmdb files as an alternative to the MaxMind sidecar.
       mmdbSources:
         city:
           url:
@@ -133,6 +195,7 @@ graylog:
           repository: maxmindinc
           name: geoipupdate
           tag: "7.1.1"
+        # schedule is a cron expression controlling database update frequency.
         schedule: "0 0 * * *"
         resources:
           requests:
@@ -141,6 +204,7 @@ graylog:
           limits:
             cpu: 500m
             memory: 256Mi
+        # securityContext for the sidecar; the geoipupdate image requires root.
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -152,26 +216,39 @@ graylog:
           seccompProfile:
             type: RuntimeDefault
     init:
+      # assetFetch controls download of plugins/geolocation assets by the
+      # init container.
       assetFetch:
         enabled: false
+        # skipChecksum disables checksum verification of downloaded assets.
         skipChecksum: false
+        # allowHttp permits plain-HTTP download URLs (HTTPS-only by default).
         allowHttp: false
         plugins:
           enabled: false
+          # baseUrl is prepended to relative plugin URLs.
           baseUrl:
         geolocation:
           enabled: false
+          # baseUrl is prepended to relative mmdb URLs.
           baseUrl:
   image:
+    # repository overrides the Graylog image; defaults to graylog/graylog or
+    # graylog/graylog-enterprise depending on graylog.enterprise.
     repository: ""
+    # tag overrides the image tag; defaults to `version` or the chart's
+    # appVersion.
     tag: ""
     imagePullPolicy: IfNotPresent
+    # imagePullSecrets overrides global.imagePullSecrets for this image.
     imagePullSecrets: []
+  # updateStrategy is the StatefulSet update strategy.
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
       partition:
+  # resources are the compute requests/limits of the Graylog container.
   resources:
     limits:
       cpu: "2"
@@ -179,17 +256,26 @@ graylog:
     requests:
       cpu: "1"
       memory: "1Gi"
+  # persistence configures the Graylog data volume (journal, node-id, ...).
   persistence:
     enabled: true
+    # storageClass overrides global.storageClass for this volume.
     storageClass:
+    # volumeNameOverride replaces the generated PVC/volume name.
     volumeNameOverride:
+    # existingClaim mounts a pre-provisioned PVC instead of using a
+    # volumeClaimTemplate.
     existingClaim:
     mountPath:
+    # accessModes defaults to ["ReadWriteOnce"] when empty.
     accessModes: []
+    # size is the requested volume size (default 8Gi).
     size:
     annotations: {}
     labels: {}
     selector: {}
+  # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
+  # for the Graylog container (TCP checks against the app port).
   livenessProbe:
     enabled: true
     initialDelaySeconds: 60
@@ -210,6 +296,9 @@ graylog:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+  # podSecurityContext / initContainerSecurityContext / containerSecurityContext
+  # expose the standard Kubernetes securityContext fields; defaults follow a
+  # non-root, no-privilege-escalation baseline.
   podSecurityContext:
     # fsGroup is required to make mounted volumes writable
     runAsUser: 1100
@@ -233,28 +322,51 @@ graylog:
       add: ["NET_BIND_SERVICE"]
     seccompProfile:
       type: RuntimeDefault
+  # podAnnotations is added to the Graylog pod template metadata.
   podAnnotations: {}
+  # nodeSelector constrains Graylog pods to matching nodes.
   nodeSelector: {}
+  # tolerations lets Graylog pods schedule onto tainted nodes.
   tolerations: []
+  # affinity overrides the default anti-affinity that spreads Graylog pods
+  # across nodes.
   affinity: {}
+  # extraEnv sets additional environment variables using full EnvVar syntax
+  # (supports valueFrom); entries here win over graylog.env keys.
   extraEnv: []
 
-# Graylog Datanode
+# datanode configures the Graylog Data Node (managed OpenSearch).
 datanode:
+  # enabled toggles the Datanode StatefulSet, Service, and PDB (the Datanode
+  # ConfigMap and Secret are not gated by this flag).
   enabled: true
+  # replicas is the number of Datanode pods.
   replicas: 3
   service:
     ports:
+      # api is the Datanode REST API port.
       api: 8999
+      # data is the OpenSearch HTTP port.
       data: 9200
+      # config is the OpenSearch transport port.
       config: 9300
+  # env sets additional environment variables on the Datanode container as a
+  # simple key/value map.
   env: {}
+  # config maps to Graylog Data Node configuration settings.
   config:
+    # nodeIdFile is the path of the node-id file inside the container.
     nodeIdFile: ""
+    # opensearchHeap is the heap size of the embedded OpenSearch process.
     opensearchHeap: "2g"
+    # javaOpts sets JVM options for the Datanode process itself.
     javaOpts: "-Xms1g -Xmx1g"
+    # skipPreflightChecks bypasses the Datanode preflight validation.
     skipPreflightChecks: "false"
+    # nodeSearchCacheSize is the OpenSearch search cache size.
     nodeSearchCacheSize: "10gb"
+    # s3ClientDefault* configure the S3 client used for searchable snapshots;
+    # endpoint, accessKey, and secretKey must be set together.
     s3ClientDefaultSecretKey: ""
     s3ClientDefaultAccessKey: ""
     s3ClientDefaultEndpoint: ""
@@ -262,10 +374,16 @@ datanode:
     s3ClientDefaultProtocol: "http"
     s3ClientDefaultPathStyleAccess: "true"
   image:
+    # repository overrides the Datanode image (default graylog/graylog-datanode).
     repository: ""
+    # tag overrides the image tag; defaults to `version` or the chart's
+    # appVersion.
     tag: ""
     imagePullPolicy: IfNotPresent
+    # imagePullSecrets overrides global.imagePullSecrets for this image.
     imagePullSecrets: []
+  # sysctlInit runs a privileged init container that raises vm.max_map_count
+  # for OpenSearch on nodes where the default is too low.
   sysctlInit:
     enabled: false
     image:
@@ -275,11 +393,13 @@ datanode:
     securityContext:
       privileged: true
     vmMaxMapCount: 262144
+  # updateStrategy is the StatefulSet update strategy.
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
       partition:
+  # resources are the compute requests/limits of the Datanode container.
   resources:
     limits:
       cpu: "1"
@@ -287,8 +407,14 @@ datanode:
     requests:
       cpu: "500m"
       memory: "3.5Gi"
+  # persistence configures the Datanode volumes. Each volume consumes its
+  # enabled, storageClass, mountPath, accessModes, and size fields; the
+  # remaining fields (existingClaim, annotations, labels, selector,
+  # dataSource) and the parent enabled flag are currently not consumed by
+  # the templates.
   persistence:
     enabled: true
+    # data is the OpenSearch data volume.
     data:
       enabled: true
       storageClass: ""
@@ -300,6 +426,7 @@ datanode:
       labels: {}
       selector: {}
       dataSource: {}
+    # nativeLibs is an optional volume for OpenSearch native libraries.
     nativeLibs:
       enabled: false
       storageClass: ""
@@ -310,6 +437,8 @@ datanode:
       annotations: {}
       labels: {}
       selector: {}
+  # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
+  # for the Datanode container.
   livenessProbe:
     enabled: true
     initialDelaySeconds: 30
@@ -342,10 +471,17 @@ datanode:
       add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
     seccompProfile:
       type: RuntimeDefault
+  # podAnnotations is added to the Datanode pod template metadata.
   podAnnotations: {}
+  # nodeSelector constrains Datanode pods to matching nodes.
   nodeSelector: {}
+  # tolerations lets Datanode pods schedule onto tainted nodes.
   tolerations: []
+  # affinity overrides the default anti-affinity that spreads Datanode pods
+  # across nodes.
   affinity: {}
+  # extraEnv sets additional environment variables using full EnvVar syntax
+  # (supports valueFrom); entries here win over datanode.env keys.
   extraEnv: []
 
 # External OpenSearch
@@ -380,10 +516,17 @@ opensearch:
 
 # Graylog service account
 serviceAccount:
+  # create makes the chart manage the ServiceAccount. Set create=false and
+  # nameOverride to use an existing, externally managed ServiceAccount.
   create: true
+  # automount controls automountServiceAccountToken on the ServiceAccount.
   automount: true
+  # annotations is added to the ServiceAccount (e.g. IRSA role ARNs).
   annotations: {}
+  # nameOverride replaces the generated ServiceAccount name, or names the
+  # existing ServiceAccount to use when create=false.
   nameOverride: ""
+  # role optionally creates a namespaced Role/RoleBinding with these rules.
   role:
     create: false
     rules: []
@@ -394,20 +537,31 @@ serviceAccount:
 # Ingress configuration
 # more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
+  # enabled is the master switch for all Ingress resources.
   enabled: false
   config:
+    # defaultBackend deploys a small "waiting room" fallback service that
+    # answers while Graylog is starting up.
     defaultBackend:
       enabled: true
+    # tls selects how Ingress certificates are issued via cert-manager.
     tls:
       clusterIssuer:
+        # existingName references a pre-existing ClusterIssuer.
         existingName:
       issuer:
+        # existingName references a pre-existing namespaced Issuer.
         existingName:
+        # managed creates a Let's Encrypt ACME Issuer owned by this chart.
         managed:
           enabled: false
+          # staging uses the Let's Encrypt staging endpoint (untrusted certs,
+          # generous rate limits).
           staging: true
+  # web exposes the Graylog web interface/API.
   web:
     enabled: false
+    # className is the IngressClass to use.
     className: ""
     annotations: {}
     hosts:
@@ -419,6 +573,7 @@ ingress:
     #  - secretName: chart-example-tls
     #    hosts:
     #      - chart-example.local
+  # forwarder exposes the Graylog forwarder input.
   forwarder:
     enabled: false
     className: ""
@@ -434,7 +589,10 @@ ingress:
 # Requires MongoDB Kubernetes Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
 mongodb:
   communityResource:
+    # enabled renders a MongoDBCommunity resource for the operator to manage.
+    # Set to false to bring your own MongoDB via graylog.config.mongodb.customUri.
     enabled: true
+  # version is the MongoDB server version deployed by the operator.
   version: "7.0.25"
   # For production deployments, use 3 data-bearing replicas with no arbiters.
   # This configuration supports w:majority writes even with one replica down.
@@ -443,15 +601,20 @@ mongodb:
   replicas: 3
   arbiters: 0
   persistence:
+    # storageClass overrides global.storageClass for the MongoDB volumes.
     storageClass: ""
     size:
       data: "10G"
       logs: "2G"
+  # serviceAccount configures the ServiceAccount used by the MongoDB pods;
+  # fields mirror the top-level serviceAccount block.
   serviceAccount:
     create: true
     automount: true
     annotations: {}
     nameOverride: ""
+    # role creates the Role/RoleBinding required by the MongoDB operator's
+    # readiness/version-upgrade hooks.
     role:
       create: true
       rules:

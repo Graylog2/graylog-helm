@@ -3,6 +3,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "graylog.fallback.name" . }}
+  labels:
+    app.kubernetes.io/component: default-backend
+    {{- include "graylog.labels" . | nindent 4 }}
 spec:
   selector:
     graylog-app: {{ include "graylog.fallback.name" . }}

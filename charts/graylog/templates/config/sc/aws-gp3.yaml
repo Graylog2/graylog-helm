@@ -3,6 +3,8 @@ apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: {{ include "graylog.provider.storageClassName" . }}
+  labels:
+    {{- include "graylog.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-10"

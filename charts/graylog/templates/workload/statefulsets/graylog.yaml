@@ -6,6 +6,7 @@ metadata:
   name: {{ include "graylog.fullname" . }}
   labels:
     app: graylog-app
+    app.kubernetes.io/component: server
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
     {{- include "graylog.annotations" . | nindent 4 }}
@@ -29,6 +30,7 @@ spec:
     metadata:
       labels:
         app: graylog-app
+        app.kubernetes.io/component: server
         {{- include "graylog.selectorLabels" . | nindent 8 }}
       annotations:
         checksum/config: {{ include "graylog.configChecksum" . }}
@@ -45,7 +47,7 @@ spec:
       {{- with .Values.graylog.nodeSelector }}
       nodeSelector: {{ . | toYaml | nindent 8 }}
       {{- end }}
-      {{- if .Values.serviceAccount.create }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.nameOverride }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
       {{- with .Values.graylog.podSecurityContext }}
