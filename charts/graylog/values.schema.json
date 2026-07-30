@@ -380,16 +380,12 @@
             "storageClass": { "type": [ "string", "null" ] },
             "volumeNameOverride": { "type": [ "string", "null" ] },
             "existingClaim": { "type": [ "string", "null" ] },
-            "mountPath": { "type": [ "string", "null" ] },
             "accessModes": { "type": "array" },
             "size": { "type": [ "string", "null" ] },
             "annotations": {
               "type": "object"
             },
             "labels": {
-              "type": "object"
-            },
-            "selector": {
               "type": "object"
             }
           }
@@ -568,28 +564,14 @@
         "persistence": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
             "data": {
               "type": "object",
               "properties": {
                 "enabled": { "type": "boolean" },
                 "storageClass": { "type": "string" },
-                "existingClaim": { "type": "string" },
                 "mountPath": { "type": "string" },
                 "accessModes": { "type": "array" },
-                "size": { "type": "string" },
-                "annotations": {
-                  "type": "object"
-                },
-                "labels": {
-                  "type": "object"
-                },
-                "selector": {
-                  "type": "object"
-                },
-                "dataSource": {
-                  "type": "object"
-                }
+                "size": { "type": "string" }
               }
             },
             "nativeLibs": {
@@ -597,19 +579,9 @@
               "properties": {
                 "enabled": { "type": "boolean" },
                 "storageClass": { "type": "string" },
-                "existingClaim": { "type": "string" },
                 "mountPath": { "type": "string" },
                 "accessModes": { "type": "array" },
-                "size": { "type": "string" },
-                "annotations": {
-                  "type": "object"
-                },
-                "labels": {
-                  "type": "object"
-                },
-                "selector": {
-                  "type": "object"
-                }
+                "size": { "type": "string" }
               }
             }
           }
