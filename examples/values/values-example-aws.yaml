@@ -24,7 +24,6 @@ graylog:
 datanode:
   replicas: 3
   persistence:
-    enabled: true
     data:
       enabled: true
       storageClass: "gp3"

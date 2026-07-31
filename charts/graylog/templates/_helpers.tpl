@@ -207,7 +207,7 @@ Graylog secret pepper
 */}}
 {{- define "graylog.secretPepper" }}
 {{- $pepper := .Values.graylog.config.customSecretPepper | default (randAlphaNum 96) }}
-{{- if len $pepper | ge 64 }}
+{{- if lt (len $pepper) 64 }}
 {{- fail "Use at least 64 characters when setting a secret to pepper the stored user data." }}
 {{- else }}
 {{- print $pepper }}
@@ -346,6 +346,86 @@ Datanode configmap name
 {{- define "graylog.datanode.configmap.name" -}}
 {{- include "graylog.fullname" . | printf "%s-datanode-config" }}
 {{- end }}
+
+{{/*
+BYO OpenSearch / Data Node mutual-exclusion validation.
+Exactly one indexer source must be selected.
+*/}}
+{{- define "graylog.opensearch.validate" -}}
+{{- if and .Values.datanode.enabled .Values.opensearch.enabled }}
+{{- fail "datanode.enabled and opensearch.enabled are mutually exclusive. To bring your own OpenSearch, set datanode.enabled=false and opensearch.enabled=true." }}
+{{- end }}
+{{- if and (not .Values.datanode.enabled) (not .Values.opensearch.enabled) }}
+{{- fail "No indexer configured: enable the bundled Data Node (datanode.enabled=true) or bring your own OpenSearch (opensearch.enabled=true)." }}
+{{- end }}
+{{- if .Values.opensearch.enabled }}
+{{- if not .Values.opensearch.hosts }}
+{{- fail "opensearch.enabled=true but opensearch.hosts is empty. Provide at least one OpenSearch node URI." }}
+{{- end }}
+{{- if and .Values.opensearch.tls.enabled (not .Values.opensearch.tls.caSecret) (not .Values.global.existingSecretName) }}
+{{- /* CA may legitimately be a public/known CA; warn-by-convention only, no fail */ -}}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Resolve OpenSearch basic-auth credentials as "user:pass" (empty string if none).
+Inline values win; otherwise read from opensearch.auth.existingSecret via lookup.
+*/}}
+{{- define "graylog.opensearch.credentials" -}}
+{{- $u := .Values.opensearch.auth.username | default "" -}}
+{{- $p := .Values.opensearch.auth.password | default "" -}}
+{{- if and (not $u) .Values.opensearch.auth.existingSecret -}}
+  {{- $s := lookup "v1" "Secret" .Release.Namespace .Values.opensearch.auth.existingSecret -}}
+  {{- if $s -}}
+    {{- $u = index $s.data .Values.opensearch.auth.usernameKey | default "" | b64dec -}}
+    {{- $p = index $s.data .Values.opensearch.auth.passwordKey | default "" | b64dec -}}
+  {{- end -}}
+{{- end -}}
+{{- if $u -}}
+{{- printf "%s:%s" $u $p -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Build the comma-joined GRAYLOG_ELASTICSEARCH_HOSTS value, injecting credentials into
+each URI after the scheme.
+*/}}
+{{- define "graylog.opensearch.hosts" -}}
+{{- $creds := include "graylog.opensearch.credentials" . -}}
+{{- $out := list -}}
+{{- range .Values.opensearch.hosts -}}
+  {{- $uri := . | trim -}}
+  {{- if $creds -}}
+    {{- $parts := regexSplit "://" $uri 2 -}}
+    {{- if eq (len $parts) 2 -}}
+      {{- $uri = printf "%s://%s@%s" (index $parts 0) $creds (index $parts 1) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $out = append $out $uri -}}
+{{- end -}}
+{{- join "," $out -}}
+{{- end -}}
+
+{{/*
+Dedicated OpenSearch connection secret name.
+Kept separate from the main Graylog secret so GRAYLOG_ELASTICSEARCH_HOSTS is injected
+even when the user supplies their own secret via global.existingSecretName.
+*/}}
+{{- define "graylog.opensearch.secretName" -}}
+{{- include "graylog.fullname" . | printf "%s-opensearch" }}
+{{- end }}
+
+{{/*
+Whether Graylog needs a custom Java truststore built at init time.
+True when Graylog server TLS wants a keystore update, OR when a BYO OpenSearch CA
+must be trusted.
+*/}}
+{{- define "graylog.truststore.enabled" -}}
+{{- $graylogTls := and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.updateKeyStore -}}
+{{- $osCa := and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret -}}
+{{- if or $graylogTls $osCa -}}true{{- end -}}
+{{- end -}}
 
 {{/*
 Provider-defined Storage Class name
@@ -524,7 +604,7 @@ Graylog Java Options
 */}}
 {{- define "graylog.javaOpts" }}
 {{- $extraOpts := .Values.graylog.config.extraServerJavaOpts | default list }}
-{{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.updateKeyStore }}
+{{- if eq (include "graylog.truststore.enabled" .) "true" }}
 {{- $extraOpts = append $extraOpts "-Djavax.net.ssl.trustStore=/usr/share/graylog/data/cacerts/graylog.jks" }}
 {{- $extraOpts = .Values.graylog.config.tls.keyStorePass | default "changeit" | printf "-Djavax.net.ssl.trustStorePassword=%s" | append $extraOpts }}
 {{- end }}

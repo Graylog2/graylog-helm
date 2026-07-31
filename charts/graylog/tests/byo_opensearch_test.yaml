@@ -1,0 +1,154 @@
+suite: Bring Your Own OpenSearch
+templates:
+  - workload/statefulsets/graylog.yaml
+  - config/secret/secrets.yaml
+  - config/secret/opensearch.yaml
+  - config/graylog.yaml
+  - config/datanode.yaml
+
+tests:
+  # --- connection wiring -----------------------------------------------------
+  - it: injects GRAYLOG_ELASTICSEARCH_HOSTS into the dedicated secret when opensearch enabled
+    template: config/secret/opensearch.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.ns.svc:9200"]
+      opensearch.auth.username: admin
+      opensearch.auth.password: pw
+    asserts:
+      - isNotNull:
+          path: data.GRAYLOG_ELASTICSEARCH_HOSTS
+
+  - it: assembles credentials into each host URI
+    template: config/secret/opensearch.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os-0.ns.svc:9200", "https://os-1.ns.svc:9200"]
+      opensearch.auth.username: admin
+      opensearch.auth.password: pw
+    asserts:
+      # base64 of "https://admin:pw@os-0.ns.svc:9200,https://admin:pw@os-1.ns.svc:9200"
+      - equal:
+          path: data.GRAYLOG_ELASTICSEARCH_HOSTS
+          value: aHR0cHM6Ly9hZG1pbjpwd0Bvcy0wLm5zLnN2Yzo5MjAwLGh0dHBzOi8vYWRtaW46cHdAb3MtMS5ucy5zdmM6OTIwMA==
+
+  - it: does not render the OpenSearch secret in default Data Node mode
+    template: config/secret/opensearch.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: wires the OpenSearch secret into the Graylog container envFrom
+    template: workload/statefulsets/graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.ns.svc:9200"]
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: RELEASE-NAME-graylog-opensearch
+
+  - it: disables selfsigned_startup in OpenSearch mode
+    template: config/graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.ns.svc:9200"]
+    asserts:
+      - equal:
+          path: data.GRAYLOG_SELFSIGNED_STARTUP
+          value: "false"
+
+  # --- CA trust --------------------------------------------------------------
+  - it: mounts the OpenSearch CA secret into the init container and as a volume
+    template: workload/statefulsets/graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.ns.svc:9200"]
+      opensearch.tls.enabled: true
+      opensearch.tls.caSecret: my-os-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: os-ca
+            secret:
+              secretName: my-os-ca
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: os-ca
+            mountPath: /mnt/os-tls
+            readOnly: true
+
+  - it: adds the truststore JVM option when a BYO OpenSearch CA is configured
+    template: config/graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.ns.svc:9200"]
+      opensearch.tls.enabled: true
+      opensearch.tls.caSecret: my-os-ca
+    asserts:
+      - matchRegex:
+          path: data.GRAYLOG_SERVER_JAVA_OPTS
+          pattern: -Djavax\.net\.ssl\.trustStore=/usr/share/graylog/data/cacerts/graylog\.jks
+
+  - it: does not mount the OpenSearch CA when tls is disabled
+    template: workload/statefulsets/graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["http://os.ns.svc:9200"]
+      opensearch.tls.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: os-ca
+
+  # --- disabling the Data Node ----------------------------------------------
+  - it: does not render the datanode configmap when datanode is disabled
+    template: config/datanode.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.ns.svc:9200"]
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- validation guards -----------------------------------------------------
+  - it: fails when both Data Node and OpenSearch are enabled
+    template: workload/statefulsets/graylog.yaml
+    set:
+      datanode.enabled: true
+      opensearch.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "datanode.enabled and opensearch.enabled are mutually exclusive. To bring your own OpenSearch, set datanode.enabled=false and opensearch.enabled=true."
+
+  - it: fails when neither Data Node nor OpenSearch is enabled
+    template: workload/statefulsets/graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "No indexer configured: enable the bundled Data Node (datanode.enabled=true) or bring your own OpenSearch (opensearch.enabled=true)."
+
+  - it: fails when opensearch is enabled but no hosts are provided
+    template: workload/statefulsets/graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "opensearch.enabled=true but opensearch.hosts is empty. Provide at least one OpenSearch node URI."

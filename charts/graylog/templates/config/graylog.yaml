@@ -11,7 +11,13 @@ data:
   {{/* The exporter defaults to 127.0.0.1, which is unreachable from outside the pod. */}}
   GRAYLOG_PROMETHEUS_EXPORTER_BIND_ADDRESS: {{ include "graylog.service.port.metrics" . | printf "0.0.0.0:%s" | quote }}
   {{- end }}
+  {{- if .Values.opensearch.enabled }}
+  {{/* Self-signed startup is required for Data Node feature; disable it so Graylog uses elasticsearch_hosts instead of datanode discovery */}}
+  GRAYLOG_SELFSIGNED_STARTUP: "false"
+  {{- else }}
+
   GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfSignedStartup | default true | quote }}
+  {{- end }}
   GRAYLOG_IS_CLOUD: {{ .Values.graylog.config.isCloud | default false | quote }}
   GRAYLOG_SERVER_JAVA_OPTS: {{ include "graylog.javaOpts" . | quote }}
   GRAYLOG_LEADER_ELECTION_MODE: {{ .Values.graylog.config.leaderElectionMode | quote }}

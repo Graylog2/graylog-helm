@@ -73,6 +73,10 @@ spec:
                 name: {{ include "graylog.configmap.name" . }}
             - secretRef:
                 name: {{ include "graylog.secretsName" . }}
+            {{- if .Values.opensearch.enabled }}
+            - secretRef:
+                name: {{ include "graylog.opensearch.secretName" . }}
+            {{- end }}
           volumeMounts:
             - name: {{ include "graylog.volume.name" . }}
               mountPath: /mnt/data
@@ -82,6 +86,11 @@ spec:
             - name: tls-creds
               mountPath: /mnt/tls/tls.crt
               subPath: tls.crt
+              readOnly: true
+            {{- end }}
+            {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+            - name: os-ca
+              mountPath: /mnt/os-tls
               readOnly: true
             {{- end }}
         {{- if .Values.graylog.config.plugins.enabled }}
@@ -134,6 +143,10 @@ spec:
                 name: {{ include "graylog.configmap.name" . }}
             - secretRef:
                 name: {{ include "graylog.secretsName" . }}
+            {{- if .Values.opensearch.enabled }}
+            - secretRef:
+                name: {{ include "graylog.opensearch.secretName" . }}
+            {{- end }}
           ports:
             - name: app
               containerPort: {{ .Values.graylog.service.ports.app | int }}
@@ -226,6 +239,11 @@ spec:
       - name: tls-creds
         secret:
           secretName: {{ .Values.graylog.config.tls.secretName | quote }}
+      {{- end }}
+      {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+      - name: os-ca
+        secret:
+          secretName: {{ .Values.opensearch.tls.caSecret }}
       {{- end }}
       {{- if .Values.graylog.config.plugins.enabled }}
       - name: init-plugins
