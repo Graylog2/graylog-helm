@@ -60,7 +60,15 @@ lifecycle:
           SETTLE={{ $settle }}
           STALL_LIMIT={{ $drain.stallPolls | int }}
 
-          log() { echo "[prestop-drain] $*"; }
+          # kubelet discards preStop stdout — it only ever surfaces (truncated) in
+          # a FailedPreStopHook event, and only when the hook fails. Writing to
+          # PID 1's stdout puts these lines in the container's real log stream so
+          # `kubectl logs` can see a drain happen. Keep the plain echo too: it is
+          # what lands in the event if this hook ever does fail.
+          log() {
+            echo "[prestop-drain] $*"
+            echo "[prestop-drain] $*" > /proc/1/fd/1 2>/dev/null || true
+          }
 
           # Kubernetes removes a Terminating pod from every Service
           # EndpointSlice, but kube-proxy convergence is not instant. Measuring
@@ -73,39 +81,51 @@ lifecycle:
           # a wide margin and get the container SIGKILLed mid-shutdown.
           started=$(date +%s)
           deadline=$((started + BUDGET))
+          # Progress is measured against the best (lowest) depth seen so far, not
+          # against the previous sample. Under live ingest the gauge oscillates
+          # continuously — two consecutive samples are essentially never equal —
+          # so an equality test never fires and the hook burns the whole budget
+          # for nothing. Requiring a new low means "no improvement" is detected
+          # even while the raw number jitters.
           stall=0
-          last=""
+          best=""
           while [ "$(date +%s)" -lt "${deadline}" ]; do
             elapsed=$(( $(date +%s) - started ))
             # $NF is the gauge value; ^gl_ skips the "# HELP"/"# TYPE" lines, and
             # the anchored name avoids the similarly-spelled data-lake and kafka
-            # gauges. awk exits non-zero when the gauge is absent.
-            n=$(curl -fsS --max-time 5 "${URL}" 2>/dev/null \
-              | awk '/^gl_journal_entries_uncommitted[{ ]/ { v = $NF } END { if (v == "") exit 1; printf "%d\n", v }')
-            if [ -z "${n}" ]; then
+            # gauges. awk exits non-zero when the gauge is absent. The append rate
+            # is diagnostic only: it explains *why* a drain cannot finish.
+            sample=$(curl -fsS --max-time 5 "${URL}" 2>/dev/null \
+              | awk '/^gl_journal_entries_uncommitted[{ ]/ { v = $NF }
+                     /^gl_journal_append_1_sec_rate[{ ]/   { r = $NF }
+                     END { if (v == "") exit 1; printf "%d %d\n", v, r }')
+            if [ -z "${sample}" ]; then
               log "journal gauge unavailable after ${elapsed}s; handing over to graceful shutdown"
               exit 0
             fi
+            n=${sample% *}
+            rate=${sample#* }
             if [ "${n}" -le 0 ]; then
               log "journal drained after ${elapsed}s"
               exit 0
             fi
-            if [ "${n}" = "${last}" ]; then
+            if [ -z "${best}" ] || [ "${n}" -lt "${best}" ]; then
+              best="${n}"
+              stall=0
+            else
               stall=$((stall + 1))
               if [ "${stall}" -ge "${STALL_LIMIT}" ]; then
                 # Endpoint removal only sheds newly-established connections.
-                # Long-lived TCP inputs and UDP keep arriving, so a flat gauge
-                # means waiting longer will not help.
-                log "journal flat at ${n} uncommitted entries across ${stall} polls (${elapsed}s); senders are still writing, handing over to graceful shutdown"
+                # Long-lived TCP inputs and UDP senders keep writing, so the
+                # journal will not reach zero no matter how long we wait. Only
+                # stopping the inputs can do that, and that needs a token.
+                log "no progress in ${stall} polls (${elapsed}s): depth ${n}, best ${best}, still ingesting ${rate} msg/s. A true drain needs inputs stopped; handing over to graceful shutdown"
                 exit 0
               fi
-            else
-              stall=0
             fi
-            last="${n}"
             sleep "${POLL}"
           done
-          log "drain budget of ${BUDGET}s exhausted with ${last} uncommitted entries remaining; handing over to graceful shutdown"
+          log "drain budget of ${BUDGET}s exhausted at depth ${n} (best ${best}, ingesting ${rate} msg/s); handing over to graceful shutdown"
           exit 0
 {{- end }}
 {{- end }}

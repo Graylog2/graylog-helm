@@ -350,8 +350,51 @@ It is **off by default** because it slows every rolling upgrade by the drain tim
 | Limit | Consequence |
 |---|---|
 | Bounded by `terminationGracePeriodSeconds` | The hook always yields in time for SIGTERM (see below). If the journal is still full, termination proceeds anyway. |
-| Only sheds *newly established* connections | Kubernetes removes the terminating pod from Service endpoints, but long-lived TCP inputs and UDP senders keep writing. Against those the journal may never reach zero, and the hook gives up after `stallPolls` samples with no decrease. |
+| Only sheds *newly established* connections | Kubernetes removes the terminating pod from Service endpoints, but that only stops new connections. Long-lived TCP inputs, UDP senders, and internally generated inputs keep writing. Against those the journal never reaches zero, and the hook gives up once journal depth stops reaching new lows for `stallPolls` samples. |
 | Does not stop inputs | Stopping inputs requires an authenticated API call. Only the manual runbook can guarantee an empty journal. |
+| Pointless on rolling upgrades | A replacement pod re-binds the same PVC and replays the journal itself, so there is nothing to protect. The hook cannot tell an upgrade from a scale-in, so it pays the cost on both. |
+
+> [!IMPORTANT]
+> Enable this only if you routinely scale in. On a node that is still receiving
+> traffic the drain cannot finish, and it adds its give-up time to *every* pod
+> termination — including every rolling upgrade, where it buys nothing.
+
+Measured on a 3-node cluster ingesting ~115 msg/s per node from inputs that keep
+producing throughout termination — in this case internally generated traffic, which
+endpoint removal cannot shed at all. Network inputs holding long-lived TCP
+connections behave the same way, because removing a pod from Service endpoints only
+stops *new* connections:
+
+```
+[prestop-drain] waiting 15s for endpoint removal to propagate
+[prestop-drain] no progress in 10 polls (63s): depth 163, best 4, still ingesting
+                113 msg/s. A true drain needs inputs stopped; handing over to
+                graceful shutdown
+```
+
+Pod termination took **89s** instead of ~10s, and the journal never emptied — it
+got as low as 4 entries but new messages kept arriving. That is the expected
+outcome for a node under live load, and it is why the message names the ingest
+rate: the fix is to stop the inputs, not to wait longer.
+
+Where the hook *does* pay off is a scale-in whose senders reconnect elsewhere once
+the pod leaves Service endpoints. Then ingest to that node genuinely stops, depth
+falls to zero, and the hook exits early having saved the journal that would
+otherwise have been stranded.
+
+### Watching a drain
+
+The hook writes its progress to the container's log stream, so:
+
+```sh
+# follow BEFORE you terminate — a pod's logs are destroyed with the pod object
+kubectl logs -n graylog -l app=graylog-app -c graylog-app \
+  --follow --prefix --tail=0 --max-log-requests=20 | grep "prestop-drain"
+```
+
+A post-mortem `kubectl logs` will find nothing: the terminated pod is gone. Note
+also that Kubernetes discards `preStop` output by default — these lines are
+visible only because the hook writes to PID 1's stdout deliberately.
 
 #### The grace-period budget
 
@@ -686,6 +729,9 @@ helm upgrade -i graylog graylog/graylog -n graylog --reuse-values --set global.e
 > - `graylog.config.rootUsername`
 > - `graylog.config.customSecretPepper`
 > - `graylog.config.tls.keyPassword`
+
+The required keys, and how to build the secret, are documented in
+[Graylog Secrets](../../docs/graylog-secrets.md).
 
 ## Bring Your Own MongoDB
 

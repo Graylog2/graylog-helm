@@ -144,3 +144,25 @@ tests:
           path: spec.template.spec.containers[0].lifecycle
         template: workload/statefulsets/graylog.yaml
 
+
+  - it: measures progress against the best depth seen, not the previous sample
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # Live gauges oscillate under ingest (observed 31->82->36->126->231->9->3...),
+      # so an equality test against the previous sample never fires and the hook
+      # burns its entire budget. Progress must mean "a new low".
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\[ "\$\{n\}" -lt "\$\{best\}" \]'
+        template: workload/statefulsets/graylog.yaml
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\[ "\$\{n\}" = "\$\{last\}" \]'
+        template: workload/statefulsets/graylog.yaml
+      # The give-up message must report the ingest rate, since that is the actual
+      # reason a drain cannot complete.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "still ingesting \\$\\{rate\\} msg/s"
+        template: workload/statefulsets/graylog.yaml
