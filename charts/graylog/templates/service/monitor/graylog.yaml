@@ -1,0 +1,78 @@
+{{- if and .Values.graylog.enabled .Values.graylog.service.metrics.serviceMonitor.enabled }}
+{{- if not .Values.graylog.service.metrics.enabled }}
+{{- fail "graylog.service.metrics.serviceMonitor.enabled requires graylog.service.metrics.enabled=true, otherwise there is no metrics port to scrape." }}
+{{- end }}
+{{/*
+Fail early with an actionable message when the Prometheus Operator CRDs are
+missing. The lookup guard skips the check for offline renders (helm template,
+unittest), where .Capabilities only contains built-in API versions.
+*/}}
+{{- if and (not (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor")) (lookup "v1" "Namespace" "" .Release.Namespace) }}
+{{- fail "The Prometheus Operator CRDs (monitoring.coreos.com/v1) were not found in the cluster. Install the Prometheus Operator first (https://prometheus-operator.dev/docs/getting-started/installation/), or disable the ServiceMonitor (graylog.service.metrics.serviceMonitor.enabled=false) and scrape the metrics port directly." }}
+{{- end }}
+{{- with .Values.graylog.service.metrics.serviceMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "graylog.serviceMonitor.name" $ }}
+  namespace: {{ .namespace | default $.Release.Namespace }}
+  labels:
+    app.kubernetes.io/component: server
+    {{- include "graylog.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .jobLabel }}
+  jobLabel: {{ . | quote }}
+  {{- end }}
+  {{- with .targetLabels }}
+  targetLabels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .podTargetLabels }}
+  podTargetLabels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ $.Release.Namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: server
+      {{- include "graylog.selectorLabels" $ | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: {{ .path | default "/metrics" | quote }}
+      scheme: {{ .scheme | default "http" | quote }}
+      {{- with .interval }}
+      interval: {{ . | quote }}
+      {{- end }}
+      {{- with .scrapeTimeout }}
+      scrapeTimeout: {{ . | quote }}
+      {{- end }}
+      {{- if .honorLabels }}
+      honorLabels: true
+      {{- end }}
+      {{- with .bearerTokenSecret }}
+      bearerTokenSecret:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tlsConfig }}
+      tlsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

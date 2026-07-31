@@ -15,7 +15,7 @@ spec:
       protocol: TCP
     {{- if .Values.graylog.service.metrics.enabled }}
     - name: metrics
-      port: {{ .Values.graylog.service.ports.metrics | default 9833 | int }}
+      port: {{ include "graylog.service.port.metrics" . }}
       targetPort: metrics
       protocol: TCP
     {{- end }}
