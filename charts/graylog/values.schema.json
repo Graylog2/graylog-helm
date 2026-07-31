@@ -377,6 +377,14 @@
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
+            "retentionPolicy": {
+              "type": "object",
+              "description": "PVC lifecycle for the journal volumes. whenScaled must remain Retain; Delete destroys the journal of a scaled-in ordinal.",
+              "properties": {
+                "whenDeleted": { "type": "string", "enum": ["Retain", "Delete"] },
+                "whenScaled": { "type": "string", "enum": ["Retain", "Delete"] }
+              }
+            },
             "storageClass": { "type": [ "string", "null" ] },
             "volumeNameOverride": { "type": [ "string", "null" ] },
             "existingClaim": { "type": [ "string", "null" ] },
@@ -428,7 +436,11 @@
                 "endpointPropagationDelaySeconds": { "type": "integer", "minimum": 0 },
                 "pollIntervalSeconds": { "type": "integer", "minimum": 1 },
                 "shutdownReserveSeconds": { "type": "integer", "minimum": 0 },
-                "stallPolls": { "type": "integer", "minimum": 1 }
+                "stallPolls": { "type": "integer", "minimum": 1 },
+                "statusIntervalSeconds": { "type": "integer", "minimum": 1 },
+                "confirmPolls": { "type": "integer", "minimum": 1 },
+                "metricsRetries": { "type": "integer", "minimum": 1 },
+                "feasibilityWarmupPolls": { "type": "integer", "minimum": 0 }
               }
             }
           }

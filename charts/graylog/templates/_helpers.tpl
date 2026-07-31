@@ -286,14 +286,17 @@ Graylog service app port
 {{- end }}
 
 {{/*
-Whether the Graylog server should listen for forwarder connections.
+DISABLED 2026-07-30 -- graylog.config.forwarder is commented out in values.yaml
+because the settings are inert: the forwarder listener is configured as attributes
+on a Graylog input of type "Forwarder", not through server.conf, and unrecognised
+GRAYLOG_* env vars are silently dropped. This helper reads values that no longer
+exist. Restore it together with that block.
 
+Whether the Graylog server should listen for forwarder connections.
 Defaults to ingress.forwarder.enabled so that exposing the ingest endpoint also
 binds the ports behind it; set graylog.config.forwarder.enabled explicitly to
 override (e.g. to bind the ports without creating an Ingress).
-Returns the string "true" or "false".
-Usage: if include "graylog.forwarder.enabled" . | eq "true" ...
-*/}}
+
 {{- define "graylog.forwarder.enabled" -}}
 {{- $configured := .Values.graylog.config.forwarder.enabled -}}
 {{- if kindIs "bool" $configured -}}
@@ -302,6 +305,7 @@ Usage: if include "graylog.forwarder.enabled" . | eq "true" ...
 {{- .Values.ingress.forwarder.enabled | ternary true false -}}
 {{- end -}}
 {{- end }}
+*/}}
 
 {{/*
 Graylog service port name for the forwarder message channel (default 13301).

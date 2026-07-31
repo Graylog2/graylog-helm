@@ -60,13 +60,27 @@ data:
   {{/* http_publish_uri is rendered directly on the PodSpec for each Graylog node based on $POD_NAME */}}
   # GRAYLOG_HTTP_PUBLISH_URI: ""
 
+  {{/* DISABLED 2026-07-30 -- these settings are INERT. Verified against Graylog
+     Enterprise 7.1.6: the forwarder listener is configured as attributes on a
+     Graylog input of type "Forwarder"
+     (org.graylog.plugins.forwarder.input.ForwarderServiceInput), NOT via
+     server.conf:
+         forwarder_bind_address                default 0.0.0.0
+         forwarder_message_transmission_port   default 13301
+         forwarder_configuration_port          default 13302
+         forwarder_grpc_enable_tls             default TRUE
+     Unrecognised GRAYLOG_* env vars are silently dropped, so rendering
+     GRAYLOG_FORWARDER_BIND_ADDRESS did nothing -- 13301/13302 stayed closed until
+     the input was created, after which Graylog bound them on every node.
+     NOTE: grpc TLS defaults to TRUE on the input; behind a TLS-terminating load
+     balancer it must be set false or targets stay unhealthy.
+
   {{- if include "graylog.forwarder.enabled" . | eq "true" }}
   # Forwarder
-  {{/* Without a bind address Graylog never listens on 13301/13302, so forwarders
-       cannot connect no matter how the ingest endpoint is exposed. */}}
   GRAYLOG_FORWARDER_BIND_ADDRESS: {{ .Values.graylog.config.forwarder.bindAddress | quote }}
   GRAYLOG_FORWARDER_GRPC_ENABLE_TLS: {{ .Values.graylog.config.forwarder.grpcEnableTls | quote }}
   {{- end }}
+  */}}
 
   # Performance Tuning
   GRAYLOG_ASYNC_EVENTBUS_PROCESSORS: {{ .Values.graylog.config.performance.asyncEventbusProcessors | int | quote }}

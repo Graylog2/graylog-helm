@@ -49,83 +49,57 @@ lifecycle:
         - /bin/sh
         - -c
         - |
-          # Token-free journal drain. Always exits 0: a failing preStop hook
-          # would stall termination for the whole grace period and then get the
-          # container SIGKILLed, so every give-up path here hands over to
-          # Graylog's own graceful shutdown instead of erroring.
-          set -u
-          URL="http://127.0.0.1:{{ .Values.graylog.service.ports.metrics | default 9833 | int }}/metrics"
-          BUDGET={{ $budget }}
-          POLL={{ $poll }}
-          SETTLE={{ $settle }}
-          STALL_LIMIT={{ $drain.stallPolls | int }}
+          {{/* A real .sh, kept outside templates/ so it contains no Helm syntax and
+               tooling can read it. .Files.Get returns it verbatim - all of its
+               configuration arrives through the env below. */}}
+          {{- .Files.Get "files/scripts/prestop-drain.sh" | nindent 10 }}
+{{- end }}
+{{- end }}
 
-          # kubelet discards preStop stdout — it only ever surfaces (truncated) in
-          # a FailedPreStopHook event, and only when the hook fails. Writing to
-          # PID 1's stdout puts these lines in the container's real log stream so
-          # `kubectl logs` can see a drain happen. Keep the plain echo too: it is
-          # what lands in the event if this hook ever does fail.
-          log() {
-            echo "[prestop-drain] $*"
-            echo "[prestop-drain] $*" > /proc/1/fd/1 2>/dev/null || true
-          }
+{{/*
+Environment for the preStop drain script.
 
-          # Kubernetes removes a Terminating pod from every Service
-          # EndpointSlice, but kube-proxy convergence is not instant. Measuring
-          # before it lands reads traffic that is already going away.
-          log "waiting ${SETTLE}s for endpoint removal to propagate"
-          sleep "${SETTLE}"
+Rendered into the graylog-app container's `env` so the hook - which inherits the
+container environment - gets its configuration without any templating inside the
+script itself. Also means `kubectl describe pod` shows exactly what the drain was
+configured with, and the script can be run by hand for testing.
 
-          # Wall clock, not a tick count. Each iteration can block for up to the
-          # curl timeout, so counting polls would let the hook overrun BUDGET by
-          # a wide margin and get the container SIGKILLed mid-shutdown.
-          started=$(date +%s)
-          deadline=$((started + BUDGET))
-          # Progress is measured against the best (lowest) depth seen so far, not
-          # against the previous sample. Under live ingest the gauge oscillates
-          # continuously — two consecutive samples are essentially never equal —
-          # so an equality test never fires and the hook burns the whole budget
-          # for nothing. Requiring a new low means "no improvement" is detected
-          # even while the raw number jitters.
-          stall=0
-          best=""
-          while [ "$(date +%s)" -lt "${deadline}" ]; do
-            elapsed=$(( $(date +%s) - started ))
-            # $NF is the gauge value; ^gl_ skips the "# HELP"/"# TYPE" lines, and
-            # the anchored name avoids the similarly-spelled data-lake and kafka
-            # gauges. awk exits non-zero when the gauge is absent. The append rate
-            # is diagnostic only: it explains *why* a drain cannot finish.
-            sample=$(curl -fsS --max-time 5 "${URL}" 2>/dev/null \
-              | awk '/^gl_journal_entries_uncommitted[{ ]/ { v = $NF }
-                     /^gl_journal_append_1_sec_rate[{ ]/   { r = $NF }
-                     END { if (v == "") exit 1; printf "%d %d\n", v, r }')
-            if [ -z "${sample}" ]; then
-              log "journal gauge unavailable after ${elapsed}s; handing over to graceful shutdown"
-              exit 0
-            fi
-            n=${sample% *}
-            rate=${sample#* }
-            if [ "${n}" -le 0 ]; then
-              log "journal drained after ${elapsed}s"
-              exit 0
-            fi
-            if [ -z "${best}" ] || [ "${n}" -lt "${best}" ]; then
-              best="${n}"
-              stall=0
-            else
-              stall=$((stall + 1))
-              if [ "${stall}" -ge "${STALL_LIMIT}" ]; then
-                # Endpoint removal only sheds newly-established connections.
-                # Long-lived TCP inputs and UDP senders keep writing, so the
-                # journal will not reach zero no matter how long we wait. Only
-                # stopping the inputs can do that, and that needs a token.
-                log "no progress in ${stall} polls (${elapsed}s): depth ${n}, best ${best}, still ingesting ${rate} msg/s. A true drain needs inputs stopped; handing over to graceful shutdown"
-                exit 0
-              fi
-            fi
-            sleep "${POLL}"
-          done
-          log "drain budget of ${BUDGET}s exhausted at depth ${n} (best ${best}, ingesting ${rate} msg/s); handing over to graceful shutdown"
-          exit 0
+Deliberately not GRAYLOG_-prefixed: this container's environment is read as
+server.conf overrides, and a GRAYLOG_ name would look like a setting that does
+not exist.
+
+Call with: {{ include "graylog.prestopDrain.env" . | nindent 12 }}
+*/}}
+{{- define "graylog.prestopDrain.env" -}}
+{{- if .Values.graylog.lifecycle.preStopDrain.enabled }}
+{{- $drain := .Values.graylog.lifecycle.preStopDrain }}
+{{- $grace := .Values.graylog.terminationGracePeriodSeconds | int }}
+{{- $settle := $drain.endpointPropagationDelaySeconds | int }}
+{{- $reserve := $drain.shutdownReserveSeconds | int }}
+- name: GL_DRAIN_METRICS_URL
+  value: {{ printf "http://127.0.0.1:%d/metrics" (.Values.graylog.service.ports.metrics | default 9833 | int) | quote }}
+{{/* Same derivation as "graylog.lifecycle", which is where it is validated. */}}
+- name: GL_DRAIN_BUDGET_SECONDS
+  value: {{ sub $grace (add $settle $reserve) | int | quote }}
+- name: GL_DRAIN_POLL_SECONDS
+  value: {{ $drain.pollIntervalSeconds | int | quote }}
+- name: GL_DRAIN_SETTLE_SECONDS
+  value: {{ $settle | quote }}
+- name: GL_DRAIN_STALL_POLLS
+  value: {{ $drain.stallPolls | int | quote }}
+- name: GL_DRAIN_STATUS_INTERVAL_SECONDS
+  value: {{ $drain.statusIntervalSeconds | int | quote }}
+- name: GL_DRAIN_CONFIRM_POLLS
+  value: {{ $drain.confirmPolls | int | quote }}
+- name: GL_DRAIN_METRICS_RETRIES
+  value: {{ $drain.metricsRetries | int | quote }}
+{{/* 0 disables the projection outright, so int is the right coercion here - a
+     `default` would silently turn the intended 0 back into the chart default. */}}
+- name: GL_DRAIN_FEASIBILITY_WARMUP_POLLS
+  value: {{ $drain.feasibilityWarmupPolls | int | quote }}
+- name: GL_DRAIN_GRACE_SECONDS
+  value: {{ $grace | quote }}
+- name: GL_DRAIN_RESERVE_SECONDS
+  value: {{ $reserve | quote }}
 {{- end }}
 {{- end }}

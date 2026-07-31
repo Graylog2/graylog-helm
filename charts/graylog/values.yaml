@@ -16,6 +16,8 @@ nameOverride: ""
 fullnameOverride: ""
 
 # global values are shared by the Graylog, Datanode, and MongoDB workloads.
+
+
 global:
   # imagePullSecrets is applied to the Graylog and Datanode pods unless
   # overridden per image (MongoDB images are pulled by the operator).
@@ -25,6 +27,7 @@ global:
   existingSecretName: ""
   # storageClass is the default StorageClass for all persistent volumes.
   storageClass: ""
+
 
 # graylog configures the Graylog server application.
 graylog:
@@ -101,10 +104,15 @@ graylog:
       updateKeyStore: true
       # keyStorePass is the password of the JVM trust store.
       keyStorePass: "changeit"
+
     # Graylog Forwarder ingest (enterprise feature).
     # Graylog only listens on 13301/13302 when a bind address is configured AND a
     # Forwarder input exists. Self-managed deployments must create that input
     # manually under System > Inputs; Graylog Cloud provisions it automatically.
+
+    # @ WARNING: These values have been removed as the application is not respecting their
+    # configuration currently. These will be brought back in future versions.
+
     forwarder:
       # Unset defaults to ingress.forwarder.enabled. Set true to bind the ports
       # without an Ingress (e.g. when fronting them with your own load balancer).
@@ -271,6 +279,17 @@ graylog:
   # persistence configures the Graylog data volume (journal, node-id, ...).
   persistence:
     enabled: true
+    # What happens to the journal PVCs when the StatefulSet is scaled in or
+    # deleted. Both default to Retain, which is also the Kubernetes default -
+    # set explicitly so it cannot drift, and so the schema can police it.
+    #
+    # whenScaled MUST stay Retain. Scaling in removes the highest ordinal, and
+    # anything still unprocessed in its journal lives only on that claim; Delete
+    # would destroy exactly the data the drain hook exists to protect, silently.
+    # The chart refuses to render whenScaled: Delete for that reason.
+    retentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
     # storageClass overrides global.storageClass for this volume.
     storageClass:
     # volumeNameOverride replaces the generated PVC/volume name.
@@ -336,6 +355,35 @@ graylog:
       # removal only sheds new connections; long-lived TCP and UDP senders keep
       # writing, and against those the journal never reaches zero.
       stallPolls: 10
+      # How many times to retry the metrics probe before giving up. A single
+      # failed scrape is usually a blip - the exporter briefly busy, a dropped
+      # connection - and abandoning the drain on one miss defeats the hook.
+      # Applies both to the preflight check and to failures mid-drain; retries
+      # are spaced pollIntervalSeconds apart.
+      metricsRetries: 5
+      # A single reading of zero does not mean drained: under live ingest the
+      # depth oscillates and can momentarily touch zero while messages are still
+      # arriving. Require it to hold at zero across this many consecutive polls
+      # before declaring success, so anything still writing resets the streak.
+      # Costs confirmPolls x pollIntervalSeconds on an otherwise finished drain.
+      confirmPolls: 3
+      # How often to emit a progress line during the drain. Throttled separately
+      # from pollIntervalSeconds so a long drain does not bury the container log;
+      # the start, the verdict, and any warning are always logged regardless.
+      statusIntervalSeconds: 10
+      # Polls to observe before projecting whether the drain can finish at all.
+      # stallPolls only notices a journal that has stopped falling; it cannot
+      # notice one that is falling far too slowly to matter, because every new
+      # low resets the counter. Against a deep backlog that means the hook holds
+      # termination for the whole budget to clear a couple of percent, then
+      # strands the rest anyway - and on a rolling upgrade it pays that per pod.
+      # After this many polls the drain rate is measured and the finish time
+      # projected; if it does not fit in the remaining budget the hook logs a
+      # CRIT verdict (journal size on disk, measured rate, time to clear, how
+      # much it is short by) and gives up at once, returning the grace period to
+      # Graylog's own shutdown. Set to 0 to disable the projection and always
+      # drain for the full budget.
+      feasibilityWarmupPolls: 5
   # PodDisruptionBudgets are enabled by default for production deployments
   # They prevent cluster upgrades and maintenance from disrupting all instances
   # Set enabled: false only for non-production clusters or single-replica deployments
@@ -380,6 +428,7 @@ graylog:
   # extraEnv sets additional environment variables using full EnvVar syntax
   # (supports valueFrom); entries here win over graylog.env keys.
   extraEnv: []
+
 
 # datanode configures the Graylog Data Node (managed OpenSearch).
 datanode:
@@ -516,6 +565,7 @@ datanode:
   # (supports valueFrom); entries here win over datanode.env keys.
   extraEnv: []
 
+
 # External OpenSearch
 # Point Graylog at an existing, self-managed OpenSearch cluster instead of the bundled
 # Graylog Data Node. Enable this AND set `datanode.enabled: false` (the two are mutually
@@ -546,6 +596,7 @@ opensearch:
     caSecret: ""
     caKey: "ca.crt"
 
+
 # Graylog service account
 serviceAccount:
   # create makes the chart manage the ServiceAccount. Set create=false and
@@ -566,6 +617,8 @@ serviceAccount:
 #        resources: [ "pods" ]
 #        resourceNames: []
 #        verbs: [ "get" ]
+
+
 # Ingress configuration
 # more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -632,6 +685,7 @@ ingress:
             - path: /
               pathType: ImplementationSpecific
       tls: []
+
 
 # MongoDB Community Resource configuration
 # Requires MongoDB Kubernetes Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
