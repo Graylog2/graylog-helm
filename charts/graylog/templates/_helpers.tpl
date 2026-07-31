@@ -478,16 +478,29 @@ Graylog Publish URI
 {{- end }}
 
 {{/*
-Graylog External URI
+Graylog External URI, or "" when no source gives a hostname.
+An explicit network.externalUri skips the Service lookup, so a changed load
+balancer address cannot restart the pods. A bare hostname gets the tls.enabled
+scheme and the app port, so a public endpoint needs the full URI form.
 */}}
 {{- define "graylog.externalUri" }}
+{{- $externalUri := "" }}
 {{- $externalHost := "" }}
 {{- $scheme := "http" }}
 {{- $port := include "graylog.service.port.app" . | printf ":%s" }}
-{{- $svc := include "graylog.service.name" . | lookup "v1" "Service" .Release.Namespace }}
+{{- $explicit := .Values.graylog.config.network.externalUri | default "" }}
 {{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.cn }}
   {{- $externalHost = .Values.graylog.config.tls.cn }}
   {{- $scheme = "https" }}
+{{- else if $explicit }}
+  {{- if contains "://" $explicit }}
+    {{- $externalUri = printf "%s/" (trimSuffix "/" $explicit) }}
+  {{- else }}
+    {{- $externalHost = $explicit }}
+    {{- if .Values.graylog.config.tls.enabled }}
+      {{- $scheme = "https" }}
+    {{- end }}
+  {{- end }}
 {{- else if and .Values.ingress.enabled .Values.ingress.web.enabled .Values.ingress.web.tls }}
   {{- with .Values.ingress.web.tls }}
     {{- with (index . 0).hosts }}
@@ -503,12 +516,16 @@ Graylog External URI
     {{- end }}
   {{- end }}
   {{- $port = "" }}
-{{- else if eq .Values.graylog.service.type "LoadBalancer" | and $svc $svc.status.loadBalancer }}
-  {{- $lbName := index $svc.status.loadBalancer.ingress 0 }}
-  {{- $externalHost = coalesce $lbName.hostname $lbName.ip }}
+{{- else if eq .Values.graylog.service.type "LoadBalancer" }}
+  {{- $svc := include "graylog.service.name" . | lookup "v1" "Service" .Release.Namespace }}
+  {{- if and $svc $svc.status.loadBalancer $svc.status.loadBalancer.ingress }}
+    {{- $lb := index $svc.status.loadBalancer.ingress 0 }}
+    {{- $externalHost = coalesce $lb.hostname $lb.ip }}
+  {{- end }}
 {{- end }}
-{{- $externalHost = $externalHost | default .Values.graylog.config.network.externalUri }}
-{{- if $externalHost }}
+{{- if $externalUri }}
+  {{- $externalUri }}
+{{- else if $externalHost }}
   {{- printf "%s://%s%s/" $scheme $externalHost $port }}
 {{- end }}
 {{- end }}

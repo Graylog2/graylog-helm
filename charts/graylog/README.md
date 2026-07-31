@@ -274,6 +274,31 @@ pre-existing dependencies.
 helm upgrade graylog graylog/graylog -n graylog --set graylog.service.type="LoadBalancer" --reuse-values
 ```
 
+### Override the public URI
+The chart gives Graylog a public URI in `GRAYLOG_HTTP_EXTERNAL_URI`. Browsers and API clients use this URI.
+The chart reads it from the Ingress hostname or from the LoadBalancer Service address.
+
+These two sources are not always correct. The public URI differs from them in these cases:
+
+- Graylog is behind a path prefix, such as `https://example.com/graylog/`.
+- An external proxy or CDN answers on a different name.
+- TLS ends outside the cluster, so the public scheme is `https` but the Ingress has no TLS.
+- The Ingress has more than one hostname, and the first one is not the public one.
+
+In these cases, set the URI directly:
+
+```sh
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.network.externalUri="https://logs.example.com/graylog" --reuse-values
+```
+
+This value comes before the Ingress hostnames and the LoadBalancer Service address.
+Only `graylog.config.tls.cn` comes before this value, and only when `graylog.config.tls.enabled` is `true`.
+
+Use the full URI form in all four cases. A bare hostname becomes `<scheme>://<hostname>:<port>/`.
+The chart takes this scheme from `graylog.config.tls.enabled` and this port from `graylog.service.ports.app`.
+Both values describe the connection to the pod, not the public endpoint.
+A bare hostname is therefore not correct behind an Ingress, a proxy, a CDN, or external TLS.
+
 ### Temporary access: Port Forwarding
 Finally, if you wish to enable external access _temporarily_, you can always use port forwarding:
 
@@ -765,7 +790,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.network.maxHeaderSize`                                | Max header size.                                            | `"8192"`                        |
 | `graylog.config.network.readTimeout`                                  | Network read timeout.                                       | `"10s"`                         |
 | `graylog.config.network.threadPoolSize`                               | Network thread pool size.                                   | `"64"`                          |
-| `graylog.config.network.externalUri`                                  | External URI for Graylog web interface.                     | `""`                            |
+| `graylog.config.network.externalUri`                                  | Public URI of the Graylog web interface. Comes before the Ingress hostnames and the LoadBalancer Service address, so upgrades do not restart the pods when the load balancer address changes. Give a full URI. A bare hostname gets the chart scheme and the app port. | `""`                            |
 | `graylog.config.performance.asyncEventbusProcessors`                  | Async event bus processors.                                 | `"2"`                           |
 | `graylog.config.performance.autoRestartInputs`                        | Automatically restart inputs.                               | `"false"`                       |
 | `graylog.config.performance.inputBufferProcessors`                    | Input buffer processors.                                    | `"2"`                           |
@@ -812,7 +837,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.image.imagePullPolicy`                                       | Pull policy for Graylog image.                              | `IfNotPresent`                  |
 | `graylog.image.imagePullSecrets`                                      | Pull secrets for image.                                     | `[]`                            |
 | `graylog.updateStrategy.type`                                         | Pod update strategy for StatefulSet.                        | `"RollingUpdate"`               |
-| `graylog.updateStrategy.rollingUpdate.maxUnavailable`                 | Max unavailable pods during an update.                      | `1`                             |
+| `graylog.updateStrategy.rollingUpdate.maxUnavailable`                 | Max unavailable pods during an update. Honored only where the `MaxUnavailableStatefulSet` feature gate is enabled, silently dropped otherwise. | `1`                             |
 | `graylog.updateStrategy.rollingUpdate.partition`                      | Pods that will remain unaffected by the update.             | `""`                            |
 | `graylog.resources.limits.cpu`                                        | CPU limit for the Graylog pod.                              | `"2"`                           |
 | `graylog.resources.limits.memory`                                     | Memory limit for the Graylog pod.                           | `"2Gi"`                         |
@@ -899,7 +924,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.image.imagePullPolicy`                       | Image pull policy.                              | `IfNotPresent`    |
 | `datanode.image.imagePullSecrets`                      | Image pull secrets.                             | `[]`              |
 | `datanode.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
-| `datanode.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
+| `datanode.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update. Honored only where the `MaxUnavailableStatefulSet` feature gate is enabled, silently dropped otherwise. | `1`               |
 | `datanode.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
 | `datanode.resources.limits.cpu`                        | CPU limit for the datanode pod.                 | `"1"`             |
 | `datanode.resources.limits.memory`                     | Memory limit for the datanode pod.              | `"5Gi"`           |
