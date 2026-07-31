@@ -47,8 +47,53 @@ graylog:
       # metrics is the port serving Prometheus metrics.
       metrics: 9833
     metrics:
-      # enabled exposes the Prometheus metrics port on the Service.
+      # enabled turns on the Graylog Prometheus exporter and exposes its port
+      # on the Service. The exporter binds to all interfaces so it can be
+      # scraped from outside the pod.
       enabled: true
+      # serviceMonitor creates a Prometheus Operator ServiceMonitor that scrapes
+      # the metrics port. Requires the Prometheus Operator CRDs
+      # (monitoring.coreos.com/v1) and graylog.service.metrics.enabled=true.
+      serviceMonitor:
+        enabled: false
+        # nameOverride replaces the generated ServiceMonitor name.
+        nameOverride: ""
+        # namespace deploys the ServiceMonitor outside the release namespace,
+        # e.g. into the namespace Prometheus watches. Defaults to the release
+        # namespace when empty.
+        namespace: ""
+        # labels is added to the ServiceMonitor. Set these to match the
+        # serviceMonitorSelector of your Prometheus instance.
+        labels: {}
+        # annotations is added to the ServiceMonitor.
+        annotations: {}
+        # path is the HTTP path the Graylog exporter serves metrics on.
+        path: /metrics
+        # scheme is the protocol used to scrape the metrics endpoint.
+        scheme: http
+        # interval is the scrape interval (e.g. "30s"). Prometheus defaults
+        # apply when empty.
+        interval: ""
+        # scrapeTimeout is the per-scrape timeout (e.g. "10s"). Prometheus
+        # defaults apply when empty.
+        scrapeTimeout: ""
+        # honorLabels keeps the labels of scraped metrics on conflict.
+        honorLabels: false
+        # jobLabel names the Service label whose value becomes the job label.
+        jobLabel: ""
+        # targetLabels/podTargetLabels copy labels from the Service/pods onto
+        # the scraped metrics.
+        targetLabels: []
+        podTargetLabels: []
+        # relabelings/metricRelabelings are applied before the scrape and
+        # before ingestion respectively.
+        relabelings: []
+        metricRelabelings: []
+        # tlsConfig configures TLS for scraping (used with scheme: https).
+        tlsConfig: {}
+        # bearerTokenSecret references a Secret key holding a bearer token to
+        # authenticate the scrape.
+        bearerTokenSecret: {}
   # inputs declares Graylog inputs to expose as Service/container ports.
   # Each entry needs a name, port, and protocol; targetPort defaults to port.
   inputs:

@@ -1,0 +1,33 @@
+suite: graylog ConfigMap
+templates:
+  - config/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: enables the Prometheus exporter and binds it to all interfaces
+    asserts:
+      - equal:
+          path: data.GRAYLOG_PROMETHEUS_EXPORTER_ENABLED
+          value: "true"
+      - equal:
+          path: data.GRAYLOG_PROMETHEUS_EXPORTER_BIND_ADDRESS
+          value: 0.0.0.0:9833
+
+  - it: binds the exporter to the configured metrics port
+    set:
+      graylog.service.ports.metrics: 9999
+    asserts:
+      - equal:
+          path: data.GRAYLOG_PROMETHEUS_EXPORTER_BIND_ADDRESS
+          value: 0.0.0.0:9999
+
+  - it: omits the bind address when metrics are disabled
+    set:
+      graylog.service.metrics.enabled: false
+    asserts:
+      - equal:
+          path: data.GRAYLOG_PROMETHEUS_EXPORTER_ENABLED
+          value: "false"
+      - notExists:
+          path: data.GRAYLOG_PROMETHEUS_EXPORTER_BIND_ADDRESS

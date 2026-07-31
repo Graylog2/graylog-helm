@@ -286,6 +286,21 @@ Graylog service app port
 {{- end }}
 
 {{/*
+Graylog service metrics port
+*/}}
+{{- define "graylog.service.port.metrics" -}}
+{{- .Values.graylog.service.ports.metrics | default 9833 | int }}
+{{- end }}
+
+{{/*
+Graylog ServiceMonitor name
+*/}}
+{{- define "graylog.serviceMonitor.name" -}}
+{{- $defaultName := include "graylog.fullname" . | printf "%s-metrics" }}
+{{- .Values.graylog.service.metrics.serviceMonitor.nameOverride | default $defaultName }}
+{{- end }}
+
+{{/*
 Graylog configmap name
 */}}
 {{- define "graylog.configmap.name" -}}

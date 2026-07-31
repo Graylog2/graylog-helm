@@ -7,6 +7,10 @@ metadata:
     {{- include "graylog.labels" . | nindent 4 }}
 data:
   GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.service.metrics.enabled | ternary true false | quote }}
+  {{- if .Values.graylog.service.metrics.enabled }}
+  {{/* The exporter defaults to 127.0.0.1, which is unreachable from outside the pod. */}}
+  GRAYLOG_PROMETHEUS_EXPORTER_BIND_ADDRESS: {{ include "graylog.service.port.metrics" . | printf "0.0.0.0:%s" | quote }}
+  {{- end }}
   GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfSignedStartup | default true | quote }}
   GRAYLOG_IS_CLOUD: {{ .Values.graylog.config.isCloud | default false | quote }}
   GRAYLOG_SERVER_JAVA_OPTS: {{ include "graylog.javaOpts" . | quote }}

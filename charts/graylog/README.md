@@ -26,6 +26,7 @@ Official Helm chart for Graylog.
   * [Modify Graylog `server.conf` parameters](#modify-graylog-serverconf-parameters)
   * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
   * [Add inputs](#add-inputs)
+  * [Scrape Prometheus metrics](#scrape-prometheus-metrics)
   * [Enable TLS](#enable-tls)
 * [Using External Resources](#using-external-resources)
   * [Managing Secrets Externally](#managing-secrets-externally)
@@ -432,6 +433,41 @@ helm upgrade graylog graylog/graylog -n graylog -f inputs.yaml --reuse-values
 
 The inputs should now be exposed. Make sure to complete their configuration through the Graylog UI.
 
+## Scrape Prometheus metrics
+
+Graylog's Prometheus exporter is enabled by default and served on port `9833` (`/metrics`) of the
+Graylog service. Any Prometheus setup can scrape it directly.
+
+If you run the [Prometheus Operator](https://prometheus-operator.dev/) (for example via
+`kube-prometheus-stack`), let the chart create a `ServiceMonitor` for you:
+
+```yaml
+# metrics.yaml
+graylog:
+  service:
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        interval: 30s
+        # Prometheus only picks up ServiceMonitors matching its
+        # serviceMonitorSelector - with kube-prometheus-stack that is usually
+        # the release label of the Prometheus installation.
+        labels:
+          release: kube-prometheus-stack
+```
+
+```sh
+helm upgrade graylog graylog/graylog -n graylog -f metrics.yaml --reuse-values
+```
+
+The `ServiceMonitor` is created in the release namespace and selects the Graylog service.
+Set `serviceMonitor.namespace` when your Prometheus instance only watches a dedicated
+namespace, and use `relabelings`/`metricRelabelings` to reshape or drop series before ingestion.
+
+To turn metrics off entirely, set `graylog.service.metrics.enabled=false`. This removes the
+metrics port from the service and disables the exporter in `server.conf`.
+
 ## Enable TLS
 
 Before you can enable TLS, you must associate a DNS name with your Graylog installation.
@@ -674,7 +710,24 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.service.type`                                                | Kubernetes service type.                                    | `ClusterIP`                     |
 | `graylog.service.ports.app`                                           | Graylog web UI port.                                        | `9000`                          |
 | `graylog.service.ports.metrics`                                       | Metrics endpoint port.                                      | `9833`                          |
-| `graylog.service.metrics.enabled`                                     | Enable metrics collection.                                  | `true`                          |
+| `graylog.service.metrics.enabled`                                     | Enable the Prometheus exporter and metrics port.            | `true`                          |
+| `graylog.service.metrics.serviceMonitor.enabled`                      | Create a Prometheus Operator ServiceMonitor.                | `false`                         |
+| `graylog.service.metrics.serviceMonitor.nameOverride`                 | Override for ServiceMonitor name.                           | `""`                            |
+| `graylog.service.metrics.serviceMonitor.namespace`                    | Namespace of the ServiceMonitor (release namespace when empty). | `""`                            |
+| `graylog.service.metrics.serviceMonitor.labels`                       | Extra labels, e.g. to match a Prometheus serviceMonitorSelector. | `{}`                            |
+| `graylog.service.metrics.serviceMonitor.annotations`                  | Extra annotations for the ServiceMonitor.                   | `{}`                            |
+| `graylog.service.metrics.serviceMonitor.path`                         | HTTP path scraped for metrics.                              | `/metrics`                      |
+| `graylog.service.metrics.serviceMonitor.scheme`                       | Scheme used to scrape metrics.                              | `http`                          |
+| `graylog.service.metrics.serviceMonitor.interval`                     | Scrape interval (Prometheus default when empty).            | `""`                            |
+| `graylog.service.metrics.serviceMonitor.scrapeTimeout`                | Scrape timeout (Prometheus default when empty).             | `""`                            |
+| `graylog.service.metrics.serviceMonitor.honorLabels`                  | Keep scraped labels on conflict.                            | `false`                         |
+| `graylog.service.metrics.serviceMonitor.jobLabel`                     | Service label whose value becomes the job label.            | `""`                            |
+| `graylog.service.metrics.serviceMonitor.targetLabels`                 | Service labels copied onto scraped metrics.                 | `[]`                            |
+| `graylog.service.metrics.serviceMonitor.podTargetLabels`              | Pod labels copied onto scraped metrics.                     | `[]`                            |
+| `graylog.service.metrics.serviceMonitor.relabelings`                  | Relabeling rules applied before the scrape.                 | `[]`                            |
+| `graylog.service.metrics.serviceMonitor.metricRelabelings`            | Relabeling rules applied before ingestion.                  | `[]`                            |
+| `graylog.service.metrics.serviceMonitor.tlsConfig`                    | TLS settings for scraping.                                  | `{}`                            |
+| `graylog.service.metrics.serviceMonitor.bearerTokenSecret`            | Secret key holding a bearer token for scraping.             | `{}`                            |
 | `graylog.inputs`                                                      | List of inputs to configure.                                | See below                       |
 | `graylog.plugins`                                                     | List of plugins to configure.                               | See below                       |
 | `graylog.env`                                                         | Custom environment variables.                               | `{}`                            |
