@@ -163,8 +163,9 @@ graylog:
       maxHeaderSize: "8192"
       readTimeout: "10s"
       threadPoolSize: "64"
-      # externalUri is the public URI of the Graylog web interface, used when
-      # it cannot be derived from the Service, Ingress, or TLS configuration.
+      # externalUri is the public URI of the Graylog web interface. It comes
+      # before the Ingress hostnames and the LoadBalancer address. Give a full
+      # URI: a bare hostname gets the chart scheme and app port.
       externalUri: ""
     # performance maps to the processing/buffer tuning knobs of server.conf.
     performance:
@@ -278,7 +279,9 @@ graylog:
     imagePullPolicy: IfNotPresent
     # imagePullSecrets overrides global.imagePullSecrets for this image.
     imagePullSecrets: []
-  # updateStrategy is the StatefulSet update strategy.
+  # updateStrategy is the StatefulSet update strategy. maxUnavailable needs the
+  # MaxUnavailableStatefulSet feature gate. Without the gate, the API server
+  # drops the field.
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
@@ -505,7 +508,9 @@ datanode:
     securityContext:
       privileged: true
     vmMaxMapCount: 262144
-  # updateStrategy is the StatefulSet update strategy.
+  # updateStrategy is the StatefulSet update strategy. maxUnavailable needs the
+  # MaxUnavailableStatefulSet feature gate. Without the gate, the API server
+  # drops the field.
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
