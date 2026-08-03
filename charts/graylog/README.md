@@ -18,6 +18,7 @@ Official Helm chart for Graylog.
   * [Set external access](#set-external-access)
 * [Usage](#usage)
   * [Scale Graylog](#scale-graylog)
+  * [Message Journal Lifecycle](#message-journal-lifecycle)
   * [Scale DataNode](#scale-datanode)
   * [Data Node Replicas and Data Redundancy](#data-node-replicas-and-data-redundancy)
   * [High Availability Defaults](#high-availability-defaults)
@@ -312,10 +313,84 @@ kubectl port-forward service/graylog-svc 9000:9000 -n graylog
 ```sh
 # scaling out: add more Graylog nodes to your cluster
 helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=3 --reuse-values
+```
 
+Scaling **out** is safe and needs no procedure. Scaling **in** can lose buffered
+messages — read [Message Journal Lifecycle](#message-journal-lifecycle) before you
+do it.
+
+```sh
 # scaling in: remove Graylog nodes from your cluster
+# WARNING: drain first. See "Message Journal Lifecycle" below.
 helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=1 --reuse-values
 ```
+
+## Message Journal Lifecycle
+
+Each Graylog node buffers incoming messages in an on-disk journal on its own PVC,
+then works them off into the indexer.
+
+Rolling upgrades are safe with no procedure: the replacement pod keeps the ordinal,
+re-binds the same PVC, and replays the journal. **Scale-in is not.** The ordinal
+stops existing, so its PVC is retained but never mounted again, and anything left
+unprocessed in that journal is unreachable. Graceful shutdown flushes memory buffers
+*into* the journal; it never drains the journal *out*.
+
+Before scaling in, drain the node. See
+[Graylog Message Handling](../../docs/graylog-message-handling.md) for the runbook,
+how to read a drain's logs, and what to do with the leftover PVC.
+
+### Shutdown budget
+
+`graylog.terminationGracePeriodSeconds` (default `300`) covers the preStop hook
+**and** the SIGTERM after it. The Kubernetes default of 30s is not enough to flush
+buffers under load.
+
+### Automatic drain
+
+Off by default. Holds pod termination while the journal is worked off, so a
+scale-in has a chance to finish processing:
+
+```sh
+helm upgrade graylog graylog/graylog -n graylog \
+  --set graylog.lifecycle.preStopDrain.enabled=true --reuse-values
+```
+
+It reads journal depth from the Prometheus exporter on localhost, so it needs no
+credentials, but it does require `graylog.service.metrics.enabled` (the default).
+
+It is best-effort. It cannot stop inputs, so on a node still receiving traffic the
+journal never reaches zero and the hook gives up. It also cannot tell an upgrade
+from a scale-in, so it slows both. Enable it if you routinely scale in.
+
+| Key | Description | Default |
+|---|---|---|
+| `enabled` | Hold termination while the journal drains. | `false` |
+| `endpointPropagationDelaySeconds` | Sleep before the first sample, waiting for endpoint removal to propagate. Raise it if a load balancer targets pod IPs directly. | `15` |
+| `shutdownReserveSeconds` | Held back out of the grace period for Graylog's own shutdown. | `45` |
+| `pollIntervalSeconds` | Seconds between journal-depth samples. | `2` |
+| `stallPolls` | Give up after this many polls with no new low. | `10` |
+| `confirmPolls` | Consecutive zero readings required before declaring success. | `3` |
+| `metricsRetries` | Metrics probe retries before giving up. | `5` |
+| `statusIntervalSeconds` | How often to log a progress line. | `10` |
+| `feasibilityWarmupPolls` | Polls to observe before projecting whether the drain can finish at all; aborts early if it cannot. `0` disables. | `5` |
+
+All under `graylog.lifecycle.preStopDrain`. The drain budget is
+`terminationGracePeriodSeconds - endpointPropagationDelaySeconds - shutdownReserveSeconds`
+(240s at defaults); the chart refuses to render if that is not positive.
+
+### PVC retention
+
+Both StatefulSets pin `persistentVolumeClaimRetentionPolicy` to `Retain`, so no
+claim is deleted automatically. `graylog.persistence.retentionPolicy.whenScaled: Delete`
+is **refused** — it would destroy a scaled-in node's journal. The Data Node permits
+it, since shard data rebuilds from replicas.
+
+> [!WARNING]
+> Retention protects the claim from the StatefulSet controller, not from you.
+> Deleting a retained PVC destroys the disk under most StorageClasses, including this
+> chart's gp3 class. See
+> [Deleting a leftover PVC](../../docs/graylog-message-handling.md#deleting-a-leftover-pvc).
 
 ## Scale DataNode
 ```sh
@@ -600,6 +675,9 @@ helm upgrade -i graylog graylog/graylog -n graylog --reuse-values --set global.e
 > - `graylog.config.customSecretPepper`
 > - `graylog.config.tls.keyPassword`
 
+The required keys, and how to build the secret, are documented in
+[Graylog Secrets](../../docs/graylog-secrets.md).
+
 ## Bring Your Own MongoDB
 
 By default, this chart deploys a MongoDB replica set using a custom resource template, which is rendered when 
@@ -778,7 +856,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.mongodb.customUri`                                    | Custom MongoDB connection URI.                              | `""`                            |
 | `graylog.config.mongodb.maxConnections`                               | Max MongoDB connections.                                    | `"1000"`                        |
 | `graylog.config.mongodb.versionProbeAttempts`                         | MongoDB version probe attempts.                             | `"0"`                           |
-| `graylog.config.messageJournal.enabled`                               | Enable message journal.                                     | `"true"`                        |
+| `graylog.config.messageJournal.enabled`                               | Enable message journal. Requires durable storage — the chart refuses to render this with `persistence.enabled=false` and no `existingClaim`, since the journal would be an `emptyDir`. A string, so disabling needs `--set-string`. | `"true"` |
+| `graylog.config.messageJournal.maxSize`                                | On-disk journal cap. Must stay under 90% of `graylog.persistence.size`; the chart refuses to render otherwise. Binary suffixes — `5gb` is 5×1024³. | `"5gb"` |
 | `graylog.config.messageJournal.flushAge`                              | Journal flush age.                                          | `"1m"`                          |
 | `graylog.config.messageJournal.flushInterval`                         | Journal flush interval.                                     | `"1000000"`                     |
 | `graylog.config.messageJournal.maxAge`                                | Max journal age.                                            | `"12h"`                         |
@@ -863,6 +942,18 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.readinessProbe.timeoutSeconds`                               | Timeout for the readiness probe.                            | `5`                             |
 | `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                  | `6`                             |
 | `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                  | `1`                             |
+| `graylog.terminationGracePeriodSeconds`                               | Shutdown budget before SIGKILL. Covers the preStop hook and Graylog's own graceful shutdown. | `300`  |
+| `graylog.lifecycle.preStopDrain.enabled`                              | Hold termination while the journal drains. See [Message Journal Lifecycle](#message-journal-lifecycle). | `false` |
+| `graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds`      | Wait for EndpointSlice removal to reach kube-proxy before sampling. | `15`                     |
+| `graylog.lifecycle.preStopDrain.pollIntervalSeconds`                  | Seconds between journal-depth samples.                      | `2`                             |
+| `graylog.lifecycle.preStopDrain.shutdownReserveSeconds`               | Seconds reserved out of the grace period for Graylog's own shutdown. | `45`                   |
+| `graylog.lifecycle.preStopDrain.stallPolls`                           | Give up after this many polls with no decrease in journal depth. | `10`                       |
+| `graylog.lifecycle.preStopDrain.statusIntervalSeconds`                | How often to log a progress line during the drain.          | `10`                            |
+| `graylog.lifecycle.preStopDrain.confirmPolls`                          | Consecutive zero readings required before declaring the journal drained. | `3`                |
+| `graylog.lifecycle.preStopDrain.metricsRetries`                        | Retries for the metrics probe before giving up.              | `5`                             |
+| `graylog.lifecycle.preStopDrain.feasibilityWarmupPolls`                | Polls observed before projecting whether the drain can finish; aborts early if it cannot. `0` disables. | `5` |
+| `graylog.persistence.retentionPolicy.whenDeleted`                      | PVC fate when the StatefulSet is deleted.                   | `Retain`                        |
+| `graylog.persistence.retentionPolicy.whenScaled`                       | PVC fate when scaled in. `Delete` is refused — it destroys a scaled-in node's journal. | `Retain` |
 | `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
 | `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                   | `1`                             |
 | `graylog.podAnnotations`                                              | Additional pod annotations.                                 | `{}`                            |
@@ -930,6 +1021,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.resources.limits.memory`                     | Memory limit for the datanode pod.              | `"5Gi"`           |
 | `datanode.resources.requests.cpu`                      | CPU request for the datanode pod.               | `"500m"`          |
 | `datanode.resources.requests.memory`                   | Memory request for the datanode pod.            | `"3.5Gi"`         |
+| `datanode.persistence.retentionPolicy.whenDeleted`     | PVC fate when the StatefulSet is deleted.       | `Retain`          |
+| `datanode.persistence.retentionPolicy.whenScaled`      | PVC fate when scaled in. `Delete` is permitted here (shard data rebuilds from replicas), unlike on the Graylog StatefulSet. | `Retain` |
 | `datanode.persistence.data.enabled`                    | Enable persistent volume for data.              | `true`            |
 | `datanode.persistence.data.storageClass`               | Storage class for data PVC.                     | `""`              |
 | `datanode.persistence.data.mountPath`                  | Mount path for data volume.                     | `""`              |
@@ -1016,15 +1109,60 @@ Mutually exclusive with `datanode.enabled`. See [Bring Your Own OpenSearch](#bri
 
 ### Forwarder Ingress
 
-| Key Path                                       | Description                           | Default                  |
-|------------------------------------------------|---------------------------------------|--------------------------|
-| `ingress.forwarder.enabled`                    | Enable ingress for Graylog Forwarder. | `false`                  |
-| `ingress.forwarder.className`                  | Ingress class name.                   | `""`                     |
-| `ingress.forwarder.annotations`                | Annotations for ingress resource.     | `{}`                     |
-| `ingress.forwarder.hosts[0].host`              | Hostname for ingress.                 | `chart-example.local`    |
-| `ingress.forwarder.hosts[0].paths[0].path`     | Path for routing.                     | `/`                      |
-| `ingress.forwarder.hosts[0].paths[0].pathType` | Path matching type.                   | `ImplementationSpecific` |
-| `ingress.forwarder.tls`                        | TLS configuration.                    | `[]`                     |
+A [Graylog Forwarder](https://go2docs.graylog.org/current/getting_in_log_data/forwarder.html) requires **both**
+gRPC channels to be reachable: the message channel (port `13301`) it ships log data on, and the configuration
+channel (port `13302`) it polls for configuration updates. Because the two channels listen on different ports
+and an Ingress routes on host/path rather than listener port, each channel is rendered as its own Ingress
+resource — `<release>-forwarder-message-channel` and `<release>-forwarder-config-channel`.
+
+Setting `ingress.forwarder.enabled: true` enables both channels; disable one with
+`ingress.forwarder.<channel>.enabled: false`.
+
+The Forwarder is an enterprise feature and requires a valid license.
+
+The Ingress only exposes the ports — it cannot make Graylog listen on them. A **Forwarder input** must
+exist for that: an input of type **Forwarder**
+(`org.graylog.plugins.forwarder.input.ForwarderServiceInput`) created under **System > Inputs**. Graylog
+Cloud provisions it automatically; self-managed deployments must create it. Registering a forwarder
+under **System > Forwarders** is *not* sufficient — and neither is any chart setting. Until the input
+exists, `13301`/`13302` stay closed, forwarders fail with `Code=<UNAVAILABLE>`, and load balancer
+targets remain unhealthy. Once it exists, Graylog binds the ports on every node.
+
+The listener is configured by attributes **on that input**, not through `server.conf` or this chart:
+
+| Input attribute | Default |
+|---|---|
+| `forwarder_bind_address` | `0.0.0.0` |
+| `forwarder_message_transmission_port` | `13301` |
+| `forwarder_configuration_port` | `13302` |
+| `forwarder_grpc_enable_tls` | `true` |
+
+> [!IMPORTANT]
+> `forwarder_grpc_enable_tls` defaults to **true** on the input. When a load balancer terminates TLS and
+> speaks cleartext HTTP/2 to Graylog — as in the ALB example above — it must be set to **false**, or the
+> targets never become healthy. Set TLS on the *forwarder agent* instead, since it connects to the load
+> balancer's certificate.
+
+| Key Path                                                      | Description                                     | Default                  |
+|---------------------------------------------------------------|-------------------------------------------------|--------------------------|
+| `ingress.forwarder.enabled`                                   | Enable ingress for Graylog Forwarder ingest.    | `false`                  |
+| `ingress.forwarder.messageChannel.enabled`                    | Expose the message channel (port `13301`).      | `true`                   |
+| `ingress.forwarder.messageChannel.className`                  | Ingress class name.                             | `""`                     |
+| `ingress.forwarder.messageChannel.annotations`                | Annotations for ingress resource.               | `{}`                     |
+| `ingress.forwarder.messageChannel.hosts[0].host`              | Hostname for ingress (optional).                | `""`                     |
+| `ingress.forwarder.messageChannel.hosts[0].paths[0].path`     | Path for routing.                               | `/`                      |
+| `ingress.forwarder.messageChannel.hosts[0].paths[0].pathType` | Path matching type.                             | `ImplementationSpecific` |
+| `ingress.forwarder.messageChannel.tls`                        | TLS configuration.                              | `[]`                     |
+| `ingress.forwarder.configChannel.enabled`                     | Expose the configuration channel (port `13302`).| `true`                   |
+| `ingress.forwarder.configChannel.className`                   | Ingress class name.                             | `""`                     |
+| `ingress.forwarder.configChannel.annotations`                 | Annotations for ingress resource.               | `{}`                     |
+| `ingress.forwarder.configChannel.hosts[0].host`               | Hostname for ingress (optional).                | `""`                     |
+| `ingress.forwarder.configChannel.hosts[0].paths[0].path`      | Path for routing.                               | `/`                      |
+| `ingress.forwarder.configChannel.hosts[0].paths[0].pathType`  | Path matching type.                             | `ImplementationSpecific` |
+| `ingress.forwarder.configChannel.tls`                         | TLS configuration.                              | `[]`                     |
+
+See [`examples/forwarder-ingress.yaml`](../../examples/forwarder-ingress.yaml) for a worked AWS ALB
+configuration.
 
 ## MongoDB
 MongoDB Community Resource configuration.

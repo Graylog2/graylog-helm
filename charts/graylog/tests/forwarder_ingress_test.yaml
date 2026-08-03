@@ -18,79 +18,274 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders when ingress and forwarder are enabled
+  - it: renders both channels when ingress and forwarder are enabled
     set:
       ingress.enabled: true
       ingress.forwarder.enabled: true
     asserts:
+      - hasDocuments:
+          count: 2
       - isKind:
           of: Ingress
+        documentIndex: 0
       - equal:
           path: apiVersion
           value: networking.k8s.io/v1
+        documentIndex: 0
       - equal:
           path: metadata.name
-          value: graylog-forwarder
+          value: graylog-forwarder-message-channel
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: graylog-forwarder-config-channel
+        documentIndex: 1
 
-  - it: sets the ingressClassName when provided
+  - it: renders only the message channel when the config channel is disabled
     set:
       ingress.enabled: true
       ingress.forwarder.enabled: true
-      ingress.forwarder.className: nginx
+      ingress.forwarder.configChannel.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: graylog-forwarder-message-channel
+
+  - it: renders only the config channel when the message channel is disabled
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.messageChannel.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: graylog-forwarder-config-channel
+
+  - it: does not render when graylog is disabled
+    set:
+      graylog.enabled: false
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: sets the ingressClassName per channel
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.messageChannel.className: alb
+      ingress.forwarder.configChannel.className: nginx
     asserts:
       - equal:
           path: spec.ingressClassName
+          value: alb
+        documentIndex: 0
+      - equal:
+          path: spec.ingressClassName
           value: nginx
+        documentIndex: 1
 
-  - it: applies forwarder annotations
+  - it: omits ingressClassName when not provided
     set:
       ingress.enabled: true
       ingress.forwarder.enabled: true
-      ingress.forwarder.annotations:
-        nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    asserts:
+      - notExists:
+          path: spec.ingressClassName
+        documentIndex: 0
+      - notExists:
+          path: spec.ingressClassName
+        documentIndex: 1
+
+  - it: applies annotations per channel
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.messageChannel.annotations:
+        alb.ingress.kubernetes.io/backend-protocol-version: GRPC
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 13301}]'
+      ingress.forwarder.configChannel.annotations:
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 13302}]'
     asserts:
       - equal:
-          path: metadata.annotations["nginx.ingress.kubernetes.io/backend-protocol"]
-          value: HTTP
+          path: metadata.annotations["alb.ingress.kubernetes.io/backend-protocol-version"]
+          value: GRPC
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["alb.ingress.kubernetes.io/listen-ports"]
+          value: '[{"HTTPS": 13301}]'
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["alb.ingress.kubernetes.io/listen-ports"]
+          value: '[{"HTTPS": 13302}]'
+        documentIndex: 1
+      - notExists:
+          path: metadata.annotations["alb.ingress.kubernetes.io/backend-protocol-version"]
+        documentIndex: 1
 
-  - it: renders host rules with the forwarder service backend
+  - it: backs the message channel with the 13301 service port
     set:
       ingress.enabled: true
       ingress.forwarder.enabled: true
-      ingress.forwarder.hosts:
-        - host: fwd.example.com
+      ingress.forwarder.messageChannel.hosts:
+        - host: ingest.example.com
           paths:
             - path: /
               pathType: Prefix
     asserts:
       - equal:
           path: spec.rules[0].host
-          value: fwd.example.com
+          value: ingest.example.com
+        documentIndex: 0
       - equal:
           path: spec.rules[0].http.paths[0].path
           value: /
+        documentIndex: 0
       - equal:
           path: spec.rules[0].http.paths[0].pathType
           value: Prefix
+        documentIndex: 0
       - equal:
           path: spec.rules[0].http.paths[0].backend.service.name
           value: graylog-svc
+        documentIndex: 0
       - equal:
           path: spec.rules[0].http.paths[0].backend.service.port.name
           value: input-forwarder
+        documentIndex: 0
+
+  - it: backs the config channel with the 13302 service port
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.configChannel.hosts:
+        - host: conf.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: conf.example.com
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: graylog-svc
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.name
+          value: input-fwd-conf
+        documentIndex: 1
+
+  - it: omits the host key when host is empty
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+    asserts:
+      - notExists:
+          path: spec.rules[0].host
+        documentIndex: 0
+      - exists:
+          path: spec.rules[0].http.paths[0].backend.service
+        documentIndex: 0
+
+  - it: defaults path and pathType when omitted
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.messageChannel.hosts:
+        - host: ingest.example.com
+          paths:
+            - {}
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: ImplementationSpecific
+        documentIndex: 0
 
   - it: renders TLS block when configured
     set:
       ingress.enabled: true
       ingress.forwarder.enabled: true
-      ingress.forwarder.tls:
+      ingress.forwarder.messageChannel.tls:
         - secretName: fwd-tls
           hosts:
-            - fwd.example.com
+            - ingest.example.com
     asserts:
       - equal:
           path: spec.tls[0].secretName
           value: fwd-tls
+        documentIndex: 0
       - contains:
           path: spec.tls[0].hosts
-          content: fwd.example.com
+          content: ingest.example.com
+        documentIndex: 0
+      - notExists:
+          path: spec.tls
+        documentIndex: 1
+
+  - it: defaults the TLS secretName to the chart TLS secret
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.configChannel.tls:
+        - hosts:
+            - conf.example.com
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: graylog-tls
+        documentIndex: 1
+
+  - it: supports multiple hosts and paths on a channel
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.messageChannel.hosts:
+        - host: ingest-a.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+            - path: /alt
+              pathType: Prefix
+        - host: ingest-b.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.rules[1].host
+          value: ingest-b.example.com
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: /alt
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].http.paths[1].backend.service.port.name
+          value: input-forwarder
+        documentIndex: 0
+
+  - it: honours the graylog service nameOverride
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      graylog.service.nameOverride: custom-svc
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: custom-svc
+        documentIndex: 0
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: custom-svc
+        documentIndex: 1

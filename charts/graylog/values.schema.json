@@ -162,6 +162,7 @@
               "type": "object",
               "properties": {
                 "enabled": { "type": "string" },
+                "maxSize": { "type": "string", "description": "On-disk journal cap (message_journal_max_size). Must stay under 90% of graylog.persistence.size; the chart validates this." },
                 "flushAge": { "type": "string" },
                 "flushInterval": { "type": "string" },
                 "maxAge": { "type": "string" },
@@ -377,6 +378,14 @@
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
+            "retentionPolicy": {
+              "type": "object",
+              "description": "PVC lifecycle for the journal volumes. whenScaled must remain Retain; Delete destroys the journal of a scaled-in ordinal.",
+              "properties": {
+                "whenDeleted": { "type": "string", "enum": ["Retain", "Delete"] },
+                "whenScaled": { "type": "string", "enum": ["Retain", "Delete"] }
+              }
+            },
             "storageClass": { "type": [ "string", "null" ] },
             "volumeNameOverride": { "type": [ "string", "null" ] },
             "existingClaim": { "type": [ "string", "null" ] },
@@ -410,6 +419,31 @@
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
             "successThreshold": { "type": "integer" }
+          }
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Seconds Kubernetes allows for shutdown before SIGKILL. Covers the preStop hook and the SIGTERM that follows it."
+        },
+        "lifecycle": {
+          "type": "object",
+          "properties": {
+            "preStopDrain": {
+              "type": "object",
+              "description": "Hold pod termination while the on-disk journal drains, so scaling in does not strand unprocessed messages. Requires graylog.service.metrics.enabled.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "endpointPropagationDelaySeconds": { "type": "integer", "minimum": 0 },
+                "pollIntervalSeconds": { "type": "integer", "minimum": 1 },
+                "shutdownReserveSeconds": { "type": "integer", "minimum": 0 },
+                "stallPolls": { "type": "integer", "minimum": 1 },
+                "statusIntervalSeconds": { "type": "integer", "minimum": 1 },
+                "confirmPolls": { "type": "integer", "minimum": 1 },
+                "metricsRetries": { "type": "integer", "minimum": 1 },
+                "feasibilityWarmupPolls": { "type": "integer", "minimum": 0 }
+              }
+            }
           }
         },
         "podDisruptionBudget": {
@@ -564,6 +598,14 @@
         "persistence": {
           "type": "object",
           "properties": {
+            "retentionPolicy": {
+              "type": "object",
+              "description": "PVC lifecycle for the Data Node volumes. Delete is permitted, unlike on the Graylog StatefulSet, because shard data can be rebuilt from replicas.",
+              "properties": {
+                "whenDeleted": { "type": "string", "enum": ["Retain", "Delete"] },
+                "whenScaled": { "type": "string", "enum": ["Retain", "Delete"] }
+              }
+            },
             "data": {
               "type": "object",
               "properties": {
