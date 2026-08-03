@@ -286,11 +286,11 @@ Graylog service app port
 {{- end }}
 
 {{/*
-DISABLED 2026-07-30 -- graylog.config.forwarder is commented out in values.yaml
-because the settings are inert: the forwarder listener is configured as attributes
-on a Graylog input of type "Forwarder", not through server.conf, and unrecognised
-GRAYLOG_* env vars are silently dropped. This helper reads values that no longer
-exist. Restore it together with that block.
+DISABLED 2026-07-30 -- the settings are inert: the forwarder listener is
+configured as attributes on a Graylog input of type "Forwarder", not through
+server.conf, and unrecognised GRAYLOG_* env vars are silently dropped.
+graylog.config.forwarder was removed from values.yaml, so this helper reads a
+path that no longer exists -- re-add those values before restoring it.
 
 Whether the Graylog server should listen for forwarder connections.
 Defaults to ingress.forwarder.enabled so that exposing the ingest endpoint also
@@ -387,6 +387,124 @@ Exactly one indexer source must be selected.
 {{- end }}
 {{- if and .Values.opensearch.tls.enabled (not .Values.opensearch.tls.caSecret) (not .Values.global.existingSecretName) }}
 {{- /* CA may legitimately be a public/known CA; warn-by-convention only, no fail */ -}}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Size string to bytes, or "" when the format is not recognised.
+
+Two conventions meet here: Kubernetes resource quantities on persistence.size and
+Graylog's own size strings on the journal settings. They disagree - Kubernetes G is
+10^9 and Gi is 2^30, while Graylog's gb is 2^30 (verified against the exporter:
+maxSize 5gb reports gl_journal_size_limit 5368709120, exactly 5 x 1024^3). So
+suffixes are matched exactly, never case-folded: lowercasing would collapse
+Kubernetes M (10^6) onto m (milli).
+
+Returns "" rather than guessing on anything unrecognised, fractional quantities like
+1.5Gi included. Callers must treat "" as "cannot validate" and skip - a size this
+cannot parse is not grounds for refusing to render.
+
+Usage: {{ include "graylog.sizeToBytes" "8Gi" }}
+*/}}
+{{- define "graylog.sizeToBytes" -}}
+{{- $s := . | toString | trim -}}
+{{- $digits := regexFind "^[0-9]+" $s -}}
+{{- if $digits -}}
+{{- $suffix := substr (len $digits) (len $s) $s -}}
+{{- $units := dict
+    "" 1 "b" 1 "B" 1
+    "k" 1000 "K" 1000 "M" 1000000 "G" 1000000000 "T" 1000000000000
+    "Ki" 1024 "Mi" 1048576 "Gi" 1073741824 "Ti" 1099511627776
+    "kb" 1024 "KB" 1024 "mb" 1048576 "MB" 1048576
+    "gb" 1073741824 "GB" 1073741824 "tb" 1099511627776 "TB" 1099511627776 -}}
+{{- if hasKey $units $suffix -}}
+{{- mul (atoi $digits) (get $units $suffix) -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Message journal durability validation (J-03).
+
+An enabled journal on a non-persistent data dir is a data-loss configuration
+wearing a durability costume: the volume renders as emptyDir while
+GRAYLOG_MESSAGE_JOURNAL_ENABLED=true tells Graylog its write-ahead log survives
+restarts. Every pod replacement then silently discards whatever had not been
+processed yet.
+
+Three things this deliberately does NOT treat as the broken combination:
+
+  - existingClaim. `persistence.enabled=false` with an existingClaim still mounts
+    a real PVC (see the volumes block in the Graylog StatefulSet), so the journal
+    is durable and the config is legitimate.
+  - graylog.enabled=false. No StatefulSet is rendered, so there is no pod and no
+    journal to lose.
+  - A journal that is genuinely turned off. messageJournal.enabled is
+    schema-typed as a *string*, so `if .Values.graylog.config.messageJournal.enabled`
+    is truthy even for "false" - a non-empty string. The comparison below has to
+    be against the value, not its truthiness, or the guard fires on the very
+    configuration it tells people to use.
+*/}}
+{{- define "graylog.journal.validate" -}}
+{{- if .Values.graylog.enabled }}
+{{/* Mirrors how config/graylog.yaml renders the env var: `default true` covers
+     nil/empty, toString covers a bool from a values file, lower covers "False". */}}
+{{- $journal := .Values.graylog.config.messageJournal.enabled | default true | toString | lower }}
+{{- if ne $journal "false" }}
+{{- if and (not .Values.graylog.persistence.enabled) (not .Values.graylog.persistence.existingClaim) }}
+{{/* The first line is deliberately short and everything substantive follows a
+     break: helm-unittest only matches a fail message from the first line break
+     onward, so anything asserted in the test suite has to live below it. */}}
+{{- $msg := "Cannot enable the message journal without persistent storage." }}
+{{- $msg = cat $msg "\n\ngraylog.config.messageJournal.enabled is on while graylog.persistence.enabled=false, so the journal would be backed by an emptyDir volume: every unprocessed message is lost on any pod restart, eviction, or upgrade - while GRAYLOG_MESSAGE_JOURNAL_ENABLED=true tells Graylog its write-ahead log is durable." }}
+{{- $msg = cat $msg "\n\nChoose one of the following instead:" }}
+{{- $msg = cat $msg "\n\nOption A: Durable journal on chart-managed storage (recommended)" }}
+{{- $msg = cat $msg "\n  --set graylog.persistence.enabled=true" }}
+{{- $msg = cat $msg "\n\nOption B: Durable journal on a pre-provisioned claim" }}
+{{- $msg = cat $msg "\n  --set graylog.persistence.existingClaim=my-graylog-data" }}
+{{- $msg = cat $msg "\n\nOption C: No journal at all (ephemeral or test deployments only)" }}
+{{- $msg = cat $msg "\n  --set-string graylog.config.messageJournal.enabled=false" }}
+{{- $msg = cat $msg "\n  --set graylog.persistence.enabled=false" }}
+{{- $msg = cat $msg "\n\nNote: messageJournal.enabled is a string in values.schema.json, so Option C needs --set-string. A bare `--set ...enabled=false` is rejected as a boolean." }}
+{{- $msg = cat $msg "\n\nSee docs/graylog-message-handling.md for what the journal protects and how to drain it." }}
+{{- fail $msg }}
+{{- end }}
+{{/*
+  Journal cap vs volume size (J-06). Only checkable when the chart provisions the
+  volume: an existingClaim's capacity is not knowable at render time, and a
+  disabled persistence has no declared size (and is already rejected above).
+
+  The cap is compared at 90% of the volume rather than 100%. The journal shares the
+  data volume with the node-id, the truststore, content packs and GeoIP databases,
+  and it can overshoot its cap briefly because reaping happens per segment. A full
+  journal throttles inputs by design; a full data volume is a much worse failure.
+*/}}
+{{- if and .Values.graylog.persistence.enabled (not .Values.graylog.persistence.existingClaim) }}
+{{- $capStr := .Values.graylog.config.messageJournal.maxSize | default "5gb" }}
+{{- $volStr := .Values.graylog.persistence.size | default "8Gi" }}
+{{- $cap := include "graylog.sizeToBytes" $capStr }}
+{{- $vol := include "graylog.sizeToBytes" $volStr }}
+{{- if and $cap $vol }}
+{{- $capB := atoi $cap }}
+{{- $volB := atoi $vol }}
+{{- if gt (mul $capB 10) (mul $volB 9) }}
+{{/* Suggestions in MiB: Graylog accepts mb, Kubernetes accepts Mi, and integer
+     division keeps both on the safe side of the 90% line. */}}
+{{- $maxCapMiB := div (mul $volB 9) 10485760 }}
+{{- $minVolMiB := div (add (mul $capB 10) 9437183) 9437184 }}
+{{- $msg := "The message journal cap does not fit the data volume." }}
+{{- $msg = cat $msg (printf "\n\ngraylog.config.messageJournal.maxSize (%s) claims more than 90%% of graylog.persistence.size (%s). The journal shares that volume with the node-id, truststore, content packs and GeoIP databases, so it cannot have all of it." $capStr $volStr) }}
+{{- $msg = cat $msg "\n\nA full journal throttles inputs by design. A full data volume does not - it takes the node down." }}
+{{- $msg = cat $msg "\n\nEither:" }}
+{{- $msg = cat $msg (printf "\n  Lower the cap:      --set-string graylog.config.messageJournal.maxSize=%dmb" $maxCapMiB) }}
+{{- $msg = cat $msg (printf "\n  Or grow the volume: --set graylog.persistence.size=%dMi" $minVolMiB) }}
+{{- $msg = cat $msg "\n\nNote that growing an existing volume needs a StorageClass with allowVolumeExpansion, and shrinking one is not supported at all." }}
+{{- $msg = cat $msg "\n\nSee docs/graylog-message-handling.md for journal sizing." }}
+{{- fail $msg }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

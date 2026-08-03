@@ -35,7 +35,7 @@ Call with: {{ include "graylog.lifecycle" . | nindent 10 }}
 */}}
 {{- $budget := sub $grace (add $settle $reserve) | int }}
 {{- if not .Values.graylog.service.metrics.enabled }}
-{{- fail "graylog.lifecycle.preStopDrain.enabled=true requires graylog.service.metrics.enabled=true.\n  The drain reads journal depth from the Prometheus exporter, which is gated by that value (GRAYLOG_PROMETHEUS_EXPORTER_ENABLED).\n  Either:\n    Set graylog.service.metrics.enabled=true\n    Or set graylog.lifecycle.preStopDrain.enabled=false and drain manually (see the Message Journal Lifecycle runbook in the README)." }}
+{{- fail "graylog.lifecycle.preStopDrain.enabled=true requires graylog.service.metrics.enabled=true.\n  The drain reads journal depth from the Prometheus exporter, which is gated by that value (GRAYLOG_PROMETHEUS_EXPORTER_ENABLED).\n  Either:\n    Set graylog.service.metrics.enabled=true\n    Or set graylog.lifecycle.preStopDrain.enabled=false and drain manually (see the scale-in runbook in docs/graylog-message-handling.md)." }}
 {{- end }}
 {{- if le $budget 1 }}
 {{- fail (printf "graylog.lifecycle.preStopDrain leaves no time to drain: terminationGracePeriodSeconds (%d) - endpointPropagationDelaySeconds (%d) - shutdownReserveSeconds (%d) = %d.\n  The drain budget must be positive, and a hook that consumes the whole grace period gets the container SIGKILLed before Graylog can flush its in-memory buffers.\n  Either:\n    Raise graylog.terminationGracePeriodSeconds\n    Or lower graylog.lifecycle.preStopDrain.shutdownReserveSeconds / endpointPropagationDelaySeconds." $grace $settle $reserve $budget) }}

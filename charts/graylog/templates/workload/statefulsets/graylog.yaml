@@ -28,7 +28,7 @@ spec:
     {{- end }}
   {{- $ret := .Values.graylog.persistence.retentionPolicy }}
   {{- if eq ($ret.whenScaled | default "Retain") "Delete" }}
-  {{- fail "graylog.persistence.retentionPolicy.whenScaled=Delete would destroy the journal of any scaled-in node.\n  Scaling in removes the highest ordinal; anything still unprocessed in its journal exists only on that claim, and nothing replays an orphaned journal.\n  Delete makes that loss silent and unrecoverable.\n  Either:\n    Leave whenScaled=Retain and delete claims by hand once verified empty (see Message Journal Lifecycle in the README)\n    Or set graylog.persistence.enabled=false if this deployment does not need a durable journal." }}
+  {{- fail "graylog.persistence.retentionPolicy.whenScaled=Delete would destroy the journal of any scaled-in node.\n  Scaling in removes the highest ordinal; anything still unprocessed in its journal exists only on that claim, and nothing replays an orphaned journal.\n  Delete makes that loss silent and unrecoverable.\n  Either:\n    Leave whenScaled=Retain and delete claims by hand once verified empty (see docs/graylog-message-handling.md)\n    Or set graylog.persistence.enabled=false if this deployment does not need a durable journal." }}
   {{- end }}
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: {{ $ret.whenDeleted | default "Retain" }}

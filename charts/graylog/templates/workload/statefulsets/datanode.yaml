@@ -25,6 +25,11 @@ spec:
       partition: {{ int . }}
       {{- end }}
     {{- end }}
+  {{/* Explicity add the Datanode retentionPolicy */}}
+  {{- $dnRet := .Values.datanode.persistence.retentionPolicy | default dict }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ $dnRet.whenDeleted | default "Retain" }}
+    whenScaled: {{ $dnRet.whenScaled | default "Retain" }}
   template:
     metadata:
       labels:

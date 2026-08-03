@@ -105,22 +105,16 @@ graylog:
       # keyStorePass is the password of the JVM trust store.
       keyStorePass: "changeit"
 
-    # Graylog Forwarder ingest (enterprise feature).
-    # Graylog only listens on 13301/13302 when a bind address is configured AND a
-    # Forwarder input exists. Self-managed deployments must create that input
-    # manually under System > Inputs; Graylog Cloud provisions it automatically.
-
-    # @ WARNING: These values have been removed as the application is not respecting their
-    # configuration currently. These will be brought back in future versions.
-
-    forwarder:
-      # Unset defaults to ingress.forwarder.enabled. Set true to bind the ports
-      # without an Ingress (e.g. when fronting them with your own load balancer).
-      enabled:
-      bindAddress: "0.0.0.0"
-      # Transport encryption between the forwarder and Graylog. Leave false when
-      # a load balancer terminates TLS and speaks cleartext HTTP/2 to Graylog.
-      grpcEnableTls: false
+    # Graylog Forwarder ingest (enterprise feature) has no server.conf settings.
+    # The listener is configured as attributes on a Graylog input of type
+    # "Forwarder" (org.graylog.plugins.forwarder.input.ForwarderServiceInput):
+    # bind address, message port (13301), configuration port (13302), and gRPC
+    # TLS all live there. Graylog binds 13301/13302 on every node once that input
+    # exists. Self-managed deployments must create it under System > Inputs;
+    # Graylog Cloud provisions it automatically. Behind a TLS-terminating load
+    # balancer set forwarder_grpc_enable_tls false on the input -- it defaults to
+    # true, and targets stay unhealthy otherwise.
+    # Expose the ports with ingress.forwarder.*; there is nothing to set here.
     mongodb:
       # customUri is a full MongoDB connection string for an externally
       # managed MongoDB. Required when mongodb.communityResource.enabled=false.
@@ -132,8 +126,30 @@ graylog:
       versionProbeAttempts: "0"
     # messageJournal configures the on-disk message journal; fields map to
     # the message_journal_* settings in server.conf.
+    #
+    # An enabled journal requires durable storage: either
+    # graylog.persistence.enabled=true or graylog.persistence.existingClaim. With
+    # neither, the data dir is an emptyDir and unprocessed messages are lost on
+    # every pod restart while Graylog still believes the journal is durable. The
+    # chart refuses to render that combination.
+    #
+    # These are strings, not booleans - disabling the journal needs
+    # `--set-string ...enabled=false`, as a bare `--set` is rejected by the schema.
     messageJournal:
       enabled: "true"
+      # maxSize caps the on-disk journal (message_journal_max_size). Graylog's
+      # own default is 5gb; it is set explicitly here because the cap and the
+      # volume have to be sized together and the chart validates them together.
+      #
+      # This must leave room on graylog.persistence.size (default 8Gi) for the
+      # node-id, truststore, content packs and GeoIP databases, which share the
+      # volume. The chart refuses to render a cap above 90% of the volume.
+      #
+      # Raising this without raising persistence.size is the mistake it guards
+      # against: a full journal throttles inputs by design, a full data volume
+      # takes the node down. Suffixes are Graylog's own and binary - 5gb is
+      # 5 x 1024^3 bytes, matching gl_journal_size_limit on the metrics endpoint.
+      maxSize: "5gb"
       flushAge: "1m"
       flushInterval: "1000000"
       maxAge: "12h"
@@ -335,7 +351,8 @@ graylog:
     #
     # Off by default because it slows every rolling upgrade by the drain time.
     # It is best-effort, not a guarantee — see the Message Journal Lifecycle
-    # runbook in the README for the drain procedure it does not replace.
+    # scale-in runbook in docs/graylog-message-handling.md for the drain
+    # procedure it does not replace.
     preStopDrain:
       enabled: false
       # Requires graylog.service.metrics.enabled: journal depth is read from the
@@ -504,6 +521,17 @@ datanode:
       memory: "3.5Gi"
   # persistence configures the Datanode volumes.
   persistence:
+    # What happens to the Datanode PVCs when the StatefulSet is scaled in or
+    # deleted. Both default to Retain, which is also the Kubernetes default -
+    # set explicitly so it cannot drift, matching graylog.persistence.
+    #
+    # Delete is permitted here, unlike on the Graylog StatefulSet: shard data on
+    # a scaled-in Data Node can be rebuilt from replicas, whereas an orphaned
+    # Graylog journal cannot be replayed by anything. Only set whenScaled=Delete
+    # if your indexes carry replicas and the cluster is green before you scale.
+    retentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
     # data is the OpenSearch data volume.
     data:
       enabled: true

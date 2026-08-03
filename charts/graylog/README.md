@@ -302,264 +302,70 @@ helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=1 --reuse
 
 ## Message Journal Lifecycle
 
-Each Graylog node writes incoming messages to an on-disk **journal** on its own
-PersistentVolumeClaim, then works them off into the indexer. The journal is what
-makes Graylog durable across restarts — and it is why scaling in is not a routine
-operation.
+Each Graylog node buffers incoming messages in an on-disk journal on its own PVC,
+then works them off into the indexer.
 
-### Why upgrades are safe but scale-in is not
+Rolling upgrades are safe with no procedure: the replacement pod keeps the ordinal,
+re-binds the same PVC, and replays the journal. **Scale-in is not.** The ordinal
+stops existing, so its PVC is retained but never mounted again, and anything left
+unprocessed in that journal is unreachable. Graceful shutdown flushes memory buffers
+*into* the journal; it never drains the journal *out*.
 
-A StatefulSet guarantees **identity**, not data migration. On a rolling upgrade,
-`graylog-app-2` is replaced by a new `graylog-app-2` that re-binds the *same* PVC,
-finds the same journal, and carries on — nothing is lost, and no procedure is
-needed.
+Before scaling in, drain the node. See
+[Graylog Message Handling](../../docs/graylog-message-handling.md) for the runbook,
+how to read a drain's logs, and what to do with the leftover PVC.
 
-On scale-in, that ordinal stops existing. Its PVC is retained but no pod will ever
-mount it again, so anything still in that journal is unreachable. Graylog's
-graceful shutdown flushes in-memory buffers **into** the journal; it never drains
-the journal **out**. Draining is the *replacement pod's* job, and on scale-in there
-is no replacement pod.
+### Shutdown budget
 
-Two consequences worth knowing:
+`graylog.terminationGracePeriodSeconds` (default `300`) covers the preStop hook
+**and** the SIGTERM after it. The Kubernetes default of 30s is not enough to flush
+buffers under load.
 
-- Scaling back up later re-binds the old PVC and **replays days-old messages** into
-  the pipeline. Late arrivals will hit alerts, dashboards, and index retention.
-- The data is not destroyed, just unreachable. See [Recovering an orphaned
-  journal](#recovering-an-orphaned-journal).
+### Automatic drain
 
-### Automatic drain on shutdown
-
-The chart can hold pod termination while the journal is worked off:
+Off by default. Holds pod termination while the journal is worked off, so a
+scale-in has a chance to finish processing:
 
 ```sh
 helm upgrade graylog graylog/graylog -n graylog \
   --set graylog.lifecycle.preStopDrain.enabled=true --reuse-values
 ```
 
-This installs a `preStop` hook that polls journal depth
-(`gl_journal_entries_uncommitted`) from Graylog's Prometheus exporter on
-`localhost` and returns once the journal is empty.
+It reads journal depth from the Prometheus exporter on localhost, so it needs no
+credentials, but it does require `graylog.service.metrics.enabled` (the default).
 
-A single reading of zero is not treated as proof: under live ingest the depth
-oscillates and can momentarily touch zero while messages are still arriving, so the
-hook requires it to hold at zero across `confirmPolls` consecutive samples (default
-3) before declaring success. Failed metrics scrapes are retried `metricsRetries`
-times (default 5) rather than abandoning the drain on one miss. It needs **no credentials** —
-the exporter answers unauthenticated on the pod itself, unlike
-`GET /api/system/journal`. It does require `graylog.service.metrics.enabled`
-(the default); the chart refuses to render otherwise.
+It is best-effort. It cannot stop inputs, so on a node still receiving traffic the
+journal never reaches zero and the hook gives up. It also cannot tell an upgrade
+from a scale-in, so it slows both. Enable it if you routinely scale in.
 
-It is **off by default** because it slows every rolling upgrade by the drain time.
+| Key | Description | Default |
+|---|---|---|
+| `enabled` | Hold termination while the journal drains. | `false` |
+| `endpointPropagationDelaySeconds` | Sleep before the first sample, waiting for endpoint removal to propagate. Raise it if a load balancer targets pod IPs directly. | `15` |
+| `shutdownReserveSeconds` | Held back out of the grace period for Graylog's own shutdown. | `45` |
+| `pollIntervalSeconds` | Seconds between journal-depth samples. | `2` |
+| `stallPolls` | Give up after this many polls with no new low. | `10` |
+| `confirmPolls` | Consecutive zero readings required before declaring success. | `3` |
+| `metricsRetries` | Metrics probe retries before giving up. | `5` |
+| `statusIntervalSeconds` | How often to log a progress line. | `10` |
+| `feasibilityWarmupPolls` | Polls to observe before projecting whether the drain can finish at all; aborts early if it cannot. `0` disables. | `5` |
 
-#### Feasibility check
+All under `graylog.lifecycle.preStopDrain`. The drain budget is
+`terminationGracePeriodSeconds - endpointPropagationDelaySeconds - shutdownReserveSeconds`
+(240s at defaults); the chart refuses to render if that is not positive.
 
-After `feasibilityWarmupPolls` samples (default 5) the hook measures the actual
-drain rate and projects when the journal would reach zero. If that projection does
-not fit in the remaining budget, it **aborts immediately** with a `CRIT` verdict
-rather than holding termination for a drain that cannot land:
+### PVC retention
 
-```text
-CRIT  FEASIBILITY: drain cannot finish in the time available - aborting instead of holding termination for nothing
-CRIT    journal on disk: 5.0GiB of 5.0GiB cap (100% full)
-CRIT    the journal is AT its cap - Graylog is already discarding the oldest segments, so messages are being lost right now
-CRIT    backlog:         999727 messages awaiting processing
-CRIT    drain rate:      107 msg/s measured over 2s (ingest 1200 msg/s)
-CRIT    time to clear:   ~2h35m at that rate
-CRIT    time available:  53s of the 55s drain budget
-CRIT    short by:        ~2h34m
-CRIT    999727 messages will NOT be drained by this hook - stop the inputs and drain manually to save them
-```
+Both StatefulSets pin `persistentVolumeClaimRetentionPolicy` to `Retain`, so no
+claim is deleted automatically. `graylog.persistence.retentionPolicy.whenScaled: Delete`
+is **refused** — it would destroy a scaled-in node's journal. The Data Node permits
+it, since shard data rebuilds from replicas.
 
-A depth that is flat or growing reports `time to clear: never at this rate`, and
-points at the likely cause — an indexer refusing writes, typically a read-only
-index block or a disk watermark.
-
-This exists because `stallPolls` alone is not enough. It only notices a journal
-that has *stopped* falling; it cannot notice one falling far too slowly to matter,
-because every new low resets the counter. On a flooded cluster that meant the hook
-held termination for its entire 240s budget to clear ~2% of a 7.24M-message
-backlog, then stranded the rest anyway — and paid that cost on every pod in the
-rollout. Aborting early instead returns the unused grace period to Graylog's own
-shutdown, which can actually use it.
-
-Set `feasibilityWarmupPolls: 0` to disable the projection and always drain for the
-full budget.
-
-**It is best-effort, not a guarantee.** Understand these limits before relying on it:
-
-| Limit | Consequence |
-|---|---|
-| Bounded by `terminationGracePeriodSeconds` | The hook always yields in time for SIGTERM (see below). If the journal is still full, termination proceeds anyway. |
-| Only sheds *newly established* connections | Kubernetes removes the terminating pod from Service endpoints, but that only stops new connections. Long-lived TCP inputs, UDP senders, and internally generated inputs keep writing. Against those the journal never reaches zero, and the hook gives up once journal depth stops reaching new lows for `stallPolls` samples. |
-| Does not stop inputs | Stopping inputs requires an authenticated API call. Only the manual runbook can guarantee an empty journal. |
-| Pointless on rolling upgrades | A replacement pod re-binds the same PVC and replays the journal itself, so there is nothing to protect. The hook cannot tell an upgrade from a scale-in, so it pays the cost on both. |
-| Cannot drain a blocked indexer | If the indexer refuses writes, nothing can be worked off and the journal only grows. The feasibility check detects this and aborts in a few seconds instead of stalling the rollout — but **disable the hook before rolling an already-backed-up cluster**, or it will still slow each pod by the warmup window. |
-
-See [preStop drain failure modes](../../docs/prestop-drain-failure-modes.md) for
-the incident this behaviour was derived from.
-
-> [!IMPORTANT]
-> Enable this only if you routinely scale in. On a node that is still receiving
-> traffic the drain cannot finish, and it adds its give-up time to *every* pod
-> termination — including every rolling upgrade, where it buys nothing.
-
-Measured on a 3-node cluster ingesting ~115 msg/s per node from inputs that keep
-producing throughout termination — in this case internally generated traffic, which
-endpoint removal cannot shed at all. Network inputs holding long-lived TCP
-connections behave the same way, because removing a pod from Service endpoints only
-stops *new* connections:
-
-```
-[prestop-drain] waiting 15s for endpoint removal to propagate
-[prestop-drain] no progress in 10 polls (63s): depth 163, best 4, still ingesting
-                113 msg/s. A true drain needs inputs stopped; handing over to
-                graceful shutdown
-```
-
-Pod termination took **89s** instead of ~10s, and the journal never emptied — it
-got as low as 4 entries but new messages kept arriving. That is the expected
-outcome for a node under live load, and it is why the message names the ingest
-rate: the fix is to stop the inputs, not to wait longer.
-
-Where the hook *does* pay off is a scale-in whose senders reconnect elsewhere once
-the pod leaves Service endpoints. Then ingest to that node genuinely stops, depth
-falls to zero, and the hook exits early having saved the journal that would
-otherwise have been stranded.
-
-#### The grace-period budget
-
-`terminationGracePeriodSeconds` is a hard ceiling covering the `preStop` hook **and**
-the SIGTERM that follows it. If the hook is still running when it expires, the
-container is SIGKILLed, Graylog never receives SIGTERM, and the in-memory buffers
-this feature exists to protect are lost — strictly worse than no hook at all.
-
-So the drain never uses the whole grace period:
-
-```
-drain budget = terminationGracePeriodSeconds
-             - endpointPropagationDelaySeconds   # wait for endpoint removal
-             - shutdownReserveSeconds            # left for Graylog's own shutdown
-```
-
-With the defaults that is `300 - 15 - 45 = 240s`. The chart fails to render if the
-budget is not positive, so raising the reserve means raising the grace period too.
-
-The Kubernetes default grace period is 30s, which is not enough to flush buffers
-under load. The chart sets `300` explicitly.
-
-### Watching a drain
-
-The hook writes its progress to the container's log stream, so:
-
-```sh
-# follow BEFORE you terminate — a pod's logs are destroyed with the pod object
-kubectl logs -n graylog -l app=graylog-app -c graylog-app \
-  --follow --prefix --tail=0 --max-log-requests=20 | grep "prestop-drain"
-```
-
-A post-mortem `kubectl logs` will find nothing: the terminated pod is gone. Note
-also that Kubernetes discards `preStop` output by default — these lines are
-visible only because the hook writes to PID 1's stdout deliberately.
-
-### Scaling in: is it safe to delete the leftover PVC?
-
-Scaling in removes the highest ordinal and leaves its claim behind. The chart pins
-`persistentVolumeClaimRetentionPolicy` to `Retain` on both `whenScaled` and
-`whenDeleted`, and **refuses to render `whenScaled: Delete`** — so the volume is
-never destroyed automatically, and the decision to delete it is always yours.
-
-```sh
-kubectl get pvc -n graylog          # e.g. graylog-data-graylog-3
-```
-
-#### Disk size is not the signal
-
-This is the part that surprises people. **A fully drained journal still occupies
-hundreds of megabytes**, and that is correct.
-
-Two different things get measured:
-
-| | Means |
-|---|---|
-| `gl_journal_entries_uncommitted` | messages **left to process** — this is what "drained" means |
-| journal size on disk | messages **still stored** |
-
-Graylog never deletes a segment merely because it has been processed. Segments are
-retained for `graylog.config.messageJournal.maxAge` (default **12h**) and reaped only
-once a segment is both fully committed *and* past retention. So a drained node keeps
-up to 12 hours of already-delivered messages on disk.
-
-A real example, sampled at one instant on a node whose drain had just reported
-`0 messages remaining`:
-
-```
-du(journal dir)      =    127.9 MiB
-gl_journal_size      =    127.5 MiB
-uncommitted          =        669
-segments:
-  00000000000003928790.log   100.0 MiB   <- rolled at segmentSize, fully processed
-  00000000000004074253.log    27.9 MiB   <- active segment, being appended to
-```
-
-That 100 MiB segment sits entirely below the committed offset: every message in it is
-already in OpenSearch. Deleting it loses nothing. Judge the claim by
-`uncommitted`, never by `du`.
-
-You will also see the on-disk figure **sawtooth** — climbing steadily, then dropping
-by ~100 MiB at once. That is a fully-committed segment being reaped, not data loss.
-
-#### Verifying before you delete
-
-The drain hook's verdict is good evidence but it is a point-in-time measurement, and
-"committed" means *read out of the journal into the processing pipeline* — the final
-hop into OpenSearch happens from an in-memory buffer during graceful shutdown. So
-confirm rather than assume. Two ways, strongest first:
-
-1. **Re-attach the volume.** Scale back up by one. The ordinal returns, re-binds the
-   same claim, and Graylog replays anything unprocessed. Watch `uncommitted` on that
-   pod settle at `0` with inputs quiesced, then scale in again and delete the claim.
-   This is both the test and the fix: if something *was* stranded, replaying it is
-   what you wanted.
-
-2. **Inspect it offline.** `examples/inspect-orphaned-journal.yaml` mounts the claim
-   read-only and compares the committed offset against the segments:
-
-   ```sh
-   kubectl apply -n graylog -f examples/inspect-orphaned-journal.yaml
-   kubectl logs -n graylog journal-inspector -f
-   kubectl delete -n graylog pod/journal-inspector
-   ```
-
-   > [!IMPORTANT]
-   > It can prove that messages **were** stranded, but it cannot prove the opposite.
-   > Graylog's offset index is sparse, so records past the last index entry are
-   > invisible to any offline reader. Measured on a live node: the index looked clean
-   > while the node genuinely had 537 unprocessed messages. Treat
-   > `NO EVIDENCE OF STRANDED DATA` as "no evidence", not as proof — use option 1 when
-   > you need certainty.
-
-Then delete it:
-
-```sh
-kubectl delete pvc graylog-data-graylog-3 -n graylog
-```
-
-#### If you scaled in without draining
-
-The data is not lost, just unreachable — nothing will ever mount that claim again.
-Scale back up to the original replica count: the ordinal returns, re-binds the claim,
-and Graylog replays the journal. Expect the late-arrival side effects described above
-(alerts, dashboards, index retention). Then drain properly and scale in again.
-
-### Inspecting journal depth manually
-
-```sh
-kubectl port-forward -n graylog pod/graylog-app-2 9833:9833
-curl -s localhost:9833/metrics | grep '^gl_journal_entries_uncommitted'
-```
-
-Port-forward the **pod**, not the Service — the Service would answer from an
-arbitrary node. `0` means that node's journal is fully worked off.
+> [!WARNING]
+> Retention protects the claim from the StatefulSet controller, not from you.
+> Deleting a retained PVC destroys the disk under most StorageClasses, including this
+> chart's gp3 class. See
+> [Deleting a leftover PVC](../../docs/graylog-message-handling.md#deleting-a-leftover-pvc).
 
 ## Scale DataNode
 ```sh
@@ -1025,7 +831,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.mongodb.customUri`                                    | Custom MongoDB connection URI.                              | `""`                            |
 | `graylog.config.mongodb.maxConnections`                               | Max MongoDB connections.                                    | `"1000"`                        |
 | `graylog.config.mongodb.versionProbeAttempts`                         | MongoDB version probe attempts.                             | `"0"`                           |
-| `graylog.config.messageJournal.enabled`                               | Enable message journal.                                     | `"true"`                        |
+| `graylog.config.messageJournal.enabled`                               | Enable message journal. Requires durable storage — the chart refuses to render this with `persistence.enabled=false` and no `existingClaim`, since the journal would be an `emptyDir`. A string, so disabling needs `--set-string`. | `"true"` |
+| `graylog.config.messageJournal.maxSize`                                | On-disk journal cap. Must stay under 90% of `graylog.persistence.size`; the chart refuses to render otherwise. Binary suffixes — `5gb` is 5×1024³. | `"5gb"` |
 | `graylog.config.messageJournal.flushAge`                              | Journal flush age.                                          | `"1m"`                          |
 | `graylog.config.messageJournal.flushInterval`                         | Journal flush interval.                                     | `"1000000"`                     |
 | `graylog.config.messageJournal.maxAge`                                | Max journal age.                                            | `"12h"`                         |
@@ -1119,6 +926,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.lifecycle.preStopDrain.statusIntervalSeconds`                | How often to log a progress line during the drain.          | `10`                            |
 | `graylog.lifecycle.preStopDrain.confirmPolls`                          | Consecutive zero readings required before declaring the journal drained. | `3`                |
 | `graylog.lifecycle.preStopDrain.metricsRetries`                        | Retries for the metrics probe before giving up.              | `5`                             |
+| `graylog.lifecycle.preStopDrain.feasibilityWarmupPolls`                | Polls observed before projecting whether the drain can finish; aborts early if it cannot. `0` disables. | `5` |
 | `graylog.persistence.retentionPolicy.whenDeleted`                      | PVC fate when the StatefulSet is deleted.                   | `Retain`                        |
 | `graylog.persistence.retentionPolicy.whenScaled`                       | PVC fate when scaled in. `Delete` is refused — it destroys a scaled-in node's journal. | `Retain` |
 | `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
@@ -1188,6 +996,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.resources.limits.memory`                     | Memory limit for the datanode pod.              | `"5Gi"`           |
 | `datanode.resources.requests.cpu`                      | CPU request for the datanode pod.               | `"500m"`          |
 | `datanode.resources.requests.memory`                   | Memory request for the datanode pod.            | `"3.5Gi"`         |
+| `datanode.persistence.retentionPolicy.whenDeleted`     | PVC fate when the StatefulSet is deleted.       | `Retain`          |
+| `datanode.persistence.retentionPolicy.whenScaled`      | PVC fate when scaled in. `Delete` is permitted here (shard data rebuilds from replicas), unlike on the Graylog StatefulSet. | `Retain` |
 | `datanode.persistence.data.enabled`                    | Enable persistent volume for data.              | `true`            |
 | `datanode.persistence.data.storageClass`               | Storage class for data PVC.                     | `""`              |
 | `datanode.persistence.data.mountPath`                  | Mount path for data volume.                     | `""`              |

@@ -41,6 +41,7 @@ data:
   GRAYLOG_MESSAGE_JOURNAL_FLUSH_AGE: {{ .Values.graylog.config.messageJournal.flushAge | quote }} 
   GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL: {{ .Values.graylog.config.messageJournal.flushInterval | int | quote }}
   GRAYLOG_MESSAGE_JOURNAL_MAX_AGE: {{ .Values.graylog.config.messageJournal.maxAge | quote }}
+  GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE: {{ .Values.graylog.config.messageJournal.maxSize | default "5gb" | quote }}
   GRAYLOG_MESSAGE_JOURNAL_SEGMENT_AGE: {{ .Values.graylog.config.messageJournal.segmentAge | quote }}
   GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE: {{ .Values.graylog.config.messageJournal.segmentSize | quote }}
 
@@ -72,6 +73,8 @@ data:
      Unrecognised GRAYLOG_* env vars are silently dropped, so rendering
      GRAYLOG_FORWARDER_BIND_ADDRESS did nothing -- 13301/13302 stayed closed until
      the input was created, after which Graylog bound them on every node.
+     graylog.config.forwarder has since been removed from values.yaml, so the
+     block below reads paths that no longer exist; re-add them to restore it.
      NOTE: grpc TLS defaults to TRUE on the input; behind a TLS-terminating load
      balancer it must be set false or targets stay unhealthy.
 
