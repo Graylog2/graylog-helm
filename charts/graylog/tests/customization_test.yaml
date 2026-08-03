@@ -1,0 +1,354 @@
+suite: workload customization
+templates:
+  - workload/statefulsets/graylog.yaml
+  - workload/statefulsets/datanode.yaml
+  # The StatefulSets' checksum helpers `include` these templates by path, so
+  # helm-unittest's template filter has to list them for the includes to resolve.
+  - config/graylog.yaml
+  - config/datanode.yaml
+  - config/secret/secrets.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: adds extra volumes and volume mounts to the Graylog pods
+    set:
+      graylog.extraVolumes:
+        - name: custom-ca
+          secret:
+            secretName: custom-ca
+      graylog.extraVolumeMounts:
+        - name: custom-ca
+          mountPath: /etc/ssl/custom
+          readOnly: true
+      graylog.extraInitVolumeMounts:
+        - name: custom-ca
+          mountPath: /mnt/ca
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-ca
+            secret:
+              secretName: custom-ca
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: custom-ca
+            mountPath: /etc/ssl/custom
+            readOnly: true
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: custom-ca
+            mountPath: /mnt/ca
+
+  - it: adds extra containers and init containers to the Graylog pods
+    set:
+      graylog.extraContainers:
+        - name: log-shipper
+          image: busybox:1.37
+      graylog.extraInitContainers:
+        - name: wait-for-dns
+          image: busybox:1.37
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: log-shipper
+            image: busybox:1.37
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-dns
+            image: busybox:1.37
+
+  - it: renders Graylog pod scheduling and runtime overrides
+    set:
+      graylog.priorityClassName: high-priority
+      graylog.schedulerName: custom-scheduler
+      graylog.runtimeClassName: gvisor
+      graylog.terminationGracePeriodSeconds: 120
+      graylog.dnsPolicy: None
+      graylog.dnsConfig:
+        nameservers: ["10.0.0.10"]
+      graylog.hostAliases:
+        - hostnames: ["mongo.internal"]
+      graylog.topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+      graylog.lifecycle:
+        preStop:
+          exec:
+            command: ["/bin/sh", "-c", "sleep 10"]
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+      - equal:
+          path: spec.template.spec.schedulerName
+          value: custom-scheduler
+      - equal:
+          path: spec.template.spec.runtimeClassName
+          value: gvisor
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 120
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: None
+      - equal:
+          path: spec.template.spec.dnsConfig.nameservers[0]
+          value: 10.0.0.10
+      - equal:
+          path: spec.template.spec.hostAliases[0].hostnames[0]
+          value: mongo.internal
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].topologyKey
+          value: topology.kubernetes.io/zone
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          value: sleep 10
+
+  - it: keeps Graylog pod defaults when no overrides are set
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: ClusterFirst
+      - notExists:
+          path: spec.template.spec.priorityClassName
+      # Not absent by default: the preStop journal drain budget is derived from
+      # it, so the chart sets it explicitly rather than taking the Kubernetes
+      # default of 30s.
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 300
+      - notExists:
+          path: spec.template.spec.runtimeClassName
+
+  - it: renders the Graylog volume claim metadata, selector and dataSource
+    set:
+      graylog.persistence.labels.tier: backend
+      graylog.persistence.annotations.note: graylog-data
+      global.commonLabels.env: dev
+      graylog.persistence.selector:
+        matchLabels:
+          disk: fast
+      graylog.persistence.dataSource:
+        name: graylog-snapshot
+        kind: VolumeSnapshot
+        apiGroup: snapshot.storage.k8s.io
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels.tier
+          value: backend
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels.env
+          value: dev
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.annotations.note
+          value: graylog-data
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.selector.matchLabels.disk
+          value: fast
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.dataSource.name
+          value: graylog-snapshot
+
+  - it: adds extra volumes, mounts and containers to the Datanode pods
+    set:
+      datanode.extraVolumes:
+        - name: scratch
+          emptyDir: {}
+      datanode.extraVolumeMounts:
+        - name: scratch
+          mountPath: /scratch
+      datanode.extraContainers:
+        - name: exporter
+          image: busybox:1.37
+      datanode.extraInitContainers:
+        - name: warmup
+          image: busybox:1.37
+      datanode.lifecycle:
+        preStop:
+          exec:
+            command: ["/bin/sh", "-c", "sleep 5"]
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: scratch
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: scratch
+            mountPath: /scratch
+      - contains:
+          path: spec.template.spec.containers
+          content:
+            name: exporter
+            image: busybox:1.37
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: warmup
+            image: busybox:1.37
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          value: sleep 5
+
+  - it: omits initContainers on the Datanode when nothing needs them
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: renders the Datanode volume claim metadata, selector and dataSource
+    set:
+      datanode.persistence.data.labels.tier: storage
+      datanode.persistence.data.annotations.note: hot
+      datanode.persistence.data.selector:
+        matchLabels:
+          disk: nvme
+      datanode.persistence.data.dataSource:
+        name: datanode-snapshot
+        kind: VolumeSnapshot
+        apiGroup: snapshot.storage.k8s.io
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels.tier
+          value: storage
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.annotations.note
+          value: hot
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.selector.matchLabels.disk
+          value: nvme
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.dataSource.name
+          value: datanode-snapshot
+
+  - it: renders the Datanode native-libs volume claim metadata, selector and dataSource
+    set:
+      datanode.persistence.nativeLibs.enabled: true
+      datanode.persistence.nativeLibs.labels.tier: storage
+      datanode.persistence.nativeLibs.annotations.note: native-libs
+      global.commonAnnotations.owner: platform-team
+      datanode.persistence.nativeLibs.selector:
+        matchLabels:
+          disk: ssd
+      datanode.persistence.nativeLibs.dataSource:
+        name: native-libs-snapshot
+        kind: VolumeSnapshot
+        apiGroup: snapshot.storage.k8s.io
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[1].metadata.name
+          value: native-libs
+      - equal:
+          path: spec.volumeClaimTemplates[1].metadata.labels.tier
+          value: storage
+      - equal:
+          path: spec.volumeClaimTemplates[1].metadata.annotations.note
+          value: native-libs
+      - equal:
+          path: spec.volumeClaimTemplates[1].metadata.annotations.owner
+          value: platform-team
+      - equal:
+          path: spec.volumeClaimTemplates[1].spec.selector.matchLabels.disk
+          value: ssd
+      - equal:
+          path: spec.volumeClaimTemplates[1].spec.dataSource.name
+          value: native-libs-snapshot
+
+  - it: keeps extra volumes on the Datanode when both persistent volumes are enabled
+    set:
+      datanode.persistence.data.enabled: true
+      datanode.persistence.nativeLibs.enabled: true
+      datanode.extraVolumes:
+        - name: scratch
+          emptyDir: {}
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: scratch
+            emptyDir: {}
+
+  - it: omits the Datanode volumes block when nothing needs it
+    set:
+      datanode.persistence.data.enabled: true
+      datanode.persistence.nativeLibs.enabled: true
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes
+
+  - it: renders Datanode pod scheduling and runtime overrides
+    set:
+      datanode.priorityClassName: high-priority
+      datanode.schedulerName: custom-scheduler
+      datanode.runtimeClassName: gvisor
+      datanode.terminationGracePeriodSeconds: 180
+      datanode.dnsPolicy: None
+      datanode.dnsConfig:
+        searches: ["graylog.svc.cluster.local"]
+      datanode.hostAliases:
+        - hostnames: ["mongo.internal"]
+      datanode.topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+      - equal:
+          path: spec.template.spec.schedulerName
+          value: custom-scheduler
+      - equal:
+          path: spec.template.spec.runtimeClassName
+          value: gvisor
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 180
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: None
+      - equal:
+          path: spec.template.spec.dnsConfig.searches[0]
+          value: graylog.svc.cluster.local
+      - equal:
+          path: spec.template.spec.hostAliases[0].hostnames[0]
+          value: mongo.internal
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].whenUnsatisfiable
+          value: DoNotSchedule
+
+  - it: keeps Datanode pod defaults when no overrides are set
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: ClusterFirst
+      - notExists:
+          path: spec.template.spec.priorityClassName
+      - notExists:
+          path: spec.template.spec.terminationGracePeriodSeconds
+      - notExists:
+          path: spec.template.spec.runtimeClassName

@@ -24,13 +24,8 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .name }}
-  labels:
-    app.kubernetes.io/component: forwarder
-    {{- include "graylog.labels" $root | nindent 4 }}
-  {{- with $channel.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+  {{- include "graylog.metadata.labels" (dict "context" $root "labels" $channel.labels "fixed" (dict "app.kubernetes.io/component" "forwarder") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $root "annotations" $channel.annotations "indent" 2) }}
 spec:
   {{- with $channel.className }}
   ingressClassName: {{ . }}
