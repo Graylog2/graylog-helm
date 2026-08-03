@@ -3,6 +3,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "graylog.fallback.name" . }}
+  labels:
+    app.kubernetes.io/component: default-backend
+    {{- include "graylog.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -12,6 +15,8 @@ spec:
     metadata:
       labels:
         graylog-app: {{ include "graylog.fallback.name" . }}
+        app.kubernetes.io/component: default-backend
+        {{- include "graylog.selectorLabels" . | nindent 8 }}
     spec:
       containers:
         - name: busybox

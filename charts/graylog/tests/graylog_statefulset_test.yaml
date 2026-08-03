@@ -236,3 +236,23 @@ tests:
       - notExists:
           path: spec.template.spec.initContainers[1].securityContext
         template: workload/statefulsets/graylog.yaml
+
+  # Service account (chart best practices): create=false + nameOverride means
+  # "use this existing, externally managed ServiceAccount"
+  - it: uses an existing service account when create is false and nameOverride is set
+    set:
+      serviceAccount.create: false
+      serviceAccount.nameOverride: existing-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: existing-sa
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits serviceAccountName when create is false and no nameOverride is set
+    set:
+      serviceAccount.create: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+        template: workload/statefulsets/graylog.yaml

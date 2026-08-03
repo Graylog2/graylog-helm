@@ -5,6 +5,7 @@ metadata:
   name: {{ include "graylog.datanode.name" . }}
   labels:
     app: graylog-datanode
+    app.kubernetes.io/component: datanode
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
     {{- include "graylog.annotations" . | nindent 4 }}
@@ -24,10 +25,16 @@ spec:
       partition: {{ int . }}
       {{- end }}
     {{- end }}
+  {{/* Explicity add the Datanode retentionPolicy */}}
+  {{- $dnRet := .Values.datanode.persistence.retentionPolicy | default dict }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ $dnRet.whenDeleted | default "Retain" }}
+    whenScaled: {{ $dnRet.whenScaled | default "Retain" }}
   template:
     metadata:
       labels:
         app: graylog-datanode
+        app.kubernetes.io/component: datanode
         {{- include "graylog.selectorLabels" . | nindent 8 }}
       annotations:
         checksum/config: {{ include "graylog.datanode.configChecksum" . }}
@@ -44,7 +51,7 @@ spec:
       {{- with .Values.datanode.nodeSelector }}
       nodeSelector: {{ . | toYaml | nindent 8 }}
       {{- end }}
-      {{- if .Values.serviceAccount.create }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.nameOverride }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
       {{- with .Values.datanode.podSecurityContext }}

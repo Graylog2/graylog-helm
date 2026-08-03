@@ -55,3 +55,53 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].securityContext
         template: workload/statefulsets/datanode.yaml
+
+  # Service account (chart best practices): create=false + nameOverride means
+  # "use this existing, externally managed ServiceAccount"
+  - it: uses an existing service account when create is false and nameOverride is set
+    set:
+      serviceAccount.create: false
+      serviceAccount.nameOverride: existing-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: existing-sa
+        template: workload/statefulsets/datanode.yaml
+
+  - it: omits serviceAccountName when create is false and no nameOverride is set
+    set:
+      serviceAccount.create: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+        template: workload/statefulsets/datanode.yaml
+
+  # PVC retention. Pinned explicitly rather than left to the Kubernetes default
+  # so it cannot drift, matching the Graylog StatefulSet.
+  - it: retains the Data Node PVCs on scale-in and on delete by default
+    asserts:
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
+          value: Retain
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Retain
+        template: workload/statefulsets/datanode.yaml
+
+  # Unlike the Graylog StatefulSet, which refuses whenScaled=Delete outright:
+  # shard data on a scaled-in Data Node can be rebuilt from replicas, whereas an
+  # orphaned Graylog journal is not replayable by anything.
+  - it: allows Delete on the Data Node, which the Graylog StatefulSet refuses
+    set:
+      datanode.persistence.retentionPolicy.whenScaled: Delete
+      datanode.persistence.retentionPolicy.whenDeleted: Delete
+    asserts:
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
+          value: Delete
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Delete
+        template: workload/statefulsets/datanode.yaml

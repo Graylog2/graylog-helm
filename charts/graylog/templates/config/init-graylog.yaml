@@ -3,15 +3,43 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "graylog.cm.init.name" . }}
+  labels:
+    app.kubernetes.io/component: server
+    {{- include "graylog.labels" . | nindent 4 }}
 data:
   init-script.sh: |
     #!/bin/sh
-    # initialize data dir
-    if [ -f /mnt/data/journal/.lock ]; then
-      echo "Data already initialized, skipping copy."
+    # Initialize the data dir.
+    #
+    # The sentinel is a dedicated marker, not the journal lock file. Volume
+    # initialization and journal presence are independent concerns: the lock only
+    # exists while a journal does, so disabling the journal - or anything else that
+    # removes that lock - made every restart re-run the copy below and overwrite
+    # volume contents with the image defaults.
+    if [ -f /mnt/data/.initialized ]; then
+      echo "Data volume already initialized, skipping copy."
+    elif [ -f /mnt/data/journal/.lock ]; then
+      # Migration path for volumes initialized by an earlier chart version: they
+      # carry the journal lock but no marker. The lock is proof enough that the
+      # copy already happened, so adopt the volume and stamp the marker. Running
+      # the copy here would clobber a live volume - the exact failure this change
+      # exists to prevent, triggered by the fix itself.
+      echo "Data volume was initialized by an earlier chart version; adopting it."
+      touch /mnt/data/.initialized
     else
-      # copy data dir
-      cp -r /usr/share/graylog/data/* /mnt/data/
+      # A volume initialized by an earlier chart version with the journal disabled
+      # has neither marker nor lock, so it lands here and is copied over once more.
+      # That matches the old behaviour, which re-copied on every restart, and it
+      # self-heals: the marker below stops it recurring.
+      echo "Initializing data volume."
+      # The marker is written only on success. Stamping it after a partial copy
+      # would mark a broken volume as done and never retry.
+      if cp -r /usr/share/graylog/data/* /mnt/data/; then
+        touch /mnt/data/.initialized
+      else
+        echo "Error: failed to copy the default data directory to /mnt/data."
+        exit 1
+      fi
     fi
     {{ if and .Values.graylog.config.tls.enabled }}
     # check that the FDQN for all Graylog nodes is part of the certificate SANs
@@ -42,7 +70,7 @@ data:
         echo "The certificate passed does not contain a root CA. Only this certificate will be added to the truststore."
         echo "Make sure to add a new certificate when performing certificate rotation."
       fi
-      # update java key store
+      # Update Java keystore for BYO Graylog application certs
       CACERTS_SRC="/usr/share/graylog/data/cacerts"
       CACERTS_DST="/mnt/data/cacerts"
       mkdir -p "${CACERTS_SRC}" "${CACERTS_DST}"
@@ -61,6 +89,26 @@ data:
       echo "The Java Key Store remains unchanged. Ensure that the CA that signed your certificates is trusted by default."
     {{- end }}
     fi
+    {{- end }}
+    {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+    # Trust the BYO OpenSearch CA. The truststore must live on the data volume
+    # (/mnt/data here, /usr/share/graylog/data in the main container) and is seeded
+    # from the JDK CA bundle so public CAs (license checks, GeoIP, notifications)
+    # stay trusted. Built in a temp file and mv'd so a failed init can't leave a
+    # half-built store behind.
+    CACERTS_DST="/mnt/data/cacerts"
+    mkdir -p "${CACERTS_DST}"
+    TRUSTSTORE_TMP="${CACERTS_DST}/graylog.jks.tmp"
+    if [ -f "${CACERTS_DST}/graylog.jks" ]; then
+      cp "${CACERTS_DST}/graylog.jks" "${TRUSTSTORE_TMP}"
+    else
+      cp "${JAVA_HOME}/lib/security/cacerts" "${TRUSTSTORE_TMP}"
+    fi
+    # delete-then-import so a rotated CA is picked up on pod restart
+    keytool -delete -alias byo-opensearch-ca -keystore "${TRUSTSTORE_TMP}" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }} >/dev/null 2>&1 || true
+    keytool -importcert -noprompt -alias byo-opensearch-ca -file "/mnt/os-tls/{{ .Values.opensearch.tls.caKey }}" -keystore "${TRUSTSTORE_TMP}" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
+    mv "${TRUSTSTORE_TMP}" "${CACERTS_DST}/graylog.jks"
+    echo "Imported OpenSearch CA into Graylog truststore."
     {{- end }}
     {{- if .Values.graylog.config.plugins.enabled }}
     # copy plugins

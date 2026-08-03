@@ -4,6 +4,7 @@ kind: Service
 metadata:
   name: {{ include "graylog.service.name" . }}
   labels:
+    app.kubernetes.io/component: server
     {{- include "graylog.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.graylog.service.type | default "ClusterIP" }}
@@ -24,7 +25,7 @@ spec:
       targetPort: {{ .targetPort | default .port | int }}
       protocol: {{ .protocol }}
     {{- end }}
-    - name: input-fwd-conf
+    - name: {{ include "graylog.service.port.forwarder.config" . }}
       port: 13302
       targetPort: 13302
       protocol: TCP

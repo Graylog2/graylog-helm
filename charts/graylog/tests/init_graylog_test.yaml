@@ -17,6 +17,47 @@ tests:
       - exists:
           path: data["init-script.sh"]
 
+  # Volume initialization must not be keyed off the journal (J-04). The lock file
+  # only exists while a journal does, so using it as the sentinel meant a disabled
+  # journal re-ran `cp -r` over the volume on every restart.
+  # Runtime behaviour of this logic — including the migration path — is covered by
+  # tests/scripts/init-graylog-behavior-test.sh.
+  - it: uses a dedicated marker file as the initialization sentinel
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'if \[ -f /mnt/data/\.initialized \]; then'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'touch /mnt/data/\.initialized'
+
+  - it: does not gate initialization on the journal lock file
+    asserts:
+      # The lock may still appear as a migration signal, but never as the
+      # first-choice sentinel that decides whether to copy. The leading \s is what
+      # keeps this from matching the legitimate `elif` — "elif" ends in "if", so an
+      # unanchored pattern passes vacuously.
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: '\sif \[ -f /mnt/data/journal/\.lock \]'
+
+  - it: keeps the journal lock only as a migration signal for existing volumes
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'elif \[ -f /mnt/data/journal/\.lock \]'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'initialized by an earlier chart version'
+
+  - it: writes the marker only after a successful copy
+    asserts:
+      # A bare `cp -r ...` followed by an unconditional touch would mark a
+      # half-copied volume as initialized and never retry it.
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'if cp -r /usr/share/graylog/data/\* /mnt/data/; then'
+
   - it: always includes the MongoDB credentials check
     asserts:
       - matchRegex:

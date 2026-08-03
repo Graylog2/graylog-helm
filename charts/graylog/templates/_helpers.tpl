@@ -180,11 +180,34 @@ nothing, which correctly matches the secret being (re)generated in that render.
 {{- end }}
 
 {{/*
+Generated root password already stored in the cluster, base64-encoded, or "" if none.
+
+The plaintext of a generated root password lives in the backup secret so users can
+retrieve it after install. It is only returned when its SHA-256 matches the stored
+hash: a stale value left behind by an explicit password reset is never surfaced.
+Returns "" when the user manages the password themselves (rootPassword set or
+global.existingSecretName in use).
+*/}}
+{{- define "graylog.storedRootPassword" -}}
+{{- if and (not .Values.global.existingSecretName) (empty .Values.graylog.config.rootPassword) }}
+{{- $backup := lookup "v1" "Secret" .Release.Namespace (include "graylog.backupSecretName" .) }}
+{{- $plain := "" }}
+{{- if $backup }}
+{{- $plain = index $backup.data "graylog-root-password" | default "" }}
+{{- end }}
+{{- $sha := include "graylog.storedRootPasswordSha" . }}
+{{- if and $plain $sha (eq ($plain | b64dec | sha256sum | b64enc) $sha) }}
+{{- $plain }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
 Graylog secret pepper
 */}}
 {{- define "graylog.secretPepper" }}
 {{- $pepper := .Values.graylog.config.customSecretPepper | default (randAlphaNum 96) }}
-{{- if len $pepper | ge 64 }}
+{{- if lt (len $pepper) 64 }}
 {{- fail "Use at least 64 characters when setting a secret to pepper the stored user data." }}
 {{- else }}
 {{- print $pepper }}
@@ -263,6 +286,44 @@ Graylog service app port
 {{- end }}
 
 {{/*
+DISABLED 2026-07-30 -- the settings are inert: the forwarder listener is
+configured as attributes on a Graylog input of type "Forwarder", not through
+server.conf, and unrecognised GRAYLOG_* env vars are silently dropped.
+graylog.config.forwarder was removed from values.yaml, so this helper reads a
+path that no longer exists -- re-add those values before restoring it.
+
+Whether the Graylog server should listen for forwarder connections.
+Defaults to ingress.forwarder.enabled so that exposing the ingest endpoint also
+binds the ports behind it; set graylog.config.forwarder.enabled explicitly to
+override (e.g. to bind the ports without creating an Ingress).
+
+{{- define "graylog.forwarder.enabled" -}}
+{{- $configured := .Values.graylog.config.forwarder.enabled -}}
+{{- if kindIs "bool" $configured -}}
+{{- $configured -}}
+{{- else -}}
+{{- .Values.ingress.forwarder.enabled | ternary true false -}}
+{{- end -}}
+{{- end }}
+*/}}
+
+{{/*
+Graylog service port name for the forwarder message channel (default 13301).
+Sourced from graylog.inputs, so it must stay in sync with that entry's name.
+*/}}
+{{- define "graylog.service.port.forwarder.message" -}}
+{{- print "input-forwarder" }}
+{{- end }}
+
+{{/*
+Graylog service port name for the forwarder configuration channel (13302).
+Always exposed by the service; the forwarder polls it for configuration updates.
+*/}}
+{{- define "graylog.service.port.forwarder.config" -}}
+{{- print "input-fwd-conf" }}
+{{- end }}
+
+{{/*
 Graylog configmap name
 */}}
 {{- define "graylog.configmap.name" -}}
@@ -308,6 +369,204 @@ Datanode configmap name
 {{- define "graylog.datanode.configmap.name" -}}
 {{- include "graylog.fullname" . | printf "%s-datanode-config" }}
 {{- end }}
+
+{{/*
+BYO OpenSearch / Data Node mutual-exclusion validation.
+Exactly one indexer source must be selected.
+*/}}
+{{- define "graylog.opensearch.validate" -}}
+{{- if and .Values.datanode.enabled .Values.opensearch.enabled }}
+{{- fail "datanode.enabled and opensearch.enabled are mutually exclusive. To bring your own OpenSearch, set datanode.enabled=false and opensearch.enabled=true." }}
+{{- end }}
+{{- if and (not .Values.datanode.enabled) (not .Values.opensearch.enabled) }}
+{{- fail "No indexer configured: enable the bundled Data Node (datanode.enabled=true) or bring your own OpenSearch (opensearch.enabled=true)." }}
+{{- end }}
+{{- if .Values.opensearch.enabled }}
+{{- if not .Values.opensearch.hosts }}
+{{- fail "opensearch.enabled=true but opensearch.hosts is empty. Provide at least one OpenSearch node URI." }}
+{{- end }}
+{{- if and .Values.opensearch.tls.enabled (not .Values.opensearch.tls.caSecret) (not .Values.global.existingSecretName) }}
+{{- /* CA may legitimately be a public/known CA; warn-by-convention only, no fail */ -}}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Size string to bytes, or "" when the format is not recognised.
+
+Two conventions meet here: Kubernetes resource quantities on persistence.size and
+Graylog's own size strings on the journal settings. They disagree - Kubernetes G is
+10^9 and Gi is 2^30, while Graylog's gb is 2^30 (verified against the exporter:
+maxSize 5gb reports gl_journal_size_limit 5368709120, exactly 5 x 1024^3). So
+suffixes are matched exactly, never case-folded: lowercasing would collapse
+Kubernetes M (10^6) onto m (milli).
+
+Returns "" rather than guessing on anything unrecognised, fractional quantities like
+1.5Gi included. Callers must treat "" as "cannot validate" and skip - a size this
+cannot parse is not grounds for refusing to render.
+
+Usage: {{ include "graylog.sizeToBytes" "8Gi" }}
+*/}}
+{{- define "graylog.sizeToBytes" -}}
+{{- $s := . | toString | trim -}}
+{{- $digits := regexFind "^[0-9]+" $s -}}
+{{- if $digits -}}
+{{- $suffix := substr (len $digits) (len $s) $s -}}
+{{- $units := dict
+    "" 1 "b" 1 "B" 1
+    "k" 1000 "K" 1000 "M" 1000000 "G" 1000000000 "T" 1000000000000
+    "Ki" 1024 "Mi" 1048576 "Gi" 1073741824 "Ti" 1099511627776
+    "kb" 1024 "KB" 1024 "mb" 1048576 "MB" 1048576
+    "gb" 1073741824 "GB" 1073741824 "tb" 1099511627776 "TB" 1099511627776 -}}
+{{- if hasKey $units $suffix -}}
+{{- mul (atoi $digits) (get $units $suffix) -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Message journal durability validation (J-03).
+
+An enabled journal on a non-persistent data dir is a data-loss configuration
+wearing a durability costume: the volume renders as emptyDir while
+GRAYLOG_MESSAGE_JOURNAL_ENABLED=true tells Graylog its write-ahead log survives
+restarts. Every pod replacement then silently discards whatever had not been
+processed yet.
+
+Three things this deliberately does NOT treat as the broken combination:
+
+  - existingClaim. `persistence.enabled=false` with an existingClaim still mounts
+    a real PVC (see the volumes block in the Graylog StatefulSet), so the journal
+    is durable and the config is legitimate.
+  - graylog.enabled=false. No StatefulSet is rendered, so there is no pod and no
+    journal to lose.
+  - A journal that is genuinely turned off. messageJournal.enabled is
+    schema-typed as a *string*, so `if .Values.graylog.config.messageJournal.enabled`
+    is truthy even for "false" - a non-empty string. The comparison below has to
+    be against the value, not its truthiness, or the guard fires on the very
+    configuration it tells people to use.
+*/}}
+{{- define "graylog.journal.validate" -}}
+{{- if .Values.graylog.enabled }}
+{{/* Mirrors how config/graylog.yaml renders the env var: `default true` covers
+     nil/empty, toString covers a bool from a values file, lower covers "False". */}}
+{{- $journal := .Values.graylog.config.messageJournal.enabled | default true | toString | lower }}
+{{- if ne $journal "false" }}
+{{- if and (not .Values.graylog.persistence.enabled) (not .Values.graylog.persistence.existingClaim) }}
+{{/* The first line is deliberately short and everything substantive follows a
+     break: helm-unittest only matches a fail message from the first line break
+     onward, so anything asserted in the test suite has to live below it. */}}
+{{- $msg := "Cannot enable the message journal without persistent storage." }}
+{{- $msg = cat $msg "\n\ngraylog.config.messageJournal.enabled is on while graylog.persistence.enabled=false, so the journal would be backed by an emptyDir volume: every unprocessed message is lost on any pod restart, eviction, or upgrade - while GRAYLOG_MESSAGE_JOURNAL_ENABLED=true tells Graylog its write-ahead log is durable." }}
+{{- $msg = cat $msg "\n\nChoose one of the following instead:" }}
+{{- $msg = cat $msg "\n\nOption A: Durable journal on chart-managed storage (recommended)" }}
+{{- $msg = cat $msg "\n  --set graylog.persistence.enabled=true" }}
+{{- $msg = cat $msg "\n\nOption B: Durable journal on a pre-provisioned claim" }}
+{{- $msg = cat $msg "\n  --set graylog.persistence.existingClaim=my-graylog-data" }}
+{{- $msg = cat $msg "\n\nOption C: No journal at all (ephemeral or test deployments only)" }}
+{{- $msg = cat $msg "\n  --set-string graylog.config.messageJournal.enabled=false" }}
+{{- $msg = cat $msg "\n  --set graylog.persistence.enabled=false" }}
+{{- $msg = cat $msg "\n\nNote: messageJournal.enabled is a string in values.schema.json, so Option C needs --set-string. A bare `--set ...enabled=false` is rejected as a boolean." }}
+{{- $msg = cat $msg "\n\nSee docs/graylog-message-handling.md for what the journal protects and how to drain it." }}
+{{- fail $msg }}
+{{- end }}
+{{/*
+  Journal cap vs volume size (J-06). Only checkable when the chart provisions the
+  volume: an existingClaim's capacity is not knowable at render time, and a
+  disabled persistence has no declared size (and is already rejected above).
+
+  The cap is compared at 90% of the volume rather than 100%. The journal shares the
+  data volume with the node-id, the truststore, content packs and GeoIP databases,
+  and it can overshoot its cap briefly because reaping happens per segment. A full
+  journal throttles inputs by design; a full data volume is a much worse failure.
+*/}}
+{{- if and .Values.graylog.persistence.enabled (not .Values.graylog.persistence.existingClaim) }}
+{{- $capStr := .Values.graylog.config.messageJournal.maxSize | default "5gb" }}
+{{- $volStr := .Values.graylog.persistence.size | default "8Gi" }}
+{{- $cap := include "graylog.sizeToBytes" $capStr }}
+{{- $vol := include "graylog.sizeToBytes" $volStr }}
+{{- if and $cap $vol }}
+{{- $capB := atoi $cap }}
+{{- $volB := atoi $vol }}
+{{- if gt (mul $capB 10) (mul $volB 9) }}
+{{/* Suggestions in MiB: Graylog accepts mb, Kubernetes accepts Mi, and integer
+     division keeps both on the safe side of the 90% line. */}}
+{{- $maxCapMiB := div (mul $volB 9) 10485760 }}
+{{- $minVolMiB := div (add (mul $capB 10) 9437183) 9437184 }}
+{{- $msg := "The message journal cap does not fit the data volume." }}
+{{- $msg = cat $msg (printf "\n\ngraylog.config.messageJournal.maxSize (%s) claims more than 90%% of graylog.persistence.size (%s). The journal shares that volume with the node-id, truststore, content packs and GeoIP databases, so it cannot have all of it." $capStr $volStr) }}
+{{- $msg = cat $msg "\n\nA full journal throttles inputs by design. A full data volume does not - it takes the node down." }}
+{{- $msg = cat $msg "\n\nEither:" }}
+{{- $msg = cat $msg (printf "\n  Lower the cap:      --set-string graylog.config.messageJournal.maxSize=%dmb" $maxCapMiB) }}
+{{- $msg = cat $msg (printf "\n  Or grow the volume: --set graylog.persistence.size=%dMi" $minVolMiB) }}
+{{- $msg = cat $msg "\n\nNote that growing an existing volume needs a StorageClass with allowVolumeExpansion, and shrinking one is not supported at all." }}
+{{- $msg = cat $msg "\n\nSee docs/graylog-message-handling.md for journal sizing." }}
+{{- fail $msg }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Resolve OpenSearch basic-auth credentials as "user:pass" (empty string if none).
+Inline values win; otherwise read from opensearch.auth.existingSecret via lookup.
+*/}}
+{{- define "graylog.opensearch.credentials" -}}
+{{- $u := .Values.opensearch.auth.username | default "" -}}
+{{- $p := .Values.opensearch.auth.password | default "" -}}
+{{- if and (not $u) .Values.opensearch.auth.existingSecret -}}
+  {{- $s := lookup "v1" "Secret" .Release.Namespace .Values.opensearch.auth.existingSecret -}}
+  {{- if $s -}}
+    {{- $u = index $s.data .Values.opensearch.auth.usernameKey | default "" | b64dec -}}
+    {{- $p = index $s.data .Values.opensearch.auth.passwordKey | default "" | b64dec -}}
+  {{- end -}}
+{{- end -}}
+{{- if $u -}}
+{{- printf "%s:%s" $u $p -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Build the comma-joined GRAYLOG_ELASTICSEARCH_HOSTS value, injecting credentials into
+each URI after the scheme.
+*/}}
+{{- define "graylog.opensearch.hosts" -}}
+{{- $creds := include "graylog.opensearch.credentials" . -}}
+{{- $out := list -}}
+{{- range .Values.opensearch.hosts -}}
+  {{- $uri := . | trim -}}
+  {{- if $creds -}}
+    {{- $parts := regexSplit "://" $uri 2 -}}
+    {{- if eq (len $parts) 2 -}}
+      {{- $uri = printf "%s://%s@%s" (index $parts 0) $creds (index $parts 1) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $out = append $out $uri -}}
+{{- end -}}
+{{- join "," $out -}}
+{{- end -}}
+
+{{/*
+Dedicated OpenSearch connection secret name.
+Kept separate from the main Graylog secret so GRAYLOG_ELASTICSEARCH_HOSTS is injected
+even when the user supplies their own secret via global.existingSecretName.
+*/}}
+{{- define "graylog.opensearch.secretName" -}}
+{{- include "graylog.fullname" . | printf "%s-opensearch" }}
+{{- end }}
+
+{{/*
+Whether Graylog needs a custom Java truststore built at init time.
+True when Graylog server TLS wants a keystore update, OR when a BYO OpenSearch CA
+must be trusted.
+*/}}
+{{- define "graylog.truststore.enabled" -}}
+{{- $graylogTls := and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.updateKeyStore -}}
+{{- $osCa := and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret -}}
+{{- if or $graylogTls $osCa -}}true{{- end -}}
+{{- end -}}
 
 {{/*
 Provider-defined Storage Class name
@@ -375,16 +634,29 @@ Graylog Publish URI
 {{- end }}
 
 {{/*
-Graylog External URI
+Graylog External URI, or "" when no source gives a hostname.
+An explicit network.externalUri skips the Service lookup, so a changed load
+balancer address cannot restart the pods. A bare hostname gets the tls.enabled
+scheme and the app port, so a public endpoint needs the full URI form.
 */}}
 {{- define "graylog.externalUri" }}
+{{- $externalUri := "" }}
 {{- $externalHost := "" }}
 {{- $scheme := "http" }}
 {{- $port := include "graylog.service.port.app" . | printf ":%s" }}
-{{- $svc := include "graylog.service.name" . | lookup "v1" "Service" .Release.Namespace }}
+{{- $explicit := .Values.graylog.config.network.externalUri | default "" }}
 {{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.cn }}
   {{- $externalHost = .Values.graylog.config.tls.cn }}
   {{- $scheme = "https" }}
+{{- else if $explicit }}
+  {{- if contains "://" $explicit }}
+    {{- $externalUri = printf "%s/" (trimSuffix "/" $explicit) }}
+  {{- else }}
+    {{- $externalHost = $explicit }}
+    {{- if .Values.graylog.config.tls.enabled }}
+      {{- $scheme = "https" }}
+    {{- end }}
+  {{- end }}
 {{- else if and .Values.ingress.enabled .Values.ingress.web.enabled .Values.ingress.web.tls }}
   {{- with .Values.ingress.web.tls }}
     {{- with (index . 0).hosts }}
@@ -400,12 +672,16 @@ Graylog External URI
     {{- end }}
   {{- end }}
   {{- $port = "" }}
-{{- else if eq .Values.graylog.service.type "LoadBalancer" | and $svc $svc.status.loadBalancer }}
-  {{- $lbName := index $svc.status.loadBalancer.ingress 0 }}
-  {{- $externalHost = coalesce $lbName.hostname $lbName.ip }}
+{{- else if eq .Values.graylog.service.type "LoadBalancer" }}
+  {{- $svc := include "graylog.service.name" . | lookup "v1" "Service" .Release.Namespace }}
+  {{- if and $svc $svc.status.loadBalancer $svc.status.loadBalancer.ingress }}
+    {{- $lb := index $svc.status.loadBalancer.ingress 0 }}
+    {{- $externalHost = coalesce $lb.hostname $lb.ip }}
+  {{- end }}
 {{- end }}
-{{- $externalHost = $externalHost | default .Values.graylog.config.network.externalUri }}
-{{- if $externalHost }}
+{{- if $externalUri }}
+  {{- $externalUri }}
+{{- else if $externalHost }}
   {{- printf "%s://%s%s/" $scheme $externalHost $port }}
 {{- end }}
 {{- end }}
@@ -486,7 +762,7 @@ Graylog Java Options
 */}}
 {{- define "graylog.javaOpts" }}
 {{- $extraOpts := .Values.graylog.config.extraServerJavaOpts | default list }}
-{{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.updateKeyStore }}
+{{- if eq (include "graylog.truststore.enabled" .) "true" }}
 {{- $extraOpts = append $extraOpts "-Djavax.net.ssl.trustStore=/usr/share/graylog/data/cacerts/graylog.jks" }}
 {{- $extraOpts = .Values.graylog.config.tls.keyStorePass | default "changeit" | printf "-Djavax.net.ssl.trustStorePassword=%s" | append $extraOpts }}
 {{- end }}
@@ -499,6 +775,20 @@ Ingress name
 */}}
 {{- define "graylog.ingress.web.name" }}
 {{- include "graylog.fullname" . | printf "%s-web" }}
+{{- end }}
+
+{{/*
+Forwarder message channel ingress name
+*/}}
+{{- define "graylog.ingress.forwarder.message.name" }}
+{{- include "graylog.fullname" . | printf "%s-forwarder-message-channel" }}
+{{- end }}
+
+{{/*
+Forwarder configuration channel ingress name
+*/}}
+{{- define "graylog.ingress.forwarder.config.name" }}
+{{- include "graylog.fullname" . | printf "%s-forwarder-config-channel" }}
 {{- end }}
 
 {{/*

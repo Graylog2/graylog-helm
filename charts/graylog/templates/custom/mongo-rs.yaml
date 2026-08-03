@@ -1,8 +1,19 @@
 {{- if .Values.mongodb.communityResource.enabled }}
+{{/*
+Fail early with an actionable message when the MongoDB operator CRD is missing.
+The lookup guard skips the check for offline renders (helm template, unittest),
+where .Capabilities only contains built-in API versions.
+*/}}
+{{- if and (not (.Capabilities.APIVersions.Has "mongodbcommunity.mongodb.com/v1/MongoDBCommunity")) (lookup "v1" "Namespace" "" .Release.Namespace) }}
+{{- fail "The MongoDBCommunity CRD (mongodbcommunity.mongodb.com/v1) was not found in the cluster. Install the MongoDB Kubernetes Operator first (https://github.com/mongodb/mongodb-kubernetes), or set mongodb.communityResource.enabled=false and provide an external MongoDB via graylog.config.mongodb.customUri." }}
+{{- end }}
 apiVersion: mongodbcommunity.mongodb.com/v1
 kind: MongoDBCommunity
 metadata:
   name: {{ include "graylog.mongodb.crName" . }}
+  labels:
+    app.kubernetes.io/component: mongodb
+    {{- include "graylog.labels" . | nindent 4 }}
 spec:
   {{- $replicas := .Values.mongodb.replicas | default 2 | int }}
   {{- $arbiters := .Values.mongodb.arbiters | default 0 | int }}

@@ -2,9 +2,17 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "graylog.configmap.name" . }}
+  labels:
+    app.kubernetes.io/component: server
+    {{- include "graylog.labels" . | nindent 4 }}
 data:
   GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.service.metrics.enabled | ternary true false | quote }}
+  {{- if .Values.opensearch.enabled }}
+  {{/* Self-signed startup is required for Data Node feature; disable it so Graylog uses elasticsearch_hosts instead of datanode discovery */}}
+  GRAYLOG_SELFSIGNED_STARTUP: "false"
+  {{- else }}
   GRAYLOG_SELFSIGNED_STARTUP: {{ .Values.graylog.config.selfSignedStartup | default true | quote }}
+  {{- end }}
   GRAYLOG_IS_CLOUD: {{ .Values.graylog.config.isCloud | default false | quote }}
   GRAYLOG_SERVER_JAVA_OPTS: {{ include "graylog.javaOpts" . | quote }}
   GRAYLOG_LEADER_ELECTION_MODE: {{ .Values.graylog.config.leaderElectionMode | quote }}
@@ -33,6 +41,7 @@ data:
   GRAYLOG_MESSAGE_JOURNAL_FLUSH_AGE: {{ .Values.graylog.config.messageJournal.flushAge | quote }} 
   GRAYLOG_MESSAGE_JOURNAL_FLUSH_INTERVAL: {{ .Values.graylog.config.messageJournal.flushInterval | int | quote }}
   GRAYLOG_MESSAGE_JOURNAL_MAX_AGE: {{ .Values.graylog.config.messageJournal.maxAge | quote }}
+  GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE: {{ .Values.graylog.config.messageJournal.maxSize | default "5gb" | quote }}
   GRAYLOG_MESSAGE_JOURNAL_SEGMENT_AGE: {{ .Values.graylog.config.messageJournal.segmentAge | quote }}
   GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE: {{ .Values.graylog.config.messageJournal.segmentSize | quote }}
 
@@ -51,6 +60,30 @@ data:
   {{- end -}}
   {{/* http_publish_uri is rendered directly on the PodSpec for each Graylog node based on $POD_NAME */}}
   # GRAYLOG_HTTP_PUBLISH_URI: ""
+
+  {{/* DISABLED 2026-07-30 -- these settings are INERT. Verified against Graylog
+     Enterprise 7.1.6: the forwarder listener is configured as attributes on a
+     Graylog input of type "Forwarder"
+     (org.graylog.plugins.forwarder.input.ForwarderServiceInput), NOT via
+     server.conf:
+         forwarder_bind_address                default 0.0.0.0
+         forwarder_message_transmission_port   default 13301
+         forwarder_configuration_port          default 13302
+         forwarder_grpc_enable_tls             default TRUE
+     Unrecognised GRAYLOG_* env vars are silently dropped, so rendering
+     GRAYLOG_FORWARDER_BIND_ADDRESS did nothing -- 13301/13302 stayed closed until
+     the input was created, after which Graylog bound them on every node.
+     graylog.config.forwarder has since been removed from values.yaml, so the
+     block below reads paths that no longer exist; re-add them to restore it.
+     NOTE: grpc TLS defaults to TRUE on the input; behind a TLS-terminating load
+     balancer it must be set false or targets stay unhealthy.
+
+  {{- if include "graylog.forwarder.enabled" . | eq "true" }}
+  # Forwarder
+  GRAYLOG_FORWARDER_BIND_ADDRESS: {{ .Values.graylog.config.forwarder.bindAddress | quote }}
+  GRAYLOG_FORWARDER_GRPC_ENABLE_TLS: {{ .Values.graylog.config.forwarder.grpcEnableTls | quote }}
+  {{- end }}
+  */}}
 
   # Performance Tuning
   GRAYLOG_ASYNC_EVENTBUS_PROCESSORS: {{ .Values.graylog.config.performance.asyncEventbusProcessors | int | quote }}

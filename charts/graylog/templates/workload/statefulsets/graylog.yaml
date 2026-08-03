@@ -6,6 +6,7 @@ metadata:
   name: {{ include "graylog.fullname" . }}
   labels:
     app: graylog-app
+    app.kubernetes.io/component: server
     {{- include "graylog.labels" . | nindent 4 }}
   annotations:
     {{- include "graylog.annotations" . | nindent 4 }}
@@ -25,10 +26,18 @@ spec:
       partition: {{ int . }}
       {{- end }}
     {{- end }}
+  {{- $ret := .Values.graylog.persistence.retentionPolicy }}
+  {{- if eq ($ret.whenScaled | default "Retain") "Delete" }}
+  {{- fail "graylog.persistence.retentionPolicy.whenScaled=Delete would destroy the journal of any scaled-in node.\n  Scaling in removes the highest ordinal; anything still unprocessed in its journal exists only on that claim, and nothing replays an orphaned journal.\n  Delete makes that loss silent and unrecoverable.\n  Either:\n    Leave whenScaled=Retain and delete claims by hand once verified empty (see docs/graylog-message-handling.md)\n    Or set graylog.persistence.enabled=false if this deployment does not need a durable journal." }}
+  {{- end }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ $ret.whenDeleted | default "Retain" }}
+    whenScaled: {{ $ret.whenScaled | default "Retain" }}
   template:
     metadata:
       labels:
         app: graylog-app
+        app.kubernetes.io/component: server
         {{- include "graylog.selectorLabels" . | nindent 8 }}
       annotations:
         checksum/config: {{ include "graylog.configChecksum" . }}
@@ -38,6 +47,9 @@ spec:
       {{- end }}
     spec:
       dnsPolicy: ClusterFirst
+      {{- with .Values.graylog.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ int . }}
+      {{- end }}
       {{- with .Values.graylog.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -45,7 +57,7 @@ spec:
       {{- with .Values.graylog.nodeSelector }}
       nodeSelector: {{ . | toYaml | nindent 8 }}
       {{- end }}
-      {{- if .Values.serviceAccount.create }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.nameOverride }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
       {{- with .Values.graylog.podSecurityContext }}
@@ -71,6 +83,10 @@ spec:
                 name: {{ include "graylog.configmap.name" . }}
             - secretRef:
                 name: {{ include "graylog.secretsName" . }}
+            {{- if .Values.opensearch.enabled }}
+            - secretRef:
+                name: {{ include "graylog.opensearch.secretName" . }}
+            {{- end }}
           volumeMounts:
             - name: {{ include "graylog.volume.name" . }}
               mountPath: /mnt/data
@@ -80,6 +96,11 @@ spec:
             - name: tls-creds
               mountPath: /mnt/tls/tls.crt
               subPath: tls.crt
+              readOnly: true
+            {{- end }}
+            {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+            - name: os-ca
+              mountPath: /mnt/os-tls
               readOnly: true
             {{- end }}
         {{- if .Values.graylog.config.plugins.enabled }}
@@ -127,11 +148,18 @@ spec:
           {{- if or .Values.graylog.env .Values.graylog.extraEnv }}
             {{- include "graylog.env" .Values.graylog | indent 12 }}
           {{- end }}
+          {{/* Config for the preStop drain hook, which inherits this container's
+               environment. Renders nothing when the drain is disabled. */}}
+          {{- include "graylog.prestopDrain.env" . | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ include "graylog.configmap.name" . }}
             - secretRef:
                 name: {{ include "graylog.secretsName" . }}
+            {{- if .Values.opensearch.enabled }}
+            - secretRef:
+                name: {{ include "graylog.opensearch.secretName" . }}
+            {{- end }}
           ports:
             - name: app
               containerPort: {{ .Values.graylog.service.ports.app | int }}
@@ -144,7 +172,7 @@ spec:
               containerPort: {{ .targetPort | default .port | int }}
               protocol: {{ .protocol }}
             {{- end }}
-            - name: input-fwd-conf
+            - name: {{ include "graylog.service.port.forwarder.config" . }}
               containerPort: 13302
               protocol: TCP
           {{- if .Values.graylog.livenessProbe.enabled }}
@@ -167,6 +195,7 @@ spec:
             failureThreshold: {{ .Values.graylog.readinessProbe.failureThreshold | int }}
             successThreshold: {{ .Values.graylog.readinessProbe.successThreshold | int }}
           {{- end }}
+          {{- include "graylog.lifecycle" . | nindent 10 }}
           {{- with .Values.graylog.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -224,6 +253,11 @@ spec:
       - name: tls-creds
         secret:
           secretName: {{ .Values.graylog.config.tls.secretName | quote }}
+      {{- end }}
+      {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+      - name: os-ca
+        secret:
+          secretName: {{ .Values.opensearch.tls.caSecret }}
       {{- end }}
       {{- if .Values.graylog.config.plugins.enabled }}
       - name: init-plugins
