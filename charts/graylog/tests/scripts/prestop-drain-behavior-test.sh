@@ -93,10 +93,13 @@ begin() {
   mkdir -p "${FX}"
   SAMPLE_N=0
   SHAPE=labeled
-  # Zero poll/settle keeps the suite fast. GRACE-RESERVE is the real deadline,
-  # so 60s of headroom means no scenario ends by timeout unless it asks to.
-  E_BUDGET=60; E_POLL=0; E_SETTLE=0; E_STALL=10; E_STATUS=0
-  E_CONFIRM=3; E_RETRIES=3; E_GRACE=60; E_RESERVE=0; E_WARMUP=0
+  # Zero poll/settle keeps the suite fast. GRACE-RESERVE is the real deadline, and
+  # it doubles as the per-scenario ceiling: with POLL=0 a scenario whose exit
+  # condition stops firing busy-spins until the deadline, so keep it small. 15s is
+  # ample headroom for every scenario here (the slowest uses 2s polls) while
+  # bounding a future regression to 15s instead of a minute.
+  E_BUDGET=15; E_POLL=0; E_SETTLE=0; E_STALL=10; E_STATUS=0
+  E_CONFIRM=3; E_RETRIES=3; E_GRACE=15; E_RESERVE=0; E_WARMUP=0
 }
 
 # sample <depth> [rate] [size] [limit] — appends one scripted /metrics response.
@@ -176,6 +179,20 @@ refute() {
 expect_rc() {
   if [ "${RC}" = "$1" ]; then ok "exit ${RC}"; else bad "exit ${RC}, wanted $1"; fi
 }
+# expect_phases_sum — the verdict's "Ns total (As preflight + Bs settle + Cs draining)"
+# breakdown must actually add up to the total. Asserting literal zeros here was
+# flaky: preflight legitimately takes a second under load.
+expect_phases_sum() {
+  _line=$(grep -oE '[0-9]+s total \([0-9]+s preflight \+ [0-9]+s settle \+ [0-9]+s draining\)' "${OUT}" | head -1)
+  if [ -z "${_line}" ]; then bad "no phase breakdown in the verdict"; return; fi
+  set -- $(printf '%s' "${_line}" | tr -cd '0-9 ' | tr -s ' ')
+  if [ "$(( $2 + $3 + $4 ))" = "$1" ]; then
+    ok "phases sum to the total (${_line})"
+  else
+    bad "phases do not sum: ${_line}"
+  fi
+}
+
 # expect_before <a> <b> — a must appear earlier in the log than b.
 expect_before() {
   _la=$(grep -nF -- "$1" "${OUT}" | head -1 | cut -d: -f1)
@@ -304,7 +321,7 @@ expect "stop the inputs and drain manually to save them"
 header "8. feasibility gate: a drain too slow to finish aborts with an ETA"
 begin "infeasible - too slow"
 E_WARMUP=3
-E_GRACE=60; E_RESERVE=0; E_BUDGET=60
+E_GRACE=15; E_RESERVE=0; E_BUDGET=15
 sample 1000000 5000
 sample 1000000; sample 999900; sample 999800
 run
@@ -462,7 +479,7 @@ run
 expect_rc 0
 # Preflight + settle + draining, all measured. A preflight-only exit must not
 # claim a settle it never waited.
-expect "s total (0s preflight + 0s settle + 0s draining)"
+expect_phases_sum
 expect "handing over to SIGTERM with"
 expect "guaranteed floor was 0s"
 

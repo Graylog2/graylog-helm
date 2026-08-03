@@ -13,7 +13,6 @@ For the values that configure this, see
 - [Scaling in safely](#scaling-in-safely)
 - [Automatic drain on shutdown](#automatic-drain-on-shutdown)
 - [Reading the drain logs](#reading-the-drain-logs)
-- [Failure modes](#failure-modes)
 - [Deleting a leftover PVC](#deleting-a-leftover-pvc)
 - [Recovering a stranded journal](#recovering-a-stranded-journal)
 
@@ -42,9 +41,9 @@ The journal cap and the data volume have to be sized together.
 | `graylog.config.messageJournal.maxSize` | `5gb` | on-disk journal cap |
 | `graylog.persistence.size` | `8Gi` | the whole data volume |
 
-Graylog's suffixes are binary: `5gb` is 5×1024³, which is what the exporter reports
-as `gl_journal_size_limit`. Kubernetes quantities are not the same — `8G` is 8×10⁹,
-`8Gi` is 8×1024³.
+> [!NOTE]
+> Graylog's suffixes are binary: `5gb` is 5×1024³, which is what the exporter reports
+> as `gl_journal_size_limit`. Kubernetes quantities are not the same — `8G` is 8×10⁹, `8Gi` is 8×1024³.
 
 The journal is not alone on that volume. It shares it with the `node-id`, the JVM
 truststore, content packs, and GeoIP databases, and it can briefly overshoot its cap
@@ -95,15 +94,28 @@ or internally generated inputs.
 ```sh
 # list inputs
 curl -su "admin:$PASS" http://localhost:9000/api/system/inputs | jq '.inputs[] | {id, title}'
-# stop one
-curl -su "admin:$PASS" -X DELETE http://localhost:9000/api/system/inputs/<id>
+
+# stop one across the whole cluster (this is the one you want for a scale-in)
+curl -su "admin:$PASS" -H 'X-Requested-By: cli' \
+  -X DELETE http://localhost:9000/api/cluster/inputstates/<id>
 ```
 
 Or **System > Inputs** in the UI. Requires admin auth.
 
+> [!WARNING]
+> Stop inputs via `inputstates`, never `DELETE /api/system/inputs/<id>` — that one is
+> "Terminate input on this node" and removes the input definition. `inputstates` stops
+> a running input and leaves it configured, so `PUT` on the same path starts it again.
+> `/api/system/inputstates/<id>` is the node-scoped variant; `/api/cluster/inputstates/<id>`
+> covers every node, which is what quiesces the journal.
+
+Every state-changing Graylog API call needs an `X-Requested-By` header (any value) or
+it fails with `CSRF protection header is missing`. That applies to the `lbstatus`
+override below too.
+
 **2. Take the node out of rotation.** Graylog publishes its load-balancer state at
-`/api/system/lbstatus` — unauthenticated, returns `200` alive, `429` throttled,
-`503` dead.
+`/api/system/lbstatus` — unauthenticated, and the body is the plain word `ALIVE`,
+`THROTTLED` or `DEAD` with HTTP `200`, `429` or `503` respectively.
 
 ```sh
 kubectl exec -n graylog graylog-2 -- curl -so /dev/null -w '%{http_code}\n' \
@@ -113,9 +125,12 @@ kubectl exec -n graylog graylog-2 -- curl -so /dev/null -w '%{http_code}\n' \
 Force it dead before scaling (requires admin auth):
 
 ```sh
-kubectl exec -n graylog graylog-2 -- curl -su "admin:$PASS" \
+kubectl exec -n graylog graylog-2 -- curl -su "admin:$PASS" -H 'X-Requested-By: cli' \
   -X PUT http://localhost:9000/api/system/lbstatus/override/dead
 ```
+
+Returns `204`. The value is case-insensitive, and `ALIVE`/`DEAD`/`THROTTLED` are the
+only ones accepted. Undo it with `override/alive`; a lifecycle change also resets it.
 
 > [!NOTE]
 > The chart's readiness probe is a TCP check, so `lb_status: DEAD` does not currently
@@ -131,8 +146,12 @@ curl -s localhost:9833/metrics | grep '^gl_journal_entries_uncommitted'
 ```
 
 Port-forward the **pod**, not the Service — the Service answers from an arbitrary
-node. The equivalent REST call is `GET /api/system/journal` (`uncommitted_entries`),
-which needs admin auth; the metrics gauge does not.
+node. The equivalent REST call is `GET /api/system/journal`, which needs admin auth; the
+metrics gauge does not. The field is **`uncommitted_journal_entries`** — not
+`uncommitted_entries`. That response also carries `journal_size`,
+`journal_size_limit`, `number_of_segments`, `oldest_segment`, and a `journal_config`
+block echoing the effective settings, which is the quickest way to confirm a
+`maxSize` change actually took.
 
 **4. Scale down by one and wait.** Do not jump several ordinals at once.
 
@@ -311,6 +330,78 @@ The hook did not run. Check `graylog.lifecycle.preStopDrain.enabled`, and that y
 are following logs from before termination. Kubernetes discards `preStop` stdout by
 default — these lines are visible only because the hook writes to PID 1's stdout
 deliberately.
+
+## Deleting a leftover PVC
+
+Scale-in leaves the highest ordinal's claim behind. The chart never deletes it. The
+decision is yours, and it is not reversible by default.
+
+> [!WARNING]
+> Deleting the PVC is what destroys the data, and most StorageClasses use
+> `reclaimPolicy: Delete` — including this chart's own gp3 class — so the underlying
+> disk goes with it. The chart's retention policy protects the claim from the
+> StatefulSet controller, not from you or from a GitOps prune.
+
+Make the volume survivable first. A PV's reclaim policy is mutable, unlike a
+StorageClass's:
+
+```sh
+PV=$(kubectl get pvc graylog-data-graylog-2 -n graylog -o jsonpath='{.spec.volumeName}')
+kubectl patch pv "$PV" -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+```
+
+A PV only picks up its reclaim policy at provision time, so changing the
+StorageClass later does not help existing volumes. Patch the PV.
+
+For GitOps, `graylog.persistence.annotations` flows into the volumeClaimTemplate, so
+`argocd.argoproj.io/sync-options: Prune=false` works — but volumeClaimTemplates are
+effectively immutable, so annotations only land on PVCs created *after* you set
+them. Adding this later does not protect the ordinal you are trying to save.
+
+### Verifying before you delete
+
+The drain verdict is good evidence but point-in-time, and "committed" means read out
+of the journal into the pipeline — the last hop into OpenSearch happens from an
+in-memory buffer during shutdown. Confirm rather than assume. Strongest first:
+
+1. **Re-attach it.** Scale back up by one. The ordinal returns, re-binds the claim,
+   and Graylog replays anything unprocessed. Watch `uncommitted` settle at 0 with
+   inputs stopped, then scale in again and delete. This is both the test and the fix.
+
+2. **Inspect it offline.** Graylog ships a journal CLI, which is the most direct
+   option once the claim is mounted somewhere:
+
+   ```sh
+   # needs a config file with data_dir pointing at the mounted volume
+   graylog journal show --show-segments
+   ```
+
+   `graylog journal decode <range>` reads messages back out. Avoid
+   `graylog journal truncate` unless you intend to discard entries.
+
+   `examples/inspect-orphaned-journal.yaml` mounts the claim read-only and compares
+   the committed offset against the segments without needing a config file.
+
+   ```sh
+   kubectl apply -n graylog -f examples/inspect-orphaned-journal.yaml
+   kubectl logs -n graylog journal-inspector -f
+   kubectl delete -n graylog pod/journal-inspector
+   ```
+
+   > [!IMPORTANT]
+   > This can prove messages **were** stranded, not that they were not. Graylog's
+   > offset index is sparse, so records past the last index entry are invisible to any
+   > offline reader. Measured on a live node: the index looked clean while the node
+   > had 537 unprocessed messages. `NO EVIDENCE OF STRANDED DATA` means no evidence.
+
+Expect the on-disk size to sawtooth — climbing, then dropping ~100MB at once as a
+fully-committed segment is reaped. That is retention, not loss.
+
+Then:
+
+```sh
+kubectl delete pvc graylog-data-graylog-2 -n graylog
+```
 
 ## Recovering a stranded journal
 

@@ -119,10 +119,10 @@ sample() {
   curl -fsS --max-time 5 "${URL}" 2>/dev/null \
     | awk -v d="${DEPTH_GAUGE}" -v r="${RATE_GAUGE}" \
           -v s="${SIZE_GAUGE}" -v l="${LIMIT_GAUGE}" '
-        $1 ~ "^"d"[{ ]" || index($1, d"{") == 1 { v = $NF }
-        $1 ~ "^"r"[{ ]" || index($1, r"{") == 1 { a = $NF }
-        $1 ~ "^"s"[{ ]" || index($1, s"{") == 1 { z = $NF }
-        $1 ~ "^"l"[{ ]" || index($1, l"{") == 1 { m = $NF }
+        $1 == d || $1 ~ "^"d"[{ ]" || index($1, d"{") == 1 { v = $NF }
+        $1 == r || $1 ~ "^"r"[{ ]" || index($1, r"{") == 1 { a = $NF }
+        $1 == s || $1 ~ "^"s"[{ ]" || index($1, s"{") == 1 { z = $NF }
+        $1 == l || $1 ~ "^"l"[{ ]" || index($1, l"{") == 1 { m = $NF }
         END {
           if (v == "") exit 1
           if (z == "") z = 0
@@ -378,7 +378,11 @@ while [ "$(date +%s)" -lt "${deadline}" ]; do
     # Restart the progress baseline. Leaving best at 0 would make every
     # subsequent reading "no new low", so the stall counter would climb every
     # poll and report INCOMPLETE while the drain was in fact still working.
+    # The accumulated count has to go with it: a drain that blips to zero late,
+    # having already banked polls without a new low, would otherwise trip
+    # STALL_LIMIT within a poll or two of genuinely resuming.
     best="${n}"
+    stall=0
   fi
   first_poll=0
 
