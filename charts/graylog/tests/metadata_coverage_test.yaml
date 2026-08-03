@@ -319,26 +319,6 @@ tests:
           path: spec.statefulSet.spec.volumeClaimTemplates[1].metadata.annotations.note
           value: mongo-data
 
-  - it: appends extra MongoDB users to the chart-managed ones
-    set:
-      mongodb.users:
-        - name: reporting
-          db: graylog
-          passwordSecretRef:
-            name: reporting-secret
-          roles:
-            - name: read
-              db: graylog
-          scramCredentialsSecretName: reporting-scram
-    template: custom/mongo-rs.yaml
-    asserts:
-      - lengthEqual:
-          path: spec.users
-          count: 3
-      - equal:
-          path: spec.users[2].name
-          value: reporting
-
   - it: labels the web Ingress and keeps the chart's own annotations
     set:
       ingress.enabled: true

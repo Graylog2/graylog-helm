@@ -131,18 +131,11 @@ tests:
       - notExists:
           path: spec.template.spec.runtimeClassName
 
-  - it: renders the Graylog volume claim metadata, selector and dataSource
+  - it: renders the Graylog volume claim metadata
     set:
       graylog.persistence.labels.tier: backend
       graylog.persistence.annotations.note: graylog-data
       global.commonLabels.env: dev
-      graylog.persistence.selector:
-        matchLabels:
-          disk: fast
-      graylog.persistence.dataSource:
-        name: graylog-snapshot
-        kind: VolumeSnapshot
-        apiGroup: snapshot.storage.k8s.io
     template: workload/statefulsets/graylog.yaml
     asserts:
       - equal:
@@ -154,12 +147,6 @@ tests:
       - equal:
           path: spec.volumeClaimTemplates[0].metadata.annotations.note
           value: graylog-data
-      - equal:
-          path: spec.volumeClaimTemplates[0].spec.selector.matchLabels.disk
-          value: fast
-      - equal:
-          path: spec.volumeClaimTemplates[0].spec.dataSource.name
-          value: graylog-snapshot
 
   - it: adds extra volumes, mounts and containers to the Datanode pods
     set:
@@ -211,17 +198,10 @@ tests:
       - notExists:
           path: spec.template.spec.initContainers
 
-  - it: renders the Datanode volume claim metadata, selector and dataSource
+  - it: renders the Datanode volume claim metadata
     set:
       datanode.persistence.data.labels.tier: storage
       datanode.persistence.data.annotations.note: hot
-      datanode.persistence.data.selector:
-        matchLabels:
-          disk: nvme
-      datanode.persistence.data.dataSource:
-        name: datanode-snapshot
-        kind: VolumeSnapshot
-        apiGroup: snapshot.storage.k8s.io
     template: workload/statefulsets/datanode.yaml
     asserts:
       - equal:
@@ -230,26 +210,13 @@ tests:
       - equal:
           path: spec.volumeClaimTemplates[0].metadata.annotations.note
           value: hot
-      - equal:
-          path: spec.volumeClaimTemplates[0].spec.selector.matchLabels.disk
-          value: nvme
-      - equal:
-          path: spec.volumeClaimTemplates[0].spec.dataSource.name
-          value: datanode-snapshot
 
-  - it: renders the Datanode native-libs volume claim metadata, selector and dataSource
+  - it: renders the Datanode native-libs volume claim metadata
     set:
       datanode.persistence.nativeLibs.enabled: true
       datanode.persistence.nativeLibs.labels.tier: storage
       datanode.persistence.nativeLibs.annotations.note: native-libs
       global.commonAnnotations.owner: platform-team
-      datanode.persistence.nativeLibs.selector:
-        matchLabels:
-          disk: ssd
-      datanode.persistence.nativeLibs.dataSource:
-        name: native-libs-snapshot
-        kind: VolumeSnapshot
-        apiGroup: snapshot.storage.k8s.io
     template: workload/statefulsets/datanode.yaml
     asserts:
       - equal:
@@ -264,12 +231,6 @@ tests:
       - equal:
           path: spec.volumeClaimTemplates[1].metadata.annotations.owner
           value: platform-team
-      - equal:
-          path: spec.volumeClaimTemplates[1].spec.selector.matchLabels.disk
-          value: ssd
-      - equal:
-          path: spec.volumeClaimTemplates[1].spec.dataSource.name
-          value: native-libs-snapshot
 
   - it: keeps extra volumes on the Datanode when both persistent volumes are enabled
     set:

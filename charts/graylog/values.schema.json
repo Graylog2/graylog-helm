@@ -405,12 +405,6 @@
             },
             "labels": {
               "type": "object"
-            },
-            "selector": {
-              "type": "object"
-            },
-            "dataSource": {
-              "type": "object"
             }
           }
         },
@@ -691,12 +685,6 @@
                   "type": "object"
                 },
                 "labels": {
-                  "type": "object"
-                },
-                "selector": {
-                  "type": "object"
-                },
-                "dataSource": {
                   "type": "object"
                 }
               }

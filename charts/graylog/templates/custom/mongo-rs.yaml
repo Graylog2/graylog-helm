@@ -54,9 +54,6 @@ spec:
         - name: readWrite
           db: {{ include "graylog.mongodb.crDatabase" . }}
       scramCredentialsSecretName: {{ printf "%s-%s" (include "graylog.mongodb.crName" .) (include "graylog.mongodb.crUsername" .) }}
-    {{- with .Values.mongodb.users }}
-      {{- . | toYaml | nindent 4 }}
-    {{- end }}
   statefulSet:
     spec:
       template:

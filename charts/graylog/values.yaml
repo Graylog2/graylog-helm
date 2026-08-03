@@ -343,10 +343,6 @@ graylog:
     size:
     annotations: {}
     labels: {}
-    # selector restricts which PersistentVolume can back the claim.
-    selector: {}
-    # dataSource populates the volume from an existing snapshot or PVC.
-    dataSource: {}
   # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
   # for the Graylog container (TCP checks against the app port).
   livenessProbe:
@@ -624,10 +620,6 @@ datanode:
       size: "2Gi"
       annotations: {}
       labels: {}
-      # selector restricts which PersistentVolume can back the claim.
-      selector: {}
-      # dataSource populates the volume from an existing snapshot or PVC.
-      dataSource: {}
   # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
   # for the Datanode container.
   livenessProbe:
@@ -869,8 +861,6 @@ mongodb:
   # to the MongoDB pods it creates.
   podAnnotations: {}
   podLabels: {}
-  # users lists additional MongoDB users, appended to the chart-managed one.
-  users: []
   persistence:
     # storageClass overrides global.storageClass for the MongoDB volumes.
     storageClass: ""

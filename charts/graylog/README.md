@@ -1100,8 +1100,6 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.persistence.size`                                            | Size of the persistent volume.                              | `""`                            |
 | `graylog.persistence.annotations`                                     | Annotations for the persistent volume claim.                | `{}`                            |
 | `graylog.persistence.labels`                                          | Labels for the persistent volume claim.                     | `{}`                            |
-| `graylog.persistence.selector`                                        | Selector for the persistent volume.                         | `{}`                            |
-| `graylog.persistence.dataSource`                                      | Data source to restore the volume from (e.g. a snapshot).   | `{}`                            |
 | `graylog.livenessProbe.enabled`                                       | Enable liveness probe.                                      | `true`                          |
 | `graylog.livenessProbe.initialDelaySeconds`                           | Initial delay for liveness probe.                           | `60`                            |
 | `graylog.livenessProbe.periodSeconds`                                 | Period between liveness probe checks.                       | `10`                            |
@@ -1230,8 +1228,6 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.persistence.nativeLibs.size`                 | Size of the native libs volume.                 | `"2Gi"`           |
 | `datanode.persistence.nativeLibs.annotations`          | Annotations for native libs PVC.                | `{}`              |
 | `datanode.persistence.nativeLibs.labels`               | Labels for native libs PVC.                     | `{}`              |
-| `datanode.persistence.nativeLibs.selector`             | Selector for native libs PVC.                   | `{}`              |
-| `datanode.persistence.nativeLibs.dataSource`           | Data source for native libs PVC.                | `{}`              |
 | `datanode.livenessProbe.enabled`                       | Enable liveness probe.                          | `true`            |
 | `datanode.livenessProbe.initialDelaySeconds`           | Initial delay for liveness probe.               | `30`              |
 | `datanode.livenessProbe.periodSeconds`                 | Period between liveness probe checks.           | `10`              |
@@ -1403,7 +1399,6 @@ Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/ma
 | `mongodb.labels`                      | Labels for the `MongoDBCommunity` object.                   | `{}`                                                                                                                                                                                                                   |
 | `mongodb.podAnnotations`              | Annotations for the MongoDB pods.                           | `{}`                                                                                                                                                                                                                   |
 | `mongodb.podLabels`                   | Labels for the MongoDB pods.                                | `{}`                                                                                                                                                                                                                   |
-| `mongodb.users`                       | Additional MongoDB users, appended to the chart-managed ones. | `[]`                                                                                                                                                                                                                 |
 | `mongodb.persistence.storageClass`    | StorageClass to use for persistent volumes.                 | `""`                                                                                                                                                                                                                   |
 | `mongodb.persistence.size.data`       | Persistent volume size for data storage.                    | `"10G"`                                                                                                                                                                                                                |
 | `mongodb.persistence.size.logs`       | Persistent volume size for MongoDB logs.                    | `"2G"`                                                                                                                                                                                                                 |

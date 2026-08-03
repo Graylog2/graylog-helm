@@ -318,14 +318,6 @@ spec:
         {{- with (include "graylog.storageClassName" .) }}
         storageClassName: {{ . | quote }}
         {{- end }}
-        {{- with .Values.graylog.persistence.selector }}
-        selector:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.graylog.persistence.dataSource }}
-        dataSource:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
         accessModes:
         {{- if .Values.graylog.persistence.accessModes }}
         {{- range .Values.graylog.persistence.accessModes }}

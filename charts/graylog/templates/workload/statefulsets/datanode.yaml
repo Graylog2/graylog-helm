@@ -229,14 +229,6 @@ spec:
         {{- with (include "graylog.datanode.data.storageClassName" . ) }}
         storageClassName: {{ . | quote }}
         {{- end }}
-        {{- with .Values.datanode.persistence.data.selector }}
-        selector:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.datanode.persistence.data.dataSource }}
-        dataSource:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
         resources:
           requests:
             storage: {{ .Values.datanode.persistence.data.size | default "8Gi" | quote }}
@@ -257,14 +249,6 @@ spec:
         {{- end }}
         {{- with (include "graylog.datanode.nativeLibs.storageClassName" . ) }}
         storageClassName: {{ . | quote }}
-        {{- end }}
-        {{- with .Values.datanode.persistence.nativeLibs.selector }}
-        selector:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
-        {{- with .Values.datanode.persistence.nativeLibs.dataSource }}
-        dataSource:
-          {{- toYaml . | nindent 10 }}
         {{- end }}
         resources:
           requests:
