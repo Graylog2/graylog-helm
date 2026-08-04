@@ -515,6 +515,196 @@ helm upgrade graylog graylog/graylog -n graylog --set graylog.readinessProbe.ini
 helm upgrade graylog graylog/graylog -n graylog --set global.storageClass="gp2" --reuse-values
 ```
 
+### Labels and annotations
+
+Every object the chart deploys accepts custom labels and annotations. Set them
+once with `global.commonLabels` / `global.commonAnnotations`, and use the
+per-object values when only one resource needs them:
+
+```yaml
+# custom-metadata.yaml
+global:
+  commonLabels:
+    cost-center: "1234"
+    environment: production
+  commonAnnotations:
+    owner: observability-team
+
+graylog:
+  # StatefulSet, ConfigMaps and Secrets
+  labels:
+    tier: backend
+  annotations:
+    reloader.stakater.com/auto: "true"
+  # Graylog pods only
+  podLabels:
+    tier: backend
+  podAnnotations:
+    prometheus.io/scrape: "true"
+  service:
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+
+datanode:
+  labels:
+    tier: storage
+
+ingress:
+  web:
+    labels:
+      tier: edge
+```
+
+> [!NOTE]
+> MongoDB pods are the one exception. `mongodb.labels` / `mongodb.annotations`
+> apply to the `MongoDBCommunity` object, but there is no `mongodb.podLabels` —
+> the MongoDB Community operator owns the pod template of the StatefulSet it
+> manages, labels it `app: <release>-mongo-rs-svc` and discards anything the
+> chart puts there. Pod-level metadata for MongoDB has to come from the
+> operator's own API.
+
+Precedence, lowest to highest: `global.common*`, the per-object value, then the
+chart's own identity labels (`app.kubernetes.io/*`, `helm.sh/chart`, `app`) and
+its Helm hook and resource-policy annotations. Chart-owned values always win, so
+custom metadata can never break release lifecycle handling.
+
+> [!NOTE]
+> Custom labels never reach a workload's `spec.selector`, which is immutable
+> once created. They land on the object and on the pod template only, so labels
+> can safely be added to a release that is already running — `helm upgrade` will
+> not fail on a changed selector.
+
+#### Immutable fields are deliberately left alone
+
+Kubernetes accepts updates to only six StatefulSet `spec` fields: `replicas`,
+`ordinals`, `template`, `updateStrategy`, `persistentVolumeClaimRetentionPolicy`
+and `minReadySeconds`. Anything else — `selector` and `volumeClaimTemplates` in
+particular — is rejected on update.
+
+So the chart injects nothing into those fields. `global.commonLabels` and
+`global.commonAnnotations` reach every object's own metadata and every pod
+template, but they stop at `volumeClaimTemplates`. Were it otherwise, simply
+upgrading to a chart version that added a label would fail for every existing
+release, and would keep failing on each release after that, because the identity
+labels include `helm.sh/chart` and `app.kubernetes.io/version`.
+
+You can still label a volume claim explicitly with
+`graylog.persistence.labels`, `datanode.persistence.data.labels`,
+`datanode.persistence.nativeLibs.labels` or `mongodb.persistence.labels`. That is
+safe on a fresh install. On a release that already exists it is a one-way door —
+the StatefulSet has to be recreated, which `kubectl delete statefulset <name>
+--cascade=orphan` does without touching the running pods or the PVCs.
+
+This rule is enforced by `tests/selector_immutability_test.yaml`. If you add an
+object or a metadata call site, extend that suite; for anything immutable use
+the `graylog.claim.metadata` helper, never `graylog.metadata.labels`.
+
+### Extra volumes, mounts and containers
+
+Graylog and Data Node pods accept additional volumes, volume mounts, init
+containers and sidecars:
+
+```yaml
+# extra-volumes.yaml
+graylog:
+  extraVolumes:
+    - name: corporate-ca
+      secret:
+        secretName: corporate-ca
+  extraVolumeMounts:
+    - name: corporate-ca
+      mountPath: /etc/ssl/corporate
+      readOnly: true
+  # the chart's copy-data init container can mount them too
+  extraInitVolumeMounts:
+    - name: corporate-ca
+      mountPath: /mnt/ca
+      readOnly: true
+  extraInitContainers:
+    - name: wait-for-mongodb
+      image: busybox:1.37
+      command: ["sh", "-c", "until nc -z graylog-mongo-rs-svc 27017; do sleep 2; done"]
+  extraContainers:
+    - name: log-shipper
+      image: busybox:1.37
+```
+
+### Pod scheduling and runtime
+
+Both workloads expose `nodeSelector`, `tolerations`, `affinity`,
+`topologySpreadConstraints`, `priorityClassName`, `schedulerName`,
+`runtimeClassName`, `terminationGracePeriodSeconds`, `dnsPolicy`, `dnsConfig`,
+`hostAliases` and container `lifecycle` hooks:
+
+```yaml
+# scheduling.yaml
+graylog:
+  priorityClassName: high-priority
+  terminationGracePeriodSeconds: 120
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app: graylog-app
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 10"]
+```
+
+`topologySpreadConstraints` is the one to reach for in a multi-AZ cluster. The
+chart's default anti-affinity is a *soft* hostname preference: it spreads pods
+across nodes when it can, but it does not guarantee a spread across zones, so a
+single-zone failure can still take every Data Node replica with it.
+
+> [!IMPORTANT]
+> On the Graylog workload, `lifecycle.preStop` and
+> `lifecycle.preStopDrain.enabled` both define a preStop hook, and a container
+> can only have one. Setting both fails the render rather than silently
+> dropping either — see [Message journal lifecycle](#message-journal-lifecycle)
+> for what the chart-managed drain does.
+
+### Extra objects
+
+Anything the chart does not model can be deployed alongside it with
+`extraObjects`. Entries share the release lifecycle — installed, upgraded and
+deleted with the chart — and are templated, so they can reference the release:
+
+```yaml
+# extra-objects.yaml
+extraObjects:
+  - apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    metadata:
+      name: '{{ include "graylog.fullname" . }}-metrics'
+    spec:
+      selector:
+        matchLabels:
+          app.kubernetes.io/instance: '{{ .Release.Name }}'
+          app.kubernetes.io/component: server
+      endpoints:
+        - port: metrics
+```
+
+Entries may also be given as strings, which is the practical form when the
+manifest itself contains Helm syntax that must survive to render time:
+
+```yaml
+extraObjects:
+  - |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: {{ include "graylog.fullname" . }}-extra
+    data:
+      namespace: {{ .Release.Namespace }}
+```
+
+`global.commonLabels` and `global.commonAnnotations` are merged into every extra
+object; anything set on the object itself wins.
+
 ## Add inputs
 
 First, define your inputs in a small YAML file like this one:
@@ -812,6 +1002,7 @@ stern statefulset/graylog-datanode -n graylog
 | `version`          | Override Graylog and Graylog Data Node version (optional).       | `""`    |
 | `nameOverride`     | Override the `app.kubernetes.io/name` label value (optional).    | `""`    |
 | `fullnameOverride` | Override the fully qualified name of the application (optional). | `""`    |
+| `extraObjects`     | Arbitrary manifests rendered with the release; each entry is templated. | `[]` |
 
 ## Global
 These values affect Graylog, DataNode, and MongoDB.
@@ -821,6 +1012,16 @@ These values affect Graylog, DataNode, and MongoDB.
 | `global.existingSecretName` | Reference to an existing Kubernetes secret. | `""`    |
 | `global.imagePullSecrets`   | Image pull secrets for private registries.  | `[]`    |
 | `global.storageClass`       | Storage class to use for PVCs.              | `""`    |
+| `global.commonLabels`       | Labels added to every object deployed by this chart.      | `{}` |
+| `global.commonAnnotations`  | Annotations added to every object deployed by this chart. | `{}` |
+
+> [!NOTE]
+> `global.commonLabels` and `global.commonAnnotations` are applied to *every*
+> object the chart renders. The chart's own identity labels
+> (`app.kubernetes.io/*`, `helm.sh/chart`, `app`) and its Helm hook/resource-policy
+> annotations always win, so they cannot be overwritten by accident. Per-object
+> `labels`/`annotations` values (e.g. `graylog.service.annotations`) take
+> precedence over the global ones.
 
 
 ## Graylog application
@@ -832,6 +1033,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.replicas`                                                    | Number of Graylog server replicas.                          | `2`                             |
 | `graylog.service.nameOverride`                                        | Override for service name.                                  | `""`                            |
 | `graylog.service.type`                                                | Kubernetes service type.                                    | `ClusterIP`                     |
+| `graylog.service.annotations`                                         | Annotations for the Graylog Service.                        | `{}`                            |
+| `graylog.service.labels`                                              | Labels for the Graylog Service.                             | `{}`                            |
 | `graylog.service.ports.app`                                           | Graylog web UI port.                                        | `9000`                          |
 | `graylog.service.ports.metrics`                                       | Metrics endpoint port.                                      | `9833`                          |
 | `graylog.service.metrics.enabled`                                     | Enable metrics collection.                                  | `true`                          |
@@ -943,6 +1146,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                  | `6`                             |
 | `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                  | `1`                             |
 | `graylog.terminationGracePeriodSeconds`                               | Shutdown budget before SIGKILL. Covers the preStop hook and Graylog's own graceful shutdown. | `300`  |
+| `graylog.lifecycle.postStart`                                         | Your own postStart hook on the graylog-app container.       | `{}`                            |
+| `graylog.lifecycle.preStop`                                           | Your own preStop hook. Mutually exclusive with `preStopDrain.enabled`. | `{}`                  |
 | `graylog.lifecycle.preStopDrain.enabled`                              | Hold termination while the journal drains. See [Message Journal Lifecycle](#message-journal-lifecycle). | `false` |
 | `graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds`      | Wait for EndpointSlice removal to reach kube-proxy before sampling. | `15`                     |
 | `graylog.lifecycle.preStopDrain.pollIntervalSeconds`                  | Seconds between journal-depth samples.                      | `2`                             |
@@ -956,11 +1161,30 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.persistence.retentionPolicy.whenScaled`                       | PVC fate when scaled in. `Delete` is refused — it destroys a scaled-in node's journal. | `Retain` |
 | `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
 | `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                   | `1`                             |
+| `graylog.podDisruptionBudget.annotations`                             | Annotations for the PodDisruptionBudget.                    | `{}`                            |
+| `graylog.podDisruptionBudget.labels`                                  | Labels for the PodDisruptionBudget.                         | `{}`                            |
+| `graylog.annotations`                                                 | Annotations for the Graylog StatefulSet, ConfigMaps and Secrets. | `{}`                       |
+| `graylog.labels`                                                      | Labels for the Graylog StatefulSet, ConfigMaps and Secrets.      | `{}`                       |
 | `graylog.podAnnotations`                                              | Additional pod annotations.                                 | `{}`                            |
+| `graylog.podLabels`                                                   | Additional pod labels.                                      | `{}`                            |
 | `graylog.nodeSelector`                                                | Node selector for scheduling.                               | `{}`                            |
 | `graylog.tolerations`                                                 | Tolerations for scheduling.                                 | `[]`                            |
 | `graylog.affinity`                                                    | Affinity rules for scheduling.                              | `{}`                            |
+| `graylog.topologySpreadConstraints`                                   | Topology spread constraints for the pods.                   | `[]`                            |
+| `graylog.priorityClassName`                                           | PriorityClass for the pods.                                 | `""`                            |
+| `graylog.schedulerName`                                               | Custom scheduler for the pods.                              | `""`                            |
+| `graylog.runtimeClassName`                                            | RuntimeClass for the pods.                                  | `""`                            |
+| `graylog.terminationGracePeriodSeconds`                               | Grace period before pods are force-killed.                  | `nil`                           |
+| `graylog.dnsPolicy`                                                   | Pod DNS policy.                                             | `ClusterFirst`                  |
+| `graylog.dnsConfig`                                                   | Pod DNS configuration.                                      | `{}`                            |
+| `graylog.hostAliases`                                                 | Additional `/etc/hosts` entries for the pods.               | `[]`                            |
+| `graylog.lifecycle`                                                   | Lifecycle hooks for the `graylog-app` container.            | `{}`                            |
 | `graylog.extraEnv`                                                    | Custom EnvVar environment variables.                        | `[]`                            |
+| `graylog.extraVolumes`                                                | Additional volumes for the Graylog pods.                    | `[]`                            |
+| `graylog.extraVolumeMounts`                                           | Additional volume mounts for the `graylog-app` container.   | `[]`                            |
+| `graylog.extraInitVolumeMounts`                                       | Additional volume mounts for the `copy-data` init container. | `[]`                           |
+| `graylog.extraInitContainers`                                         | Additional init containers.                                 | `[]`                            |
+| `graylog.extraContainers`                                             | Additional sidecar containers.                              | `[]`                            |
 
 
 ### Graylog inputs
@@ -995,6 +1219,8 @@ These values affect Graylog, DataNode, and MongoDB.
 |--------------------------------------------------------|-------------------------------------------------|-------------------|
 | `datanode.enabled`                                     | Enable Graylog datanode.                        | `true`            |
 | `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
+| `datanode.service.annotations`                         | Annotations for the Data Node Service.          | `{}`              |
+| `datanode.service.labels`                              | Labels for the Data Node Service.               | `{}`              |
 | `datanode.service.ports.api`                           | API communication port.                         | `8999`            |
 | `datanode.service.ports.data`                          | Data communication port.                        | `9200`            |
 | `datanode.service.ports.config`                        | Configuration communication port.               | `9300`            |
@@ -1028,11 +1254,15 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.persistence.data.mountPath`                  | Mount path for data volume.                     | `""`              |
 | `datanode.persistence.data.accessModes`                | Access modes for data PVC.                      | `[]`              |
 | `datanode.persistence.data.size`                       | Size of the data volume.                        | `"8Gi"`           |
+| `datanode.persistence.data.annotations`                | Annotations for the data PVC (globals do not apply). | `{}`         |
+| `datanode.persistence.data.labels`                     | Labels for the data PVC (globals do not apply). | `{}`              |
 | `datanode.persistence.nativeLibs.enabled`              | Enable persistence for native libraries.        | `false`           |
 | `datanode.persistence.nativeLibs.storageClass`         | Storage class for native libs PVC.              | `""`              |
 | `datanode.persistence.nativeLibs.mountPath`            | Mount path for native libs volume.              | `""`              |
 | `datanode.persistence.nativeLibs.accessModes`          | Access modes for native libs PVC.               | `[]`              |
 | `datanode.persistence.nativeLibs.size`                 | Size of the native libs volume.                 | `"2Gi"`           |
+| `datanode.persistence.nativeLibs.annotations`          | Annotations for native libs PVC.                | `{}`              |
+| `datanode.persistence.nativeLibs.labels`               | Labels for native libs PVC.                     | `{}`              |
 | `datanode.livenessProbe.enabled`                       | Enable liveness probe.                          | `true`            |
 | `datanode.livenessProbe.initialDelaySeconds`           | Initial delay for liveness probe.               | `30`              |
 | `datanode.livenessProbe.periodSeconds`                 | Period between liveness probe checks.           | `10`              |
@@ -1047,11 +1277,29 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.readinessProbe.successThreshold`             | Success threshold for the readiness probe.      | `1`               |
 | `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
 | `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
+| `datanode.podDisruptionBudget.annotations`             | Annotations for the PodDisruptionBudget.        | `{}`              |
+| `datanode.podDisruptionBudget.labels`                  | Labels for the PodDisruptionBudget.             | `{}`              |
+| `datanode.annotations`                                 | Annotations for the Data Node StatefulSet, ConfigMap and Secret. | `{}` |
+| `datanode.labels`                                      | Labels for the Data Node StatefulSet, ConfigMap and Secret.      | `{}` |
 | `datanode.podAnnotations`                              | Additional pod annotations.                     | `{}`              |
+| `datanode.podLabels`                                   | Additional pod labels.                          | `{}`              |
 | `datanode.nodeSelector`                                | Node selector for scheduling datanode pods.     | `{}`              |
 | `datanode.tolerations`                                 | Tolerations for scheduling.                     | `[]`              |
 | `datanode.affinity`                                    | Affinity rules for scheduling.                  | `{}`              |
+| `datanode.topologySpreadConstraints`                   | Topology spread constraints for the pods.       | `[]`              |
+| `datanode.priorityClassName`                           | PriorityClass for the pods.                     | `""`              |
+| `datanode.schedulerName`                               | Custom scheduler for the pods.                  | `""`              |
+| `datanode.runtimeClassName`                            | RuntimeClass for the pods.                      | `""`              |
+| `datanode.terminationGracePeriodSeconds`               | Grace period before pods are force-killed.      | `nil`             |
+| `datanode.dnsPolicy`                                   | Pod DNS policy.                                 | `ClusterFirst`    |
+| `datanode.dnsConfig`                                   | Pod DNS configuration.                          | `{}`              |
+| `datanode.hostAliases`                                 | Additional `/etc/hosts` entries for the pods.   | `[]`              |
+| `datanode.lifecycle`                                   | Lifecycle hooks for the `graylog-datanode` container. | `{}`        |
 | `datanode.extraEnv`                                    | Custom EnvVar environment variables.            | `[]`              |
+| `datanode.extraVolumes`                                | Additional volumes for the Data Node pods.      | `[]`              |
+| `datanode.extraVolumeMounts`                           | Additional volume mounts for the `graylog-datanode` container. | `[]` |
+| `datanode.extraInitContainers`                         | Additional init containers.                     | `[]`              |
+| `datanode.extraContainers`                             | Additional sidecar containers.                  | `[]`              |
 
 
 ## OpenSearch
@@ -1079,9 +1327,12 @@ Mutually exclusive with `datanode.enabled`. See [Bring Your Own OpenSearch](#bri
 | `serviceAccount.create`       | Create a new service account.                           | `true`  |
 | `serviceAccount.automount`    | Automount service account token.                        | `true`  |
 | `serviceAccount.annotations`  | Annotations for service account.                        | `{}`    |
+| `serviceAccount.labels`       | Labels for service account.                             | `{}`    |
 | `serviceAccount.nameOverride` | Override name of service account.                       | `""`    |
 | `serviceAccount.role.create`  | Create a new role to bind to this service account.      | `false` |
 | `serviceAccount.role.rules`   | Rules for the new role to bind to this service account. | `[]`    |
+| `serviceAccount.role.annotations` | Annotations for the Role and RoleBinding.           | `{}`    |
+| `serviceAccount.role.labels`  | Labels for the Role and RoleBinding.                    | `{}`    |
 
 
 ## Ingress
@@ -1092,6 +1343,8 @@ Mutually exclusive with `datanode.enabled`. See [Bring Your Own OpenSearch](#bri
 | `ingress.config.defaultBackend.enabled`         | Enable default backend for ingress.              | `true`  |
 | `ingress.config.tls.clusterIssuer.existingName` | Name of existing ClusterIssuer for TLS.          | `""`    |
 | `ingress.config.tls.issuer.existingName`        | Name of existing Issuer for TLS.                 | `""`    |
+| `ingress.config.tls.issuer.annotations`         | Annotations for the chart-managed Issuer.        | `{}`    |
+| `ingress.config.tls.issuer.labels`              | Labels for the chart-managed Issuer.             | `{}`    |
 | `ingress.config.tls.issuer.managed.enabled`     | Enable auto-issuing of TLS certificates.         | `false` |
 | `ingress.config.tls.issuer.managed.staging`     | Use staging environment for auto-issued certs.   | `true`  |
 
@@ -1102,6 +1355,7 @@ Mutually exclusive with `datanode.enabled`. See [Bring Your Own OpenSearch](#bri
 | `ingress.web.enabled`                    | Enable ingress for Graylog Web.    | `false`                  |
 | `ingress.web.className`                  | Ingress class name.                | `""`                     |
 | `ingress.web.annotations`                | Annotations for ingress resource.  | `{}`                     |
+| `ingress.web.labels`                     | Labels for ingress resource.       | `{}`                     |
 | `ingress.web.hosts[0].host`              | Hostname for ingress (optional).   | `""`                     |
 | `ingress.web.hosts[0].paths[0].path`     | Path for routing.                  | `/`                      |
 | `ingress.web.hosts[0].paths[0].pathType` | Path matching type.                | `ImplementationSpecific` |
@@ -1149,6 +1403,7 @@ The listener is configured by attributes **on that input**, not through `server.
 | `ingress.forwarder.messageChannel.enabled`                    | Expose the message channel (port `13301`).      | `true`                   |
 | `ingress.forwarder.messageChannel.className`                  | Ingress class name.                             | `""`                     |
 | `ingress.forwarder.messageChannel.annotations`                | Annotations for ingress resource.               | `{}`                     |
+| `ingress.forwarder.messageChannel.labels`                     | Labels for ingress resource.                    | `{}`                     |
 | `ingress.forwarder.messageChannel.hosts[0].host`              | Hostname for ingress (optional).                | `""`                     |
 | `ingress.forwarder.messageChannel.hosts[0].paths[0].path`     | Path for routing.                               | `/`                      |
 | `ingress.forwarder.messageChannel.hosts[0].paths[0].pathType` | Path matching type.                             | `ImplementationSpecific` |
@@ -1156,6 +1411,7 @@ The listener is configured by attributes **on that input**, not through `server.
 | `ingress.forwarder.configChannel.enabled`                     | Expose the configuration channel (port `13302`).| `true`                   |
 | `ingress.forwarder.configChannel.className`                   | Ingress class name.                             | `""`                     |
 | `ingress.forwarder.configChannel.annotations`                 | Annotations for ingress resource.               | `{}`                     |
+| `ingress.forwarder.configChannel.labels`                      | Labels for ingress resource.                    | `{}`                     |
 | `ingress.forwarder.configChannel.hosts[0].host`               | Hostname for ingress (optional).                | `""`                     |
 | `ingress.forwarder.configChannel.hosts[0].paths[0].path`      | Path for routing.                               | `/`                      |
 | `ingress.forwarder.configChannel.hosts[0].paths[0].pathType`  | Path matching type.                             | `ImplementationSpecific` |
@@ -1174,12 +1430,19 @@ Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/ma
 | `mongodb.version`                     | MongoDB server version for the replica set.                 | `"7.0.25"`                                                                                                                                                                                                             |
 | `mongodb.replicas`                    | Number of data-bearing replica set members.                 | `2`                                                                                                                                                                                                                    |
 | `mongodb.arbiters`                    | Number of arbiter nodes to deploy.                          | `1`                                                                                                                                                                                                                    |
+| `mongodb.annotations`                 | Annotations for the `MongoDBCommunity` object.              | `{}`                                                                                                                                                                                                                   |
+| `mongodb.labels`                      | Labels for the `MongoDBCommunity` object.                   | `{}`                                                                                                                                                                                                                   |
 | `mongodb.persistence.storageClass`    | StorageClass to use for persistent volumes.                 | `""`                                                                                                                                                                                                                   |
 | `mongodb.persistence.size.data`       | Persistent volume size for data storage.                    | `"10G"`                                                                                                                                                                                                                |
 | `mongodb.persistence.size.logs`       | Persistent volume size for MongoDB logs.                    | `"2G"`                                                                                                                                                                                                                 |
+| `mongodb.persistence.annotations`     | Annotations for the MongoDB volume claim templates.         | `{}`                                                                                                                                                                                                                   |
+| `mongodb.persistence.labels`          | Labels for the MongoDB volume claim templates.              | `{}`                                                                                                                                                                                                                   |
 | `mongodb.serviceAccount.create`       | Create a new service account for MongoDB workloads.         | `true`                                                                                                                                                                                                                 |
 | `mongodb.serviceAccount.automount`    | Automount service account token.                            | `true`                                                                                                                                                                                                                 |
 | `mongodb.serviceAccount.annotations`  | Annotations for service account.                            | `{}`                                                                                                                                                                                                                   |
+| `mongodb.serviceAccount.labels`       | Labels for service account.                                 | `{}`                                                                                                                                                                                                                   |
 | `mongodb.serviceAccount.nameOverride` | Override name of service account.                           | `""`                                                                                                                                                                                                                   |
 | `mongodb.serviceAccount.role.create`  | Create a new role to bind to this service account.          | `true`                                                                                                                                                                                                                 |
+| `mongodb.serviceAccount.role.annotations` | Annotations for the Role and RoleBinding.               | `{}`                                                                                                                                                                                                                   |
+| `mongodb.serviceAccount.role.labels`  | Labels for the Role and RoleBinding.                        | `{}`                                                                                                                                                                                                                   |
 | `mongodb.serviceAccount.role.rules`   | Rules for the new role to bind to this service account.     | <pre><code>rules:&#10;  - apiGroups: [ "" ]&#10;    resources: [ "secrets" ]&#10;    verbs: [ "get" ]&#10;  - apiGroups: [ "" ]&#10;    resources: [ "pods" ]&#10;    verbs: [ "get", "patch", "delete" ]</code></pre> |

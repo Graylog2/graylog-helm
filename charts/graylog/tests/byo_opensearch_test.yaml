@@ -5,6 +5,7 @@ templates:
   - config/secret/opensearch.yaml
   - config/graylog.yaml
   - config/datanode.yaml
+  - config/init-graylog.yaml
 
 tests:
   # --- connection wiring -----------------------------------------------------
@@ -99,6 +100,39 @@ tests:
       - matchRegex:
           path: data.GRAYLOG_SERVER_JAVA_OPTS
           pattern: -Djavax\.net\.ssl\.trustStore=/usr/share/graylog/data/cacerts/graylog\.jks
+
+  - it: adds the OpenSearch CA on top of the truststore shipped in the image
+    template: config/init-graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.ns.svc:9200"]
+      opensearch.tls.enabled: true
+      opensearch.tls.caSecret: my-os-ca
+    asserts:
+      # the image truststore is the base, the OpenSearch CA is only ever added to it
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'cp "\$\{JAVA_HOME_LOCAL\}/lib/security/cacerts" "\$\{CACERTS_TMP\}"'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert -noprompt -alias byo-opensearch-ca -file "/mnt/os-tls/ca\.crt" -keystore "\$\{CACERTS_TMP\}"'
+      # the Graylog server certificate is not imported when Graylog TLS is off
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'alias byoc'
+
+  - it: does not build a truststore when the OpenSearch CA secret is not set
+    template: config/init-graylog.yaml
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.ns.svc:9200"]
+      opensearch.tls.enabled: true
+    asserts:
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'CACERTS_TMP'
 
   - it: does not mount the OpenSearch CA when tls is disabled
     template: workload/statefulsets/graylog.yaml

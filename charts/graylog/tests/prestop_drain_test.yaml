@@ -657,3 +657,43 @@ tests:
       - notMatchRegex:
           path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
           pattern: 'sleep [0-9]'
+
+  # User-supplied hooks share graylog.lifecycle with the chart-managed drain.
+  - it: renders a user-supplied preStop hook when the drain is off
+    set:
+      graylog.lifecycle.preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 10"]
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          value: sleep 10
+
+  - it: renders a user-supplied postStart hook alongside the drain
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.postStart:
+        exec:
+          command: ["/bin/sh", "-c", "echo started"]
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.postStart.exec.command[2]
+          value: echo started
+      # The drain still owns preStop.
+      - isNotEmpty:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+
+  - it: fails when a user preStop hook collides with the drain
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 10"]
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      # helm-unittest matches a later portion of a multi-line fail message, not
+      # its opening sentence — anchor on one of the remedy lines.
+      - failedTemplate:
+          errorPattern: "Drop graylog\\.lifecycle\\.preStop and let the chart's journal drain run"

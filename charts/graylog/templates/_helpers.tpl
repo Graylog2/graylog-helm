@@ -42,7 +42,13 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
+{{/*
+Common annotations
+*/}}
 {{- define "graylog.annotations" -}}
+{{- with .Values.global.commonAnnotations }}
+{{- toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -52,6 +58,91 @@ Selector labels
 app.kubernetes.io/name: {{ include "graylog.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Object metadata labels block.
+Merges, from lowest to highest precedence: global.commonLabels, the object's own
+labels from values, the common chart labels, and chart-owned labels that must not
+be overridden.
+The block is indented by "indent" spaces and brings its own leading newline, so
+call it left-trimmed ({{- include ... }}) and it lines up on its own.
+Usage:
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.labels "fixed" (dict "app" "graylog-app") "indent" 2) }}
+*/}}
+{{- define "graylog.metadata.labels" -}}
+{{- $ctx := .context -}}
+{{- $indent := .indent | default 2 | toString | atoi -}}
+{{- $subIndent := add $indent 2 | toString | atoi -}}
+{{- $merged := merge (dict) (.fixed | default dict) (include "graylog.labels" $ctx | fromYaml) (.labels | default dict) ($ctx.Values.global.commonLabels | default dict) -}}
+{{- printf "labels:" | nindent $indent -}}
+{{- toYaml $merged | nindent $subIndent -}}
+{{- end -}}
+
+{{/*
+Object metadata annotations block. Renders nothing when there is nothing to set.
+Merges, from lowest to highest precedence: global.commonAnnotations, the object's
+own annotations from values, and chart-owned annotations that must not be
+overridden (Helm hooks, resource policies).
+Usage:
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.annotations "indent" 2) }}
+*/}}
+{{- define "graylog.metadata.annotations" -}}
+{{- $ctx := .context -}}
+{{- $indent := .indent | default 2 | toString | atoi -}}
+{{- $subIndent := add $indent 2 | toString | atoi -}}
+{{- $merged := merge (dict) (.fixed | default dict) (.annotations | default dict) ($ctx.Values.global.commonAnnotations | default dict) -}}
+{{- with $merged -}}
+{{- printf "annotations:" | nindent $indent -}}
+{{- toYaml . | nindent $subIndent -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Pod template labels block. Same precedence rules as "graylog.metadata.labels",
+but built on the selector labels so pods always match their workload selector.
+Usage:
+  {{- include "graylog.pod.labels" (dict "context" $ "labels" .Values.graylog.podLabels "fixed" (dict "app" "graylog-app") "indent" 6) }}
+*/}}
+{{- define "graylog.pod.labels" -}}
+{{- $ctx := .context -}}
+{{- $indent := .indent | default 2 | toString | atoi -}}
+{{- $subIndent := add $indent 2 | toString | atoi -}}
+{{- $merged := merge (dict) (.fixed | default dict) (include "graylog.selectorLabels" $ctx | fromYaml) (.labels | default dict) ($ctx.Values.global.commonLabels | default dict) -}}
+{{- printf "labels:" | nindent $indent -}}
+{{- toYaml $merged | nindent $subIndent -}}
+{{- end -}}
+
+{{/*
+Metadata block for an IMMUTABLE object, i.e. a StatefulSet volumeClaimTemplate.
+
+Deliberately NOT "graylog.metadata.labels". A StatefulSet's volumeClaimTemplates
+cannot be changed after creation - Kubernetes only accepts updates to replicas,
+ordinals, template, updateStrategy, persistentVolumeClaimRetentionPolicy and
+minReadySeconds. Injecting the chart's identity labels here would rewrite that
+field on every existing release and make `helm upgrade` fail, and because those
+labels carry helm.sh/chart and app.kubernetes.io/version it would fail again on
+every subsequent version bump.
+
+So only what the user explicitly asked for is rendered: no chart labels and no
+global.commonLabels/commonAnnotations. Setting these values on a release that
+already exists is still a breaking change, but it is then an explicit,
+one-time choice by the operator rather than something the chart does to them.
+
+Usage:
+  {{- include "graylog.claim.metadata" (dict "labels" .Values.graylog.persistence.labels "annotations" .Values.graylog.persistence.annotations "indent" 8) }}
+*/}}
+{{- define "graylog.claim.metadata" -}}
+{{- $indent := .indent | default 2 | toString | atoi -}}
+{{- $subIndent := add $indent 2 | toString | atoi -}}
+{{- with .labels -}}
+{{- printf "labels:" | nindent $indent -}}
+{{- toYaml . | nindent $subIndent -}}
+{{- end -}}
+{{- with .annotations -}}
+{{- printf "annotations:" | nindent $indent -}}
+{{- toYaml . | nindent $subIndent -}}
+{{- end -}}
+{{- end -}}
 
 {{/*
 Init script ConfigMap name
@@ -514,13 +605,13 @@ Resolve OpenSearch basic-auth credentials as "user:pass" (empty string if none).
 Inline values win; otherwise read from opensearch.auth.existingSecret via lookup.
 */}}
 {{- define "graylog.opensearch.credentials" -}}
-{{- $u := .Values.opensearch.auth.username | default "" -}}
-{{- $p := .Values.opensearch.auth.password | default "" -}}
+{{- $u := .Values.opensearch.auth.username | default "" | urlquery -}}
+{{- $p := .Values.opensearch.auth.password | default "" | urlquery -}}
 {{- if and (not $u) .Values.opensearch.auth.existingSecret -}}
   {{- $s := lookup "v1" "Secret" .Release.Namespace .Values.opensearch.auth.existingSecret -}}
   {{- if $s -}}
-    {{- $u = index $s.data .Values.opensearch.auth.usernameKey | default "" | b64dec -}}
-    {{- $p = index $s.data .Values.opensearch.auth.passwordKey | default "" | b64dec -}}
+    {{- $u = index $s.data .Values.opensearch.auth.usernameKey | default "" | b64dec | urlquery -}}
+    {{- $p = index $s.data .Values.opensearch.auth.passwordKey | default "" | b64dec | urlquery -}}
   {{- end -}}
 {{- end -}}
 {{- if $u -}}

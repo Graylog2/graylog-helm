@@ -1,0 +1,131 @@
+suite: extraObjects
+# The escape hatch for manifests the chart does not model. What matters here is
+# that entries are templated against the release context, that both the mapping
+# and string forms work, and that the chart's global metadata reaches them.
+templates:
+  - custom/extra-objects.yaml
+release:
+  name: graylog
+  namespace: graylog
+
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders a mapping entry and templates the release context
+    set:
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: '{{ include "graylog.fullname" . }}-extra'
+          data:
+            release: '{{ .Release.Name }}'
+            namespace: '{{ .Release.Namespace }}'
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: graylog-extra
+      - equal:
+          path: data.release
+          value: graylog
+      - equal:
+          path: data.namespace
+          value: graylog
+
+  - it: renders a string entry, which keeps Helm syntax intact until render time
+    set:
+      extraObjects:
+        - |
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: {{ include "graylog.fullname" . }}-string-form
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: graylog-string-form
+
+  - it: renders several entries at once
+    set:
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: first
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: second
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: merges global.commonLabels and commonAnnotations into extra objects
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: extra
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  - it: lets the object's own metadata win over the globals
+    set:
+      global.commonLabels.env: dev
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: extra
+            labels:
+              env: staging
+              tier: custom
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: staging
+      - equal:
+          path: metadata.labels.tier
+          value: custom
+
+  - it: adds no metadata block when no globals are set
+    set:
+      extraObjects:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: extra
+    asserts:
+      - notExists:
+          path: metadata.labels
+      - notExists:
+          path: metadata.annotations
+
+  - it: fails with an actionable message when an entry has no kind
+    set:
+      extraObjects:
+        - apiVersion: v1
+          metadata:
+            name: oops
+    asserts:
+      - failedTemplate:
+          errorPattern: "must be a complete manifest with apiVersion, kind and metadata.name"

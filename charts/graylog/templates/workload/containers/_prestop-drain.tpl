@@ -2,7 +2,8 @@
 Graylog preStop journal drain — token-free variant.
 
 Renders the `lifecycle:` block for the graylog-app container. Nothing is emitted
-unless graylog.lifecycle.preStopDrain.enabled is true.
+unless graylog.lifecycle.preStopDrain.enabled is true, or the user supplied their
+own hooks in graylog.lifecycle.postStart / graylog.lifecycle.preStop.
 
 Why this exists: a StatefulSet guarantees identity, not data migration. Graylog's
 graceful shutdown flushes in-memory buffers *into* the journal; it never drains
@@ -20,6 +21,24 @@ the token-based variant for what that buys.
 Call with: {{ include "graylog.lifecycle" . | nindent 10 }}
 */}}
 {{- define "graylog.lifecycle" -}}
+{{- $userPostStart := .Values.graylog.lifecycle.postStart }}
+{{- $userPreStop := .Values.graylog.lifecycle.preStop }}
+{{- if and $userPreStop .Values.graylog.lifecycle.preStopDrain.enabled }}
+{{- fail "graylog.lifecycle.preStop and graylog.lifecycle.preStopDrain.enabled=true both define a preStop hook, and a container can only have one.\n  Either:\n    Drop graylog.lifecycle.preStop and let the chart's journal drain run\n    Or set graylog.lifecycle.preStopDrain.enabled=false and drain from your own hook (see the scale-in runbook in docs/graylog-message-handling.md)." }}
+{{- end }}
+{{- if or $userPostStart $userPreStop }}
+{{- if not .Values.graylog.lifecycle.preStopDrain.enabled }}
+lifecycle:
+  {{- with $userPostStart }}
+  postStart:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $userPreStop }}
+  preStop:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}
 {{- if .Values.graylog.lifecycle.preStopDrain.enabled }}
 {{- $drain := .Values.graylog.lifecycle.preStopDrain }}
 {{- $grace := .Values.graylog.terminationGracePeriodSeconds | int }}
@@ -43,6 +62,10 @@ Call with: {{ include "graylog.lifecycle" . | nindent 10 }}
 {{/* pollIntervalSeconds >= 1 is enforced by values.schema.json; only the
      cross-field constraints need a template-time guard. */}}
 lifecycle:
+  {{- with $userPostStart }}
+  postStart:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   preStop:
     exec:
       command:

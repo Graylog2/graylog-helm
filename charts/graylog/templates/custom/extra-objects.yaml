@@ -1,0 +1,38 @@
+{{/*
+Arbitrary user-supplied manifests, rendered as part of this release.
+
+The escape hatch for anything the chart does not model: a ServiceMonitor, an
+ExternalSecret, a VirtualService, a NetworkPolicy. Keeping them here means they
+share the release's lifecycle — installed, upgraded and deleted with the chart —
+instead of needing a wrapper chart or a second `kubectl apply`.
+
+Each entry is passed through `tpl`, so values may reference the release context
+({{ .Release.Name }}, {{ include "graylog.fullname" . }}, ...). Entries can be
+given as a mapping or as a string; a string is the practical form when the
+manifest itself contains Helm syntax.
+
+global.commonLabels and global.commonAnnotations are merged in, so extra objects
+carry the same ownership metadata as everything else the chart renders. Anything
+set on the object itself wins.
+*/}}
+{{- range $index, $object := .Values.extraObjects }}
+{{- $rendered := $object }}
+{{- if kindIs "string" $object }}
+{{- $rendered = tpl $object $ | fromYaml }}
+{{- else }}
+{{- $rendered = tpl (toYaml $object) $ | fromYaml }}
+{{- end }}
+{{- if not $rendered.kind }}
+{{- fail (printf "extraObjects[%d] does not render to a Kubernetes object: no 'kind' field found.\n  Each entry must be a complete manifest with apiVersion, kind and metadata.name.\n  If the entry is a string, check that it is valid YAML after templating." $index) }}
+{{- end }}
+{{- $meta := $rendered.metadata | default dict }}
+{{- $_ := set $rendered "metadata" $meta }}
+{{- if $.Values.global.commonLabels }}
+{{- $_ := set $meta "labels" (merge (dict) ($meta.labels | default dict) $.Values.global.commonLabels) }}
+{{- end }}
+{{- if $.Values.global.commonAnnotations }}
+{{- $_ := set $meta "annotations" (merge (dict) ($meta.annotations | default dict) $.Values.global.commonAnnotations) }}
+{{- end }}
+---
+{{ toYaml $rendered }}
+{{- end }}

@@ -11,8 +11,8 @@ apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   name: {{ include "graylog.cert-manager.issuer.name" . }}
-  labels:
-    {{- include "graylog.labels" . | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.ingress.config.tls.issuer.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.ingress.config.tls.issuer.annotations "indent" 2) }}
 spec:
   acme:
     server: {{ .Values.ingress.config.tls.issuer.managed.staging | ternary "-staging" "" | printf "https://acme%s-v02.api.letsencrypt.org/directory" }}

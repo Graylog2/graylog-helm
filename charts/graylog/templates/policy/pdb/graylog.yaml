@@ -5,10 +5,8 @@ kind: PodDisruptionBudget
 metadata:
   name: {{ include "graylog.fullname" . | printf "%s-pdb" }}
   namespace: {{ .Release.Namespace }}
-  labels:
-    app: graylog-app
-    app.kubernetes.io/component: server
-    {{- include "graylog.labels" . | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.podDisruptionBudget.labels "fixed" (dict "app.kubernetes.io/component" "server" "app" "graylog-app") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.podDisruptionBudget.annotations "indent" 2) }}
 spec:
   minAvailable: {{ .Values.graylog.podDisruptionBudget.minAvailable | default 1 | int }}
   selector:

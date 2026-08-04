@@ -16,8 +16,6 @@ nameOverride: ""
 fullnameOverride: ""
 
 # global values are shared by the Graylog, Datanode, and MongoDB workloads.
-
-
 global:
   # imagePullSecrets is applied to the Graylog and Datanode pods unless
   # overridden per image (MongoDB images are pulled by the operator).
@@ -27,6 +25,27 @@ global:
   existingSecretName: ""
   # storageClass is the default StorageClass for all persistent volumes.
   storageClass: ""
+  # commonLabels/commonAnnotations are added to every object the chart renders.
+  # Per-object labels/annotations and the chart's own identity labels take
+  # precedence. commonLabels never reach a workload's selector, so they are
+  # safe to add to an existing release.
+  commonLabels: {}
+  commonAnnotations: {}
+
+# extraObjects renders arbitrary manifests as part of this release — a
+# ServiceMonitor, ExternalSecret, NetworkPolicy, or anything else the chart does
+# not model. Each entry is templated, so it can reference the release context.
+# Entries may be mappings or strings; use a string when the manifest itself
+# contains Helm syntax that must survive to render time.
+#
+# extraObjects:
+#   - apiVersion: v1
+#     kind: ConfigMap
+#     metadata:
+#       name: '{{ include "graylog.fullname" . }}-extra'
+#     data:
+#       release: "{{ .Release.Name }}"
+extraObjects: []
 
 
 # graylog configures the Graylog server application.
@@ -44,6 +63,8 @@ graylog:
     nameOverride: ""
     # type is the Kubernetes Service type (ClusterIP, NodePort, LoadBalancer).
     type: ClusterIP
+    annotations: {}
+    labels: {}
     ports:
       # app is the port serving the Graylog web interface and REST API.
       app: 9000
@@ -320,6 +341,14 @@ graylog:
     accessModes: []
     # size is the requested volume size (default 8Gi).
     size:
+    # annotations/labels for the volume claim template.
+    #
+    # Unlike everywhere else in this chart, global.commonLabels and
+    # global.commonAnnotations deliberately do NOT flow here. A StatefulSet's
+    # volumeClaimTemplates cannot be changed after creation, so injecting them
+    # would rewrite an immutable field and make `helm upgrade` fail on every
+    # existing release. Setting these yourself is safe on a fresh install; on a
+    # live release it needs the StatefulSet recreated (--cascade=orphan).
     annotations: {}
     labels: {}
   # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
@@ -345,6 +374,12 @@ graylog:
   # 30s is not enough under load, which is why this is set explicitly.
   terminationGracePeriodSeconds: 300
   lifecycle:
+    # postStart/preStop are your own hooks on the graylog-app container, in
+    # standard Kubernetes syntax. preStop is mutually exclusive with
+    # preStopDrain below — a container can only have one preStop hook, and the
+    # chart fails the render rather than silently dropping either.
+    postStart: {}
+    preStop: {}
     # Hold pod termination while the on-disk journal is worked off.
     #
     # Scaling in is the case that matters: the ordinal stops existing, so its
@@ -410,6 +445,8 @@ graylog:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+    annotations: {}
+    labels: {}
   # podSecurityContext / initContainerSecurityContext / containerSecurityContext
   # expose the standard Kubernetes securityContext fields; defaults follow a
   # non-root, no-privilege-escalation baseline.
@@ -436,8 +473,15 @@ graylog:
       add: ["NET_BIND_SERVICE"]
     seccompProfile:
       type: RuntimeDefault
-  # podAnnotations is added to the Graylog pod template metadata.
+  # annotations/labels are added to the Graylog StatefulSet object itself.
+  # They merge over global.commonAnnotations/global.commonLabels.
+  annotations: {}
+  labels: {}
+  # podAnnotations/podLabels are added to the Graylog pod template metadata.
+  # podLabels never reach the StatefulSet's selector, so they are safe to
+  # change on an existing release.
   podAnnotations: {}
+  podLabels: {}
   # nodeSelector constrains Graylog pods to matching nodes.
   nodeSelector: {}
   # tolerations lets Graylog pods schedule onto tainted nodes.
@@ -445,9 +489,38 @@ graylog:
   # affinity overrides the default anti-affinity that spreads Graylog pods
   # across nodes.
   affinity: {}
+  # topologySpreadConstraints spreads Graylog pods across failure domains.
+  # Unlike the default anti-affinity (which is a soft hostname preference),
+  # these can enforce an even spread across zones. Standard Kubernetes syntax.
+  topologySpreadConstraints: []
+  # priorityClassName sets the scheduling priority of the Graylog pods.
+  priorityClassName: ""
+  # schedulerName selects an alternative scheduler.
+  schedulerName: ""
+  # runtimeClassName selects a container runtime class (e.g. gvisor).
+  runtimeClassName: ""
+  # terminationGracePeriodSeconds for the Graylog pods is set above, next to
+  # the preStop drain whose budget depends on it.
+  # dnsPolicy/dnsConfig control pod DNS resolution.
+  dnsPolicy: ClusterFirst
+  dnsConfig: {}
+  # hostAliases adds entries to the pod's /etc/hosts.
+  hostAliases: []
   # extraEnv sets additional environment variables using full EnvVar syntax
   # (supports valueFrom); entries here win over graylog.env keys.
   extraEnv: []
+  # extraVolumes adds volumes to the Graylog pods, using standard Kubernetes
+  # volume syntax.
+  extraVolumes: []
+  # extraVolumeMounts mounts those volumes into the graylog-app container.
+  extraVolumeMounts: []
+  # extraInitVolumeMounts mounts them into the chart's copy-data init
+  # container instead, for assets that must be staged before startup.
+  extraInitVolumeMounts: []
+  # extraInitContainers are rendered after the chart's own init containers.
+  extraInitContainers: []
+  # extraContainers adds sidecar containers to the Graylog pods.
+  extraContainers: []
 
 
 # datanode configures the Graylog Data Node (managed OpenSearch).
@@ -458,6 +531,8 @@ datanode:
   # replicas is the number of Datanode pods.
   replicas: 3
   service:
+    annotations: {}
+    labels: {}
     ports:
       # api is the Datanode REST API port.
       api: 8999
@@ -544,6 +619,11 @@ datanode:
       mountPath: ""
       accessModes: []
       size: "8Gi"
+      # annotations/labels for the volume claim template. global.commonLabels
+      # and global.commonAnnotations deliberately do not flow here — see the
+      # note on graylog.persistence.annotations.
+      annotations: {}
+      labels: {}
     # nativeLibs is an optional volume for OpenSearch native libraries.
     nativeLibs:
       enabled: false
@@ -551,6 +631,10 @@ datanode:
       mountPath: ""
       accessModes: []
       size: "2Gi"
+      # As above: the globals stop here because volumeClaimTemplates are
+      # immutable once the StatefulSet exists.
+      annotations: {}
+      labels: {}
   # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
   # for the Datanode container.
   livenessProbe:
@@ -573,6 +657,8 @@ datanode:
   podDisruptionBudget:
     enabled: true
     minAvailable: 2
+    annotations: {}
+    labels: {}
   podSecurityContext:
     fsGroup: 999
     fsGroupChangePolicy: "OnRootMismatch"
@@ -585,8 +671,15 @@ datanode:
       add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
     seccompProfile:
       type: RuntimeDefault
-  # podAnnotations is added to the Datanode pod template metadata.
+  # annotations/labels are added to the Datanode StatefulSet object itself.
+  # They merge over global.commonAnnotations/global.commonLabels.
+  annotations: {}
+  labels: {}
+  # podAnnotations/podLabels are added to the Datanode pod template metadata.
+  # podLabels never reach the StatefulSet's selector, so they are safe to
+  # change on an existing release.
   podAnnotations: {}
+  podLabels: {}
   # nodeSelector constrains Datanode pods to matching nodes.
   nodeSelector: {}
   # tolerations lets Datanode pods schedule onto tainted nodes.
@@ -594,9 +687,38 @@ datanode:
   # affinity overrides the default anti-affinity that spreads Datanode pods
   # across nodes.
   affinity: {}
+  # topologySpreadConstraints spreads Datanode pods across failure domains.
+  # The default anti-affinity is only a soft hostname preference and does not
+  # guarantee zone spread; set this to enforce one. Standard Kubernetes syntax.
+  topologySpreadConstraints: []
+  # priorityClassName sets the scheduling priority of the Datanode pods.
+  priorityClassName: ""
+  # schedulerName selects an alternative scheduler.
+  schedulerName: ""
+  # runtimeClassName selects a container runtime class (e.g. gvisor).
+  runtimeClassName: ""
+  # terminationGracePeriodSeconds is the shutdown grace period. Leave empty
+  # for the Kubernetes default.
+  terminationGracePeriodSeconds:
+  # dnsPolicy/dnsConfig control pod DNS resolution.
+  dnsPolicy: ClusterFirst
+  dnsConfig: {}
+  # hostAliases adds entries to the pod's /etc/hosts.
+  hostAliases: []
+  # lifecycle sets postStart/preStop hooks on the graylog-datanode container.
+  lifecycle: {}
   # extraEnv sets additional environment variables using full EnvVar syntax
   # (supports valueFrom); entries here win over datanode.env keys.
   extraEnv: []
+  # extraVolumes adds volumes to the Datanode pods, using standard Kubernetes
+  # volume syntax.
+  extraVolumes: []
+  # extraVolumeMounts mounts those volumes into the graylog-datanode container.
+  extraVolumeMounts: []
+  # extraInitContainers are rendered after the chart's own init containers.
+  extraInitContainers: []
+  # extraContainers adds sidecar containers to the Datanode pods.
+  extraContainers: []
 
 
 # External OpenSearch
@@ -639,12 +761,16 @@ serviceAccount:
   automount: true
   # annotations is added to the ServiceAccount (e.g. IRSA role ARNs).
   annotations: {}
+  # labels is added to the ServiceAccount.
+  labels: {}
   # nameOverride replaces the generated ServiceAccount name, or names the
   # existing ServiceAccount to use when create=false.
   nameOverride: ""
   # role optionally creates a namespaced Role/RoleBinding with these rules.
   role:
     create: false
+    annotations: {}
+    labels: {}
     rules: []
 #      - apiGroups: [ "" ]
 #        resources: [ "pods" ]
@@ -670,6 +796,9 @@ ingress:
       issuer:
         # existingName references a pre-existing namespaced Issuer.
         existingName:
+        # annotations/labels are added to the chart-managed cert-manager Issuer.
+        annotations: {}
+        labels: {}
         # managed creates a Let's Encrypt ACME Issuer owned by this chart.
         managed:
           enabled: false
@@ -682,6 +811,7 @@ ingress:
     # className is the IngressClass to use.
     className: ""
     annotations: {}
+    labels: {}
     hosts:
       - host: ""
         paths:
@@ -701,7 +831,9 @@ ingress:
     messageChannel:
       enabled: true
       className: ""
+      # annotations/labels are added to this channel's Ingress object.
       annotations: {}
+      labels: {}
       hosts:
         - host: ""
           paths:
@@ -711,7 +843,9 @@ ingress:
     configChannel:
       enabled: true
       className: ""
+      # annotations/labels are added to this channel's Ingress object.
       annotations: {}
+      labels: {}
       hosts:
         - host: ""
           paths:
@@ -735,23 +869,39 @@ mongodb:
   # replicas: 2, arbiters: 1
   replicas: 3
   arbiters: 0
+  # annotations/labels are added to the MongoDBCommunity object itself.
+  annotations: {}
+  labels: {}
+  # No podAnnotations/podLabels here: the MongoDB Community operator owns the
+  # pod template of the StatefulSet it manages and discards anything the chart
+  # puts there, so the keys would silently do nothing. annotations/labels above
+  # apply to the MongoDBCommunity object itself and do work.
   persistence:
     # storageClass overrides global.storageClass for the MongoDB volumes.
     storageClass: ""
     size:
       data: "10G"
       logs: "2G"
+    # annotations/labels are added to the MongoDB volume claim templates. The
+    # operator copies them onto the StatefulSet it manages, where they become
+    # immutable, so global.commonLabels/commonAnnotations do not flow here —
+    # see the note on graylog.persistence.annotations.
+    annotations: {}
+    labels: {}
   # serviceAccount configures the ServiceAccount used by the MongoDB pods;
   # fields mirror the top-level serviceAccount block.
   serviceAccount:
     create: true
     automount: true
     annotations: {}
+    labels: {}
     nameOverride: ""
     # role creates the Role/RoleBinding required by the MongoDB operator's
     # readiness/version-upgrade hooks.
     role:
       create: true
+      annotations: {}
+      labels: {}
       rules:
         - apiGroups: [""]
           resources: ["secrets"]
