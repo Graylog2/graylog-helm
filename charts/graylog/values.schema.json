@@ -670,7 +670,13 @@
                 "storageClass": { "type": "string" },
                 "mountPath": { "type": "string" },
                 "accessModes": { "type": "array" },
-                "size": { "type": "string" }
+                "size": { "type": "string" },
+                "annotations": {
+                  "type": "object"
+                },
+                "labels": {
+                  "type": "object"
+                }
               }
             },
             "nativeLibs": {
@@ -936,9 +942,6 @@
         "arbiters": { "type": "integer" },
         "annotations": { "type": "object", "description": "Annotations for the MongoDBCommunity object" },
         "labels": { "type": "object", "description": "Labels for the MongoDBCommunity object" },
-        "podAnnotations": { "type": "object" },
-        "podLabels": { "type": "object" },
-        "users": { "type": "array", "items": { "type": "object" } },
         "persistence": {
           "type": "object",
           "properties": {

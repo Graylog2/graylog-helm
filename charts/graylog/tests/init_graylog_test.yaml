@@ -82,6 +82,70 @@ tests:
           path: data["init-script.sh"]
           pattern: 'keytool -importcert'
 
+  - it: seeds the truststore from the image JDK truststore before importing certificates
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'cp "\$\{JAVA_HOME_LOCAL\}/lib/security/cacerts" "\$\{CACERTS_TMP\}"'
+      # never mutate the truststore already on the data volume, it may be a truncated
+      # keystore written by an older chart version
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert.*\$\{CACERTS_DST\}'
+
+  - it: locates the JDK truststore without executing java
+    # The java binary in the Graylog image carries a file capability
+    # (cap_net_bind_service=ep) and the init container runs with
+    # allowPrivilegeEscalation: false, which sets no_new_privs. The kernel then
+    # refuses to execve it: "java: Operation not permitted", exit 126. Deriving
+    # the JDK path by running java therefore always yields an empty string and
+    # fails the init container. Resolve it from ${JAVA_HOME} instead.
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'JAVA_HOME_LOCAL="\$\{JAVA_HOME\}"'
+      # No invocation of the java binary anywhere in the script.
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: '\$\(java '
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'java -XshowSettings'
+
+  - it: fails the init container when the image JDK truststore cannot be found
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'if \[ -z "\$\{JAVA_HOME_LOCAL\}" \] \|\| \[ ! -f "\$\{JAVA_HOME_LOCAL\}/lib/security/cacerts" \]; then'
+
+  - it: re-keys the seeded truststore when a custom keyStorePass is set
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+      graylog.config.tls.keyStorePass: s3cr3t
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: "TRUSTSTORE_PASS='s3cr3t'"
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -storepasswd -keystore "\$\{CACERTS_TMP\}" -storepass changeit -new "\$\{TRUSTSTORE_PASS\}"'
+
+  - it: builds no truststore when neither Graylog TLS nor a BYO OpenSearch CA needs one
+    asserts:
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'CACERTS_TMP'
+
   - it: skips TLS setup entirely when TLS is disabled
     set:
       graylog.config.tls.enabled: false

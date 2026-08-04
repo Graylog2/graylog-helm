@@ -1,16 +1,28 @@
-suite: selector immutability under custom labels
-# A StatefulSet's spec.selector is immutable. If global.commonLabels or a
-# workload's podLabels ever leaked into it, adding a label to an existing
-# release would make `helm upgrade` fail outright — the one customization bug
-# that cannot be worked around without deleting and recreating the workload.
+suite: immutable fields under custom labels
+# Kubernetes accepts updates to only six StatefulSet spec fields: replicas,
+# ordinals, template, updateStrategy, persistentVolumeClaimRetentionPolicy and
+# minReadySeconds. Everything else — spec.selector and spec.volumeClaimTemplates
+# in particular — is rejected on update.
+#
+# That makes customization uniquely dangerous here: any chart-injected metadata
+# that reaches an immutable field rewrites it on every existing release and
+# makes `helm upgrade` fail outright, with no fix short of recreating the
+# workload. Worse, the chart's identity labels carry helm.sh/chart and
+# app.kubernetes.io/version, so the failure would recur on every version bump.
 #
 # The contract these tests pin:
 #   1. spec.selector.matchLabels contains ONLY the chart's fixed identity
 #      labels, whatever the user sets.
 #   2. spec.template.metadata.labels is a strict superset of it, so pods still
-#      match after custom labels are added.
-# The same applies to Service and PodDisruptionBudget selectors, which must
-# keep matching pods that were created before the labels were added.
+#      match after custom labels are added. (template IS mutable.)
+#   3. spec.volumeClaimTemplates carries NO metadata unless the user explicitly
+#      asked for it — no chart labels, no global.commonLabels/commonAnnotations.
+# The same reasoning applies to Service and PodDisruptionBudget selectors, which
+# must keep matching pods created before the labels were added.
+#
+# If you add a new object or a new metadata call site, extend this suite. The
+# helper to use for anything immutable is "graylog.claim.metadata", never
+# "graylog.metadata.labels".
 templates:
   - workload/statefulsets/graylog.yaml
   - workload/statefulsets/datanode.yaml
@@ -18,6 +30,7 @@ templates:
   - service/datanode.yaml
   - policy/pdb/graylog.yaml
   - policy/pdb/datanode.yaml
+  - custom/mongo-rs.yaml
   # The StatefulSets' checksum helpers `include` these templates by path, so
   # helm-unittest's template filter has to list them for the includes to resolve.
   - config/graylog.yaml
@@ -157,3 +170,74 @@ tests:
             app.kubernetes.io/name: graylog
             app.kubernetes.io/instance: graylog
         template: workload/statefulsets/datanode.yaml
+
+  # --- volumeClaimTemplates: immutable, so chart metadata must never appear ---
+
+  - it: keeps chart and global metadata off the Graylog volume claim template
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+      graylog.labels.tier: backend
+      graylog.annotations.note: primary
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      # Nothing at all by default: adding any of these to a live release would
+      # make `helm upgrade` fail on an immutable field.
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.annotations
+
+  - it: keeps chart and global metadata off the Datanode volume claim templates
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+      datanode.labels.tier: storage
+      datanode.persistence.nativeLibs.enabled: true
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.annotations
+      - notExists:
+          path: spec.volumeClaimTemplates[1].metadata.labels
+      - notExists:
+          path: spec.volumeClaimTemplates[1].metadata.annotations
+
+  - it: keeps chart and global metadata off the MongoDB volume claim templates
+    # The operator propagates these into the StatefulSet it manages, so the same
+    # immutability rule applies one level removed.
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+      mongodb.labels.tier: database
+    template: custom/mongo-rs.yaml
+    asserts:
+      - notExists:
+          path: spec.statefulSet.spec.volumeClaimTemplates[0].metadata.labels
+      - notExists:
+          path: spec.statefulSet.spec.volumeClaimTemplates[0].metadata.annotations
+      - notExists:
+          path: spec.statefulSet.spec.volumeClaimTemplates[1].metadata.labels
+      - notExists:
+          path: spec.statefulSet.spec.volumeClaimTemplates[1].metadata.annotations
+
+  - it: still renders volume claim metadata the operator explicitly asked for
+    # Opt-in remains supported — it is then the operator's own one-time choice,
+    # not something the chart does to every existing release.
+    set:
+      global.commonLabels.env: dev
+      graylog.persistence.labels.tier: backend
+      graylog.persistence.annotations.note: graylog-data
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels.tier
+          value: backend
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.annotations.note
+          value: graylog-data
+      # ...and the globals still do not ride along.
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels.env

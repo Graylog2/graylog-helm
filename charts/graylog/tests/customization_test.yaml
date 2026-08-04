@@ -142,11 +142,12 @@ tests:
           path: spec.volumeClaimTemplates[0].metadata.labels.tier
           value: backend
       - equal:
-          path: spec.volumeClaimTemplates[0].metadata.labels.env
-          value: dev
-      - equal:
           path: spec.volumeClaimTemplates[0].metadata.annotations.note
           value: graylog-data
+      # volumeClaimTemplates are immutable, so globals deliberately stop here —
+      # see tests/selector_immutability_test.yaml.
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels.env
 
   - it: adds extra volumes, mounts and containers to the Datanode pods
     set:
@@ -228,9 +229,9 @@ tests:
       - equal:
           path: spec.volumeClaimTemplates[1].metadata.annotations.note
           value: native-libs
-      - equal:
+      # As above: global.commonAnnotations must not reach an immutable field.
+      - notExists:
           path: spec.volumeClaimTemplates[1].metadata.annotations.owner
-          value: platform-team
 
   - it: keeps extra volumes on the Datanode when both persistent volumes are enabled
     set:

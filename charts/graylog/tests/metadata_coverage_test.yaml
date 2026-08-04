@@ -270,12 +270,10 @@ tests:
           value: least-privilege
         documentIndex: 2
 
-  - it: labels and annotates the MongoDBCommunity object, its pods and its volume claims
+  - it: labels and annotates the MongoDBCommunity object and its volume claims
     set:
       mongodb.labels.tier: database
       mongodb.annotations.note: replica-set
-      mongodb.podLabels.tier: database
-      mongodb.podAnnotations.note: mongod
       mongodb.persistence.labels.tier: database
       mongodb.persistence.annotations.note: mongo-data
       global.commonLabels.env: dev
@@ -297,15 +295,11 @@ tests:
       - equal:
           path: metadata.annotations.owner
           value: platform-team
-      - equal:
-          path: spec.statefulSet.spec.template.metadata.labels.tier
-          value: database
-      - equal:
-          path: spec.statefulSet.spec.template.metadata.labels.env
-          value: dev
-      - equal:
-          path: spec.statefulSet.spec.template.metadata.annotations.note
-          value: mongod
+      # The operator owns the pod template of the StatefulSet it manages and
+      # discards anything the chart puts there, so the chart renders no pod
+      # metadata at all rather than promising customization it cannot deliver.
+      - notExists:
+          path: spec.statefulSet.spec.template.metadata
       - equal:
           path: spec.statefulSet.spec.volumeClaimTemplates[0].metadata.labels.tier
           value: database

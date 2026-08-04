@@ -312,8 +312,7 @@ spec:
       kind: PersistentVolumeClaim
       metadata:
         name: {{ include "graylog.volume.name" . }}
-        {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.persistence.labels "indent" 8) }}
-        {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.persistence.annotations "indent" 8) }}
+        {{- include "graylog.claim.metadata" (dict "labels" .Values.graylog.persistence.labels "annotations" .Values.graylog.persistence.annotations "indent" 8) }}
       spec:
         {{- with (include "graylog.storageClassName" .) }}
         storageClassName: {{ . | quote }}

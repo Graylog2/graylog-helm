@@ -215,8 +215,7 @@ spec:
     {{- if .Values.datanode.persistence.data.enabled }}
     - metadata:
         name: data
-        {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.persistence.data.labels "indent" 8) }}
-        {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.persistence.data.annotations "indent" 8) }}
+        {{- include "graylog.claim.metadata" (dict "labels" .Values.datanode.persistence.data.labels "annotations" .Values.datanode.persistence.data.annotations "indent" 8) }}
       spec:
         accessModes:
         {{- if .Values.datanode.persistence.data.accessModes }}
@@ -236,8 +235,7 @@ spec:
     {{- if .Values.datanode.persistence.nativeLibs.enabled }}
     - metadata:
         name: native-libs
-        {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.persistence.nativeLibs.labels "indent" 8) }}
-        {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.persistence.nativeLibs.annotations "indent" 8) }}
+        {{- include "graylog.claim.metadata" (dict "labels" .Values.datanode.persistence.nativeLibs.labels "annotations" .Values.datanode.persistence.nativeLibs.annotations "indent" 8) }}
       spec:
         accessModes:
         {{- if .Values.datanode.persistence.nativeLibs.accessModes }}

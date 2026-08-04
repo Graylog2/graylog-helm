@@ -555,6 +555,14 @@ ingress:
       tier: edge
 ```
 
+> [!NOTE]
+> MongoDB pods are the one exception. `mongodb.labels` / `mongodb.annotations`
+> apply to the `MongoDBCommunity` object, but there is no `mongodb.podLabels` —
+> the MongoDB Community operator owns the pod template of the StatefulSet it
+> manages, labels it `app: <release>-mongo-rs-svc` and discards anything the
+> chart puts there. Pod-level metadata for MongoDB has to come from the
+> operator's own API.
+
 Precedence, lowest to highest: `global.common*`, the per-object value, then the
 chart's own identity labels (`app.kubernetes.io/*`, `helm.sh/chart`, `app`) and
 its Helm hook and resource-policy annotations. Chart-owned values always win, so
@@ -565,6 +573,31 @@ custom metadata can never break release lifecycle handling.
 > once created. They land on the object and on the pod template only, so labels
 > can safely be added to a release that is already running — `helm upgrade` will
 > not fail on a changed selector.
+
+#### Immutable fields are deliberately left alone
+
+Kubernetes accepts updates to only six StatefulSet `spec` fields: `replicas`,
+`ordinals`, `template`, `updateStrategy`, `persistentVolumeClaimRetentionPolicy`
+and `minReadySeconds`. Anything else — `selector` and `volumeClaimTemplates` in
+particular — is rejected on update.
+
+So the chart injects nothing into those fields. `global.commonLabels` and
+`global.commonAnnotations` reach every object's own metadata and every pod
+template, but they stop at `volumeClaimTemplates`. Were it otherwise, simply
+upgrading to a chart version that added a label would fail for every existing
+release, and would keep failing on each release after that, because the identity
+labels include `helm.sh/chart` and `app.kubernetes.io/version`.
+
+You can still label a volume claim explicitly with
+`graylog.persistence.labels`, `datanode.persistence.data.labels`,
+`datanode.persistence.nativeLibs.labels` or `mongodb.persistence.labels`. That is
+safe on a fresh install. On a release that already exists it is a one-way door —
+the StatefulSet has to be recreated, which `kubectl delete statefulset <name>
+--cascade=orphan` does without touching the running pods or the PVCs.
+
+This rule is enforced by `tests/selector_immutability_test.yaml`. If you add an
+object or a metadata call site, extend that suite; for anything immutable use
+the `graylog.claim.metadata` helper, never `graylog.metadata.labels`.
 
 ### Extra volumes, mounts and containers
 
@@ -1221,6 +1254,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.persistence.data.mountPath`                  | Mount path for data volume.                     | `""`              |
 | `datanode.persistence.data.accessModes`                | Access modes for data PVC.                      | `[]`              |
 | `datanode.persistence.data.size`                       | Size of the data volume.                        | `"8Gi"`           |
+| `datanode.persistence.data.annotations`                | Annotations for the data PVC (globals do not apply). | `{}`         |
+| `datanode.persistence.data.labels`                     | Labels for the data PVC (globals do not apply). | `{}`              |
 | `datanode.persistence.nativeLibs.enabled`              | Enable persistence for native libraries.        | `false`           |
 | `datanode.persistence.nativeLibs.storageClass`         | Storage class for native libs PVC.              | `""`              |
 | `datanode.persistence.nativeLibs.mountPath`            | Mount path for native libs volume.              | `""`              |
@@ -1397,8 +1432,6 @@ Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/ma
 | `mongodb.arbiters`                    | Number of arbiter nodes to deploy.                          | `1`                                                                                                                                                                                                                    |
 | `mongodb.annotations`                 | Annotations for the `MongoDBCommunity` object.              | `{}`                                                                                                                                                                                                                   |
 | `mongodb.labels`                      | Labels for the `MongoDBCommunity` object.                   | `{}`                                                                                                                                                                                                                   |
-| `mongodb.podAnnotations`              | Annotations for the MongoDB pods.                           | `{}`                                                                                                                                                                                                                   |
-| `mongodb.podLabels`                   | Labels for the MongoDB pods.                                | `{}`                                                                                                                                                                                                                   |
 | `mongodb.persistence.storageClass`    | StorageClass to use for persistent volumes.                 | `""`                                                                                                                                                                                                                   |
 | `mongodb.persistence.size.data`       | Persistent volume size for data storage.                    | `"10G"`                                                                                                                                                                                                                |
 | `mongodb.persistence.size.logs`       | Persistent volume size for MongoDB logs.                    | `"2G"`                                                                                                                                                                                                                 |

@@ -113,6 +113,38 @@ Usage:
 {{- end -}}
 
 {{/*
+Metadata block for an IMMUTABLE object, i.e. a StatefulSet volumeClaimTemplate.
+
+Deliberately NOT "graylog.metadata.labels". A StatefulSet's volumeClaimTemplates
+cannot be changed after creation - Kubernetes only accepts updates to replicas,
+ordinals, template, updateStrategy, persistentVolumeClaimRetentionPolicy and
+minReadySeconds. Injecting the chart's identity labels here would rewrite that
+field on every existing release and make `helm upgrade` fail, and because those
+labels carry helm.sh/chart and app.kubernetes.io/version it would fail again on
+every subsequent version bump.
+
+So only what the user explicitly asked for is rendered: no chart labels and no
+global.commonLabels/commonAnnotations. Setting these values on a release that
+already exists is still a breaking change, but it is then an explicit,
+one-time choice by the operator rather than something the chart does to them.
+
+Usage:
+  {{- include "graylog.claim.metadata" (dict "labels" .Values.graylog.persistence.labels "annotations" .Values.graylog.persistence.annotations "indent" 8) }}
+*/}}
+{{- define "graylog.claim.metadata" -}}
+{{- $indent := .indent | default 2 | toString | atoi -}}
+{{- $subIndent := add $indent 2 | toString | atoi -}}
+{{- with .labels -}}
+{{- printf "labels:" | nindent $indent -}}
+{{- toYaml . | nindent $subIndent -}}
+{{- end -}}
+{{- with .annotations -}}
+{{- printf "annotations:" | nindent $indent -}}
+{{- toYaml . | nindent $subIndent -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Init script ConfigMap name
 */}}
 {{- define "graylog.cm.init.name" }}
@@ -573,13 +605,13 @@ Resolve OpenSearch basic-auth credentials as "user:pass" (empty string if none).
 Inline values win; otherwise read from opensearch.auth.existingSecret via lookup.
 */}}
 {{- define "graylog.opensearch.credentials" -}}
-{{- $u := .Values.opensearch.auth.username | default "" -}}
-{{- $p := .Values.opensearch.auth.password | default "" -}}
+{{- $u := .Values.opensearch.auth.username | default "" | urlquery -}}
+{{- $p := .Values.opensearch.auth.password | default "" | urlquery -}}
 {{- if and (not $u) .Values.opensearch.auth.existingSecret -}}
   {{- $s := lookup "v1" "Secret" .Release.Namespace .Values.opensearch.auth.existingSecret -}}
   {{- if $s -}}
-    {{- $u = index $s.data .Values.opensearch.auth.usernameKey | default "" | b64dec -}}
-    {{- $p = index $s.data .Values.opensearch.auth.passwordKey | default "" | b64dec -}}
+    {{- $u = index $s.data .Values.opensearch.auth.usernameKey | default "" | b64dec | urlquery -}}
+    {{- $p = index $s.data .Values.opensearch.auth.passwordKey | default "" | b64dec | urlquery -}}
   {{- end -}}
 {{- end -}}
 {{- if $u -}}

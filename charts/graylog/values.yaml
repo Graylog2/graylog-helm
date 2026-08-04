@@ -341,6 +341,14 @@ graylog:
     accessModes: []
     # size is the requested volume size (default 8Gi).
     size:
+    # annotations/labels for the volume claim template.
+    #
+    # Unlike everywhere else in this chart, global.commonLabels and
+    # global.commonAnnotations deliberately do NOT flow here. A StatefulSet's
+    # volumeClaimTemplates cannot be changed after creation, so injecting them
+    # would rewrite an immutable field and make `helm upgrade` fail on every
+    # existing release. Setting these yourself is safe on a fresh install; on a
+    # live release it needs the StatefulSet recreated (--cascade=orphan).
     annotations: {}
     labels: {}
   # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
@@ -611,6 +619,11 @@ datanode:
       mountPath: ""
       accessModes: []
       size: "8Gi"
+      # annotations/labels for the volume claim template. global.commonLabels
+      # and global.commonAnnotations deliberately do not flow here — see the
+      # note on graylog.persistence.annotations.
+      annotations: {}
+      labels: {}
     # nativeLibs is an optional volume for OpenSearch native libraries.
     nativeLibs:
       enabled: false
@@ -618,6 +631,8 @@ datanode:
       mountPath: ""
       accessModes: []
       size: "2Gi"
+      # As above: the globals stop here because volumeClaimTemplates are
+      # immutable once the StatefulSet exists.
       annotations: {}
       labels: {}
   # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
@@ -857,17 +872,20 @@ mongodb:
   # annotations/labels are added to the MongoDBCommunity object itself.
   annotations: {}
   labels: {}
-  # podAnnotations/podLabels are passed to the operator, which applies them
-  # to the MongoDB pods it creates.
-  podAnnotations: {}
-  podLabels: {}
+  # No podAnnotations/podLabels here: the MongoDB Community operator owns the
+  # pod template of the StatefulSet it manages and discards anything the chart
+  # puts there, so the keys would silently do nothing. annotations/labels above
+  # apply to the MongoDBCommunity object itself and do work.
   persistence:
     # storageClass overrides global.storageClass for the MongoDB volumes.
     storageClass: ""
     size:
       data: "10G"
       logs: "2G"
-    # annotations/labels are added to the MongoDB volume claim templates.
+    # annotations/labels are added to the MongoDB volume claim templates. The
+    # operator copies them onto the StatefulSet it manages, where they become
+    # immutable, so global.commonLabels/commonAnnotations do not flow here —
+    # see the note on graylog.persistence.annotations.
     annotations: {}
     labels: {}
   # serviceAccount configures the ServiceAccount used by the MongoDB pods;
