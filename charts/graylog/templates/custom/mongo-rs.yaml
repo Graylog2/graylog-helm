@@ -53,6 +53,17 @@ spec:
       roles:
         - name: readWrite
           db: {{ include "graylog.mongodb.crDatabase" . }}
+        {{- /*
+        Graylog's MongodbNodesProvider runs `replSetGetStatus` against the admin
+        database to discover the replica set members. That action lives on the
+        cluster resource, so a user with only readWrite on the Graylog database
+        gets `code 13 (Unauthorized)` and Graylog falls back to a synthetic
+        single-node view while logging a WARN on every poll. clusterMonitor is
+        the least-privileged built-in role that grants it - it is read-only and
+        confers no write or admin capability.
+        */}}
+        - name: clusterMonitor
+          db: admin
       scramCredentialsSecretName: {{ printf "%s-%s" (include "graylog.mongodb.crName" .) (include "graylog.mongodb.crUsername" .) }}
   statefulSet:
     spec:

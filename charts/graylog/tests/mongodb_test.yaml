@@ -25,6 +25,24 @@ tests:
       - hasDocuments:
           count: 0
 
+  # Graylog's MongodbNodesProvider calls replSetGetStatus on admin; without
+  # clusterMonitor it logs "code 13 (Unauthorized)" on every poll and falls back
+  # to a synthetic single-node view of the replica set.
+  - it: grants the Graylog user clusterMonitor on admin alongside readWrite
+    set:
+      mongodb.communityResource.enabled: true
+    asserts:
+      - contains:
+          path: spec.users[1].roles
+          content:
+            name: readWrite
+            db: graylog
+      - contains:
+          path: spec.users[1].roles
+          content:
+            name: clusterMonitor
+            db: admin
+
   - it: uses configured mongodb.version
     set:
       mongodb.communityResource.enabled: true
