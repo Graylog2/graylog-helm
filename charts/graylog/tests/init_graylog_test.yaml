@@ -140,6 +140,43 @@ tests:
           path: data["init-script.sh"]
           pattern: 'keytool -storepasswd -keystore "\$\{CACERTS_TMP\}" -storepass changeit -new "\$\{TRUSTSTORE_PASS\}"'
 
+  - it: fails the init container when a certificate import fails
+    # An import that fails silently still leaves a truststore behind for the mv
+    # below, and the JVM is pointed at it with -Djavax.net.ssl.trustStore. The
+    # missing certificate then surfaces as unexplained TLS failures at runtime
+    # instead of here. Every import is fatal.
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert -noprompt -alias byoc -file "/mnt/tls/tls.crt".*\|\| \{ echo "Error: failed to import the Graylog certificate'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert -noprompt -alias byoc-ca .*\|\| \{ echo "Error: failed to import the root CA'
+      # The root CA import must be gated by an if, not chained onto the
+      # [ -n "${ROOT_CA}" ] test: with `&&` the whole line reports failure
+      # whenever ROOT_CA is empty, so an `|| exit 1` there would abort every
+      # deployment whose certificate carries no root CA.
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: '\[ -n "\$\{ROOT_CA\}" \] &&'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'if \[ -n "\$\{ROOT_CA\}" \]; then'
+
+  - it: fails the init container when the BYO OpenSearch CA import fails
+    set:
+      graylog.config.tls.enabled: false
+      opensearch.enabled: true
+      opensearch.tls.enabled: true
+      opensearch.tls.caSecret: os-ca
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert -noprompt -alias byo-opensearch-ca .*\|\| \{ echo "Error: failed to import the OpenSearch CA'
+
   - it: builds no truststore when neither Graylog TLS nor a BYO OpenSearch CA needs one
     asserts:
       - notMatchRegex:

@@ -115,8 +115,15 @@ data:
       keytool -storepasswd -keystore "${CACERTS_TMP}" -storepass changeit -new "${TRUSTSTORE_PASS}" || { echo "Error: failed to set the truststore password."; exit 1; }
     fi
     {{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.updateKeyStore }}
-    keytool -importcert -noprompt -alias byoc -file "/mnt/tls/tls.crt" -keystore "${CACERTS_TMP}" -storepass "${TRUSTSTORE_PASS}"
-    [ -n "${ROOT_CA}" ] && echo "Adding root CA..." && keytool -importcert -noprompt -alias byoc-ca -file "${ROOT_CA}" -keystore "${CACERTS_TMP}" -storepass "${TRUSTSTORE_PASS}"
+    # Every import is fatal. A store that was built but is missing one of our
+    # certificates is worse than no store at all: the JVM is pointed at it with
+    # -Djavax.net.ssl.trustStore, so the failure surfaces later as unexplained
+    # TLS errors rather than here, where the cause is obvious.
+    keytool -importcert -noprompt -alias byoc -file "/mnt/tls/tls.crt" -keystore "${CACERTS_TMP}" -storepass "${TRUSTSTORE_PASS}" || { echo "Error: failed to import the Graylog certificate from /mnt/tls/tls.crt."; exit 1; }
+    if [ -n "${ROOT_CA}" ]; then
+      echo "Adding root CA..."
+      keytool -importcert -noprompt -alias byoc-ca -file "${ROOT_CA}" -keystore "${CACERTS_TMP}" -storepass "${TRUSTSTORE_PASS}" || { echo "Error: failed to import the root CA from ${ROOT_CA}."; exit 1; }
+    fi
     {{- end }}
     {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
     # trust the BYO OpenSearch CA
