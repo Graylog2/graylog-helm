@@ -28,7 +28,7 @@ spec:
     service:
       name: {{ include "graylog.fallback.name" . }}
       port:
-        number: 3000
+        number: 80
   {{- end }}
   {{- with .Values.ingress.web.className }}
   ingressClassName: {{ . }}
