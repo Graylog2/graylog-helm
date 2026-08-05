@@ -26,10 +26,13 @@ helm install graylog charts/graylog \
 
 ### 2. Deploy with External Secret
 
-If you're using an external secret management system, create a Kubernetes secret with the MaxMind credentials:
+If you're using an external secret management system, put the MaxMind credentials in a
+Secret of their own and point the sidecar at it. This is independent of
+`global.existingSecretName`: the primary Graylog Secret is not expected to carry MaxMind
+credentials.
 
 ```bash
-kubectl create secret generic graylog-secrets \
+kubectl create secret generic graylog-geoip \
   --from-literal=GEO_IP_MAXMIND_ACCOUNT_ID=YOUR_ACCOUNT_ID \
   --from-literal=GEO_IP_MAXMIND_LICENSE_KEY=YOUR_LICENSE_KEY
 ```
@@ -40,8 +43,23 @@ Then deploy with:
 helm install graylog charts/graylog \
   --set graylog.config.geolocation.enabled=true \
   --set graylog.config.geolocation.sidecar.enabled=true \
-  --set global.existingSecretName=graylog-secrets
+  --set graylog.config.geolocation.maxmindGeoIp.existingSecret=graylog-geoip
 ```
+
+When the Secret uses different key names, override them:
+
+```yaml
+graylog:
+  config:
+    geolocation:
+      maxmindGeoIp:
+        existingSecret: graylog-geoip
+        accountIdKey: accountId
+        licenseKeyKey: licenseKey
+```
+
+See [examples/graylog-geoip-secret.yaml](../examples/graylog-geoip-secret.yaml) for a
+complete manifest.
 
 ## Configuration Options
 
@@ -152,7 +170,7 @@ kubectl exec -it pod/graylog-0 -- ls -lah /usr/share/data/geolocation/
 
 - Set `graylog.config.geolocation.maxmindGeoIp.accountId`
 - Set `graylog.config.geolocation.maxmindGeoIp.licenseKey`
-- OR use `global.existingSecretName` with a secret containing `GEO_IP_MAXMIND_ACCOUNT_ID` and `GEO_IP_MAXMIND_LICENSE_KEY`
+- OR set `graylog.config.geolocation.maxmindGeoIp.existingSecret` to a Secret containing `GEO_IP_MAXMIND_ACCOUNT_ID` and `GEO_IP_MAXMIND_LICENSE_KEY` (or your own key names via `accountIdKey`/`licenseKeyKey`)
 
 ### Databases Not Updating
 

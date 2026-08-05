@@ -228,10 +228,18 @@ graylog:
         # enabled wires the MaxMind credentials below into the chart-managed
         # Secret, where the GeoIP update sidecar reads them.
         enabled: true
-        # MaxMind account credentials
-        # When using global.existingSecretName, the external secret must contain:
-        # - GEO_IP_MAXMIND_ACCOUNT_ID: base64-encoded MaxMind account ID
-        # - GEO_IP_MAXMIND_LICENSE_KEY: base64-encoded MaxMind license key
+        # existingSecret points at an externally managed Secret holding the
+        # MaxMind credentials. The sidecar reads the two keys below straight from
+        # it, so the credentials never pass through the chart-managed Secret.
+        # This is independent of global.existingSecretName -- that Secret is not
+        # expected to carry MaxMind credentials. See
+        # examples/graylog-geoip-secret.yaml.
+        existingSecret: ""
+        accountIdKey: "GEO_IP_MAXMIND_ACCOUNT_ID"
+        licenseKeyKey: "GEO_IP_MAXMIND_LICENSE_KEY"
+        # OR provide the credentials inline; the chart then stores them in its own
+        # Secret. Takes precedence over existingSecret, and requires chart-managed
+        # secrets (no global.existingSecretName).
         accountId:
         licenseKey:
         # Comma-separated list of MaxMind database editions to download
@@ -250,9 +258,18 @@ graylog:
       sidecar:
         enabled: true
         image:
-          repository: maxmindinc
-          name: geoipupdate
-          tag: "7.1.1"
+          # repository is the geoipupdate image, tag pins its version. Unlike the
+          # Graylog images these are not tied to `version`/appVersion.
+          repository: "maxmindinc/geoipupdate"
+          tag: "v7.1.1"
+          imagePullPolicy: IfNotPresent
+          # imagePullSecrets overrides global.imagePullSecrets for this image.
+          # They are added to the Graylog pod alongside graylog.image.imagePullSecrets.
+          imagePullSecrets: []
+          # name is deprecated: it is appended to repository when set, so releases
+          # that split `repository: maxmindinc` / `name: geoipupdate` keep working.
+          # Put the full path in repository instead.
+          name: ""
         # schedule is a cron expression controlling database update frequency.
         schedule: "0 0 * * *"
         resources:
