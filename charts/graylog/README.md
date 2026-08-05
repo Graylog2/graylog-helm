@@ -264,7 +264,7 @@ Once an Ingress Controller has been installed and configured, run the following 
 [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) resource:
 
 ```sh
-helm upgrade graylog graylog/graylog -n graylog --set ingress.web.enabled="true" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set ingress.enabled="true" --set ingress.web.enabled="true" --reuse-values
 ```
 
 ### Alternative: LoadBalancer Service
@@ -489,16 +489,16 @@ mongodb:
 helm upgrade graylog graylog/graylog -n graylog --set graylog.config.timezone="America/Denver" --reuse-values
 
 # set JVM options
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.serverJavaOpts="-Xms2g -Xmx1g" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.serverJavaOpts="-Xms1g -Xmx2g" --reuse-values
 
 # redefine message journal maxAge
 helm upgrade graylog graylog/graylog -n graylog --set graylog.config.messageJournal.maxAge="24h" --reuse-values
 
 # enable CORS headers for HTTP interface
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.network.enableCors=true --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set-string graylog.config.network.enableCors=true --reuse-values
 
 # enable email transport and set sender address
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set-string graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
 ```
 
 ## Customize deployed Kubernetes resources
@@ -987,7 +987,7 @@ helm template graylog graylog -f your-custom-values.yaml | yq
 # Logging
 ```sh
 # Graylog app logs
-stern statefulset/graylog-app -n graylog
+stern statefulset/graylog -n graylog
 # DataNode logs
 stern statefulset/graylog-datanode -n graylog
 ```
