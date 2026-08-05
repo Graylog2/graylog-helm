@@ -3,6 +3,7 @@ templates:
   - service/fallback.yaml
   - config/fallback.yaml
   - workload/fallback.yaml
+  - service/ingress/graylog.yaml
 release:
   name: graylog
   namespace: graylog
@@ -98,3 +99,46 @@ tests:
       - equal:
           path: spec.selector.matchLabels.graylog-app
           value: graylog-waiting-room
+
+  # --- The Ingress defaultBackend must reference the fallback Service port ---
+  # An Ingress backend addresses a Service port, not a container port. The
+  # fallback Service publishes port 80 and forwards to container port 3000, so
+  # the Ingress must ask for 80. Asking for 3000 leaves the backend unresolved
+  # and the waiting room never answers.
+  - it: fallback Service publishes port 80 for the Ingress backend
+    template: service/fallback.yaml
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.config.defaultBackend.enabled: true
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 80
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 3000
+
+  - it: Ingress defaultBackend targets the fallback Service port, not the container port
+    template: service/ingress/graylog.yaml
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.config.defaultBackend.enabled: true
+    asserts:
+      - equal:
+          path: spec.defaultBackend.service.name
+          value: graylog-waiting-room
+      - equal:
+          path: spec.defaultBackend.service.port.number
+          value: 80
+
+  - it: Ingress omits defaultBackend when the waiting room is disabled
+    template: service/ingress/graylog.yaml
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.config.defaultBackend.enabled: false
+    asserts:
+      - notExists:
+          path: spec.defaultBackend

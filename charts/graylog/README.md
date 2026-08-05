@@ -132,7 +132,7 @@ You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's in
 
 ### cert-manager
 
-You can always [bring your own certificates](#bring-your-own-certificate-ingress-controller-recommended),
+You can always [bring your own certificates](#option-1-bring-your-own-certificate-with-ingress-controller-recommended),
 but using `cert-manager` can simplify TLS setup and certificate renewal considerably.
 
 Make sure you have [Ingress Controller](#ingress-controller) installed, and that `ingress.enabled` is set to `true`.
@@ -141,8 +141,20 @@ and let `cert-manager` do the rest!
 
 # Installation
 ## Pre Installation
-> [!WARNING]
-> If you are managing the deployment of this chart through GitOps (ArgoCD, Flux etc), you must manually generate the Graylog Secrets resource. Otherwise auto generated credentials will rotate after initial deployment. Refer to the [Graylog Secrets](../../docs/graylog-secrets.md) doc for requirements of that secret.
+
+1. If Argo CD or Flux manages this release, create the Graylog `Secret` before you install the
+   chart. Then set `global.existingSecretName` to the name of that Secret. Make sure that the
+   Secret contains every required key in the [Graylog Secrets](../../docs/graylog-secrets.md)
+   guide. The optional keys in that guide are only necessary for the features that use them.
+2. An external Secret requires an external MongoDB. Set `mongodb.communityResource.enabled=false`
+   and put the connection string in `GRAYLOG_MONGODB_URI`. The chart refuses to render an external
+   Secret together with the bundled MongoDB. See
+   [examples/values-existing-secret-external-mongodb.yaml](../../examples/values-existing-secret-external-mongodb.yaml)
+   for a complete example.
+
+> [!CAUTION]
+> Chart-generated credentials can change after the first deployment when a GitOps controller
+> renders the chart. An externally managed Secret prevents this change.
 
 ## Installing on Kubernetes
 
@@ -264,7 +276,7 @@ Once an Ingress Controller has been installed and configured, run the following 
 [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) resource:
 
 ```sh
-helm upgrade graylog graylog/graylog -n graylog --set ingress.web.enabled="true" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set ingress.enabled="true" --set ingress.web.enabled="true" --reuse-values
 ```
 
 ### Alternative: LoadBalancer Service
@@ -363,10 +375,29 @@ It is best-effort. It cannot stop inputs, so on a node still receiving traffic t
 journal never reaches zero and the hook gives up. It also cannot tell an upgrade
 from a scale-in, so it slows both. Enable it if you routinely scale in.
 
+> [!CAUTION]
+> Do not enable the drain and reduce the replica count in one change. The preStop hook is
+> part of the pod spec, so an existing pod does not get the hook until Kubernetes replaces
+> it. Kubernetes deletes the highest-ordinal pod with its old spec, and that pod drains
+> nothing.
+
+Enable the drain before you scale in:
+
+1. Set `graylog.lifecycle.preStopDrain.enabled=true` and keep the replica count unchanged.
+2. Wait for every pod to carry the new spec. With the default
+   `graylog.updateStrategy.type: RollingUpdate`, run
+   `kubectl rollout status sts/graylog -n graylog`. With `OnDelete`, Kubernetes does not replace
+   the pods for you: delete each one, highest ordinal first, and wait for its replacement to
+   become ready before you delete the next.
+3. Make sure that the highest-ordinal pod carries the hook. Run
+   `kubectl get pod graylog-<n> -n graylog -o jsonpath='{.spec.containers[0].lifecycle.preStop}'`.
+   An empty result means that the pod still runs the old spec. Do not scale in yet.
+4. Reduce the replica count by one.
+
 | Key | Description | Default |
 |---|---|---|
 | `enabled` | Hold termination while the journal drains. | `false` |
-| `endpointPropagationDelaySeconds` | Sleep before the first sample, waiting for endpoint removal to propagate. Raise it if a load balancer targets pod IPs directly. | `15` |
+| `endpointPropagationDelaySeconds` | Sleep before the first sample, waiting for endpoint removal to propagate. If a load balancer targets pod IPs directly, increase this value and `graylog.terminationGracePeriodSeconds` by the same number of seconds. | `15` |
 | `shutdownReserveSeconds` | Held back out of the grace period for Graylog's own shutdown. | `45` |
 | `pollIntervalSeconds` | Seconds between journal-depth samples. | `2` |
 | `stallPolls` | Give up after this many polls with no new low. | `10` |
@@ -489,16 +520,16 @@ mongodb:
 helm upgrade graylog graylog/graylog -n graylog --set graylog.config.timezone="America/Denver" --reuse-values
 
 # set JVM options
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.serverJavaOpts="-Xms2g -Xmx1g" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.serverJavaOpts="-Xms1g -Xmx2g" --reuse-values
 
 # redefine message journal maxAge
 helm upgrade graylog graylog/graylog -n graylog --set graylog.config.messageJournal.maxAge="24h" --reuse-values
 
 # enable CORS headers for HTTP interface
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.network.enableCors=true --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set-string graylog.config.network.enableCors=true --reuse-values
 
 # enable email transport and set sender address
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set-string graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
 ```
 
 ## Customize deployed Kubernetes resources
@@ -994,8 +1025,18 @@ See [the included guide](../../docs/mongodb-backup-restore.md) if you need to ta
 Graylog's MongoDB database and restore it with `mongorestore`.
 
 # Uninstall
+
+> [!WARNING]
+> A scale-in to zero replicas stops every Graylog pod. The StatefulSet does not set
+> `podManagementPolicy`, so Kubernetes deletes the pods one at a time, from the highest ordinal
+> down. The automatic drain is off by default, so unprocessed messages stay in the journal on
+> volumes that Helm does not delete.
+>
+> If the release still receives traffic, stop the inputs first. Then drain each pod. See
+> [Scaling in safely](../../docs/graylog-message-handling.md#scaling-in-safely).
+
 ```sh
-# optional: scale Graylog down to zero
+# optional: scale Graylog down to zero, after the journals are drained
 kubectl scale sts graylog -n graylog --replicas 0  && kubectl wait --for=delete pod graylog-0 -n graylog
 
 # remove chart
@@ -1017,7 +1058,7 @@ helm template graylog graylog -f your-custom-values.yaml | yq
 # Logging
 ```sh
 # Graylog app logs
-stern statefulset/graylog-app -n graylog
+stern statefulset/graylog -n graylog
 # DataNode logs
 stern statefulset/graylog-datanode -n graylog
 ```
