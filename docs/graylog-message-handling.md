@@ -91,6 +91,13 @@ ordinals first — StatefulSets terminate from the highest ordinal down.
 zero. Endpoint removal alone does not stop long-lived TCP connections, UDP senders,
 or internally generated inputs.
 
+> [!WARNING]
+> Do not send `DELETE` to `/api/system/inputs/<id>`. That endpoint deletes the input
+> definition. To stop a running input, send `DELETE` to `/api/cluster/inputstates/<id>`.
+> This call leaves the input configured, so a `PUT` on the same path starts it again.
+> `/api/system/inputstates/<id>` stops the input on one node only.
+> `/api/cluster/inputstates/<id>` covers every node, which is what quiesces the journal.
+
 ```sh
 # list inputs
 curl -su "admin:$PASS" http://localhost:9000/api/system/inputs | jq '.inputs[] | {id, title}'
@@ -101,13 +108,6 @@ curl -su "admin:$PASS" -H 'X-Requested-By: cli' \
 ```
 
 Or **System > Inputs** in the UI. Requires admin auth.
-
-> [!WARNING]
-> Stop inputs via `inputstates`, never `DELETE /api/system/inputs/<id>` — that one is
-> "Terminate input on this node" and removes the input definition. `inputstates` stops
-> a running input and leaves it configured, so `PUT` on the same path starts it again.
-> `/api/system/inputstates/<id>` is the node-scoped variant; `/api/cluster/inputstates/<id>`
-> covers every node, which is what quiesces the journal.
 
 Every state-changing Graylog API call needs an `X-Requested-By` header (any value) or
 it fails with `CSRF protection header is missing`. That applies to the `lbstatus`
@@ -219,8 +219,10 @@ Defaults: `300 - 15 - 45 = 240s`. The chart fails to render if that is not posit
 **settle** is a plain sleep before the first sample. Endpoint removal is eventually
 consistent, and measuring during that window reads ingest that is about to stop —
 which skews the drain rate and can trip the feasibility abort on a pod that would
-have drained fine. Raise it if a load balancer targets pod IPs directly (ALB/NLB IP
-mode deregisters slower than kube-proxy), and raise the grace period with it.
+have drained fine. If a load balancer targets pod IPs directly, increase
+`graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds`. Then increase
+`graylog.terminationGracePeriodSeconds` by the same number of seconds. ALB and NLB in
+IP mode deregister slower than kube-proxy.
 
 ### What it cannot do
 
