@@ -242,8 +242,9 @@ graylog:
         # secrets (no global.existingSecretName).
         accountId:
         licenseKey:
-        # Comma-separated list of MaxMind database editions to download
-        # Examples: "GeoLite2-City GeoLite2-ASN", "GeoIP2-City GeoIP2-ISP"
+        # Space-separated list of MaxMind database editions to download.
+        # Passed to the sidecar as GEOIPUPDATE_EDITION_IDS.
+        # Examples: "GeoLite2-City GeoLite2-ASN" or "GeoIP2-City GeoIP2-ISP"
         editionIds: "GeoLite2-City GeoLite2-ASN"
       # mmdbSources provides direct download URLs (and checksums) for the
       # city/asn mmdb files as an alternative to the MaxMind sidecar.
@@ -542,8 +543,8 @@ graylog:
 
 # datanode configures the Graylog Data Node (managed OpenSearch).
 datanode:
-  # enabled toggles the Datanode StatefulSet, Service, and PDB (the Datanode
-  # ConfigMap and Secret are not gated by this flag).
+  # enabled toggles the Datanode StatefulSet, Service, PDB, ConfigMap, and
+  # Secret.
   enabled: true
   # replicas is the number of Datanode pods.
   replicas: 3
