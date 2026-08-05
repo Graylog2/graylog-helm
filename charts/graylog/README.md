@@ -132,7 +132,7 @@ You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's in
 
 ### cert-manager
 
-You can always [bring your own certificates](#bring-your-own-certificate-ingress-controller-recommended),
+You can always [bring your own certificates](#option-1-bring-your-own-certificate-with-ingress-controller-recommended),
 but using `cert-manager` can simplify TLS setup and certificate renewal considerably.
 
 Make sure you have [Ingress Controller](#ingress-controller) installed, and that `ingress.enabled` is set to `true`.
