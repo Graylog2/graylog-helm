@@ -22,7 +22,7 @@ tests:
           any: true
       - equal:
           path: spec.template.spec.containers[1].image
-          value: "maxmindinc/geoipupdate:7.1.1"
+          value: "maxmindinc/geoipupdate:v7.1.1"
       - equal:
           path: spec.template.spec.containers[1].imagePullPolicy
           value: IfNotPresent
@@ -59,7 +59,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[1].image
-          value: "maxmindinc/geoipupdate:7.1.1"
+          value: "maxmindinc/geoipupdate:v7.1.1"
 
   # Test: sidecar pull secrets are added to the pod
   - it: should add sidecar imagePullSecrets to the pod

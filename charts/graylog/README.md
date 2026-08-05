@@ -1179,7 +1179,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.geolocation.sidecar.enabled`                          | Enable the GeoIP update sidecar container.                  | `true`                          |
 | `graylog.config.geolocation.sidecar.schedule`                         | Cron schedule for GeoIP database updates.                   | `"0 0 * * *"`                   |
 | `graylog.config.geolocation.sidecar.image.repository`                 | Image repository for the GeoIP updater.                     | `"maxmindinc/geoipupdate"`      |
-| `graylog.config.geolocation.sidecar.image.tag`                        | Image tag for the GeoIP updater.                            | `"7.1.1"`                       |
+| `graylog.config.geolocation.sidecar.image.tag`                        | Image tag for the GeoIP updater.                            | `"v7.1.1"`                       |
 | `graylog.config.geolocation.sidecar.image.imagePullPolicy`            | Pull policy for the GeoIP updater image.                    | `IfNotPresent`                  |
 | `graylog.config.geolocation.sidecar.image.imagePullSecrets`           | Pull secrets for the GeoIP updater image.                   | `[]`                            |
 | `graylog.config.geolocation.sidecar.resources`                        | Resource requests/limits for the sidecar.                   | see `values.yaml`               |

@@ -164,7 +164,7 @@ kubectl exec -it pod/graylog-0 -- ls -lah /usr/share/data/geolocation/
 
 - Verify network access to Docker Hub
 - Check `imagePullSecrets` if using a private registry
-- Verify image tag exists: `maxmindinc/geoipupdate:7.1.1`
+- Verify image tag exists: `maxmindinc/geoipupdate:v7.1.1`
 
 **Error:** "GeoIP sidecar is enabled but MaxMind credentials are not provided"
 
