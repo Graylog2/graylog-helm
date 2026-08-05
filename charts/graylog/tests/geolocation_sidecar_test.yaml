@@ -22,7 +22,74 @@ tests:
           any: true
       - equal:
           path: spec.template.spec.containers[1].image
-          value: "maxmindinc/geoipupdate:7.1.1"
+          value: "maxmindinc/geoipupdate:v7.1.1"
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: IfNotPresent
+
+  # Test: Sidecar image is fully overridable
+  - it: should honor sidecar image repository, tag and pull policy overrides
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.accountId: "test-account"
+      graylog.config.geolocation.maxmindGeoIp.licenseKey: "test-key"
+      graylog.config.geolocation.sidecar.image.repository: "registry.example.com/mirror/geoipupdate"
+      graylog.config.geolocation.sidecar.image.tag: "7.0.0"
+      graylog.config.geolocation.sidecar.image.imagePullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "registry.example.com/mirror/geoipupdate:7.0.0"
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always
+
+  # Test: legacy repository/name split still renders the same image
+  - it: should append the deprecated image.name to the repository
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.accountId: "test-account"
+      graylog.config.geolocation.maxmindGeoIp.licenseKey: "test-key"
+      graylog.config.geolocation.sidecar.image.repository: "maxmindinc"
+      graylog.config.geolocation.sidecar.image.name: "geoipupdate"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "maxmindinc/geoipupdate:v7.1.1"
+
+  # Test: sidecar pull secrets are added to the pod
+  - it: should add sidecar imagePullSecrets to the pod
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.accountId: "test-account"
+      graylog.config.geolocation.maxmindGeoIp.licenseKey: "test-key"
+      graylog.image.imagePullSecrets:
+        - name: graylog-pull
+      graylog.config.geolocation.sidecar.image.imagePullSecrets:
+        - name: geoip-pull
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: graylog-pull
+            - name: geoip-pull
+
+  # Test: sidecar pull secrets are not added when the sidecar is disabled
+  - it: should not add sidecar imagePullSecrets when sidecar is disabled
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: false
+      graylog.config.geolocation.sidecar.image.imagePullSecrets:
+        - name: geoip-pull
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
 
   # Test: Sidecar not rendered when geolocation disabled
   - it: should not render sidecar when geolocation disabled
@@ -272,8 +339,57 @@ tests:
           path: spec.template.spec.containers[1].command[1]
           value: "/geoip-scripts/entrypoint.sh"
 
-  # Test: External secret scenario works
-  - it: should work with external secret
+  # Test: credentials can come from a dedicated external secret
+  - it: should read credentials from maxmindGeoIp.existingSecret
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.existingSecret: "my-geoip-secret"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef
+          value:
+            name: "my-geoip-secret"
+            key: "GEO_IP_MAXMIND_ACCOUNT_ID"
+      - equal:
+          path: spec.template.spec.containers[1].env[1].valueFrom.secretKeyRef
+          value:
+            name: "my-geoip-secret"
+            key: "GEO_IP_MAXMIND_LICENSE_KEY"
+
+  # Test: custom key names in the external secret
+  - it: should honor custom key names in the external secret
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.existingSecret: "my-geoip-secret"
+      graylog.config.geolocation.maxmindGeoIp.accountIdKey: "accountId"
+      graylog.config.geolocation.maxmindGeoIp.licenseKeyKey: "licenseKey"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.key
+          value: "accountId"
+      - equal:
+          path: spec.template.spec.containers[1].env[1].valueFrom.secretKeyRef.key
+          value: "licenseKey"
+
+  # Test: inline credentials still come from the chart-managed secret
+  - it: should read inline credentials from the chart-managed secret
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.accountId: "test-account"
+      graylog.config.geolocation.maxmindGeoIp.licenseKey: "test-key"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.name
+          value: "RELEASE-NAME-graylog-secrets"
+
+  # Test: the primary external secret is no longer expected to hold the credentials
+  - it: should fail when only global.existingSecretName is set
     template: workload/statefulsets/graylog.yaml
     set:
       graylog.config.geolocation.enabled: true
@@ -285,14 +401,53 @@ tests:
       mongodb.communityResource.enabled: false
       graylog.config.mongodb.customUri: "mongodb://user:pass@host:27017/graylog"
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: geoip-updater
-          any: true
+      - failedTemplate:
+          errorPattern: "GeoIP sidecar is enabled but MaxMind credentials are not provided"
+
+  # Test: global.existingSecretName + a dedicated GeoIP secret works
+  - it: should pair global.existingSecretName with a dedicated GeoIP secret
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.existingSecret: "my-geoip-secret"
+      global.existingSecretName: "my-external-secret"
+      mongodb.communityResource.enabled: false
+      graylog.config.mongodb.customUri: "mongodb://user:pass@host:27017/graylog"
+    asserts:
       - equal:
           path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.name
-          value: "my-external-secret"
+          value: "my-geoip-secret"
+
+  # Test: inline credentials are rejected when the chart manages no secret
+  - it: should reject inline credentials alongside global.existingSecretName
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.accountId: "test-account"
+      graylog.config.geolocation.maxmindGeoIp.licenseKey: "test-key"
+      global.existingSecretName: "my-external-secret"
+      mongodb.communityResource.enabled: false
+      graylog.config.mongodb.customUri: "mongodb://user:pass@host:27017/graylog"
+    asserts:
+      - failedTemplate:
+          errorPattern: "cannot be used with global.existingSecretName"
+
+  # Test: chart-managed secret stays free of MaxMind keys when using existingSecret
+  - it: should not store MaxMind credentials when existingSecret is used
+    template: config/secret/secrets.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.existingSecret: "my-geoip-secret"
+    asserts:
+      - notExists:
+          path: data.GEO_IP_MAXMIND_ACCOUNT_ID
+        documentIndex: 1
+      - notExists:
+          path: data.GEO_IP_MAXMIND_LICENSE_KEY
+        documentIndex: 1
 
   # Test: Missing credentials causes validation failure
   - it: should fail when credentials missing

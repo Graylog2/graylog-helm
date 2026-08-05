@@ -238,6 +238,9 @@
                   "type": "object",
                   "properties": {
                     "enabled": { "type": "boolean" },
+                    "existingSecret": { "type": ["string", "null"], "description": "Secret holding the MaxMind credentials, read directly by the sidecar" },
+                    "accountIdKey": { "type": "string", "description": "Key in existingSecret holding the MaxMind account ID" },
+                    "licenseKeyKey": { "type": "string", "description": "Key in existingSecret holding the MaxMind license key" },
                     "accountId": { "type": ["string", "integer", "null"] },
                     "licenseKey": { "type": ["string", "null"] },
                     "editionIds": { "type": "string", "description": "Space-separated list of MaxMind database editions" }
@@ -271,8 +274,17 @@
                       "type": "object",
                       "properties": {
                         "repository": { "type": "string", "description": "Container image repository" },
-                        "name": { "type": "string", "description": "Container image name" },
-                        "tag": { "type": "string", "description": "Container image tag (pinned version)" }
+                        "name": { "type": "string", "description": "Deprecated: appended to repository when set" },
+                        "tag": { "type": "string", "description": "Container image tag (pinned version)" },
+                        "imagePullPolicy": { "type": "string" },
+                        "imagePullSecrets": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": { "name": { "type": "string" } },
+                            "required": ["name"]
+                          }
+                        }
                       }
                     },
                     "schedule": {

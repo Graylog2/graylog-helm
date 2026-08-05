@@ -10,14 +10,28 @@ Volume mounts assume the following volumes are defined in the pod:
 */}}
 {{- define "graylog.geolocation.sidecar" }}
 {{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.geolocation.sidecar.enabled }}
-{{- if not .Values.global.existingSecretName }}
-{{- if or (empty .Values.graylog.config.geolocation.maxmindGeoIp.accountId) (empty .Values.graylog.config.geolocation.maxmindGeoIp.licenseKey) }}
-{{- fail "GeoIP sidecar is enabled but MaxMind credentials are not provided. Set graylog.config.geolocation.maxmindGeoIp.accountId and licenseKey, or provide global.existingSecretName with GEO_IP_MAXMIND_ACCOUNT_ID and GEO_IP_MAXMIND_LICENSE_KEY keys." }}
+{{- $maxmind := .Values.graylog.config.geolocation.maxmindGeoIp }}
+{{/* Inline credentials only reach a Secret when maxmindGeoIp.enabled is true. */}}
+{{- $inline := and $maxmind.enabled $maxmind.accountId $maxmind.licenseKey }}
+{{- if and $inline .Values.global.existingSecretName }}
+{{- fail "graylog.config.geolocation.maxmindGeoIp.accountId/licenseKey cannot be used with global.existingSecretName -- the chart manages no Secret to store them in. Put the MaxMind credentials in their own Secret and reference it with graylog.config.geolocation.maxmindGeoIp.existingSecret." }}
 {{- end }}
+{{- if not (or $inline $maxmind.existingSecret) }}
+{{- fail "GeoIP sidecar is enabled but MaxMind credentials are not provided. Set graylog.config.geolocation.maxmindGeoIp.accountId and licenseKey, or point graylog.config.geolocation.maxmindGeoIp.existingSecret at a Secret holding them (see examples/graylog-geoip-secret.yaml)." }}
 {{- end }}
+{{/* Inline credentials live in the chart-managed Secret; otherwise read the external one. */}}
+{{- $credsSecret := $maxmind.existingSecret }}
+{{- $accountIdKey := $maxmind.accountIdKey | default "GEO_IP_MAXMIND_ACCOUNT_ID" }}
+{{- $licenseKeyKey := $maxmind.licenseKeyKey | default "GEO_IP_MAXMIND_LICENSE_KEY" }}
+{{- if $inline }}
+{{- $credsSecret = include "graylog.secretsName" . }}
+{{- $accountIdKey = "GEO_IP_MAXMIND_ACCOUNT_ID" }}
+{{- $licenseKeyKey = "GEO_IP_MAXMIND_LICENSE_KEY" }}
+{{- end }}
+{{- $image := .Values.graylog.config.geolocation.sidecar.image }}
 - name: geoip-updater
-  image: "{{ .Values.graylog.config.geolocation.sidecar.image.repository }}/{{ .Values.graylog.config.geolocation.sidecar.image.name }}:{{ .Values.graylog.config.geolocation.sidecar.image.tag }}"
-  imagePullPolicy: {{ .Values.graylog.image.imagePullPolicy }}
+  image: "{{ $image.repository }}{{ with $image.name }}/{{ . }}{{ end }}:{{ $image.tag }}"
+  imagePullPolicy: {{ $image.imagePullPolicy | default .Values.graylog.image.imagePullPolicy }}
   {{- with .Values.graylog.config.geolocation.sidecar.securityContext }}
   securityContext:
     {{- toYaml . | nindent 4 }}
@@ -29,13 +43,13 @@ Volume mounts assume the following volumes are defined in the pod:
     - name: GEOIPUPDATE_ACCOUNT_ID
       valueFrom:
         secretKeyRef:
-          name: {{ include "graylog.secretsName" . }}
-          key: GEO_IP_MAXMIND_ACCOUNT_ID
+          name: {{ $credsSecret }}
+          key: {{ $accountIdKey }}
     - name: GEOIPUPDATE_LICENSE_KEY
       valueFrom:
         secretKeyRef:
-          name: {{ include "graylog.secretsName" . }}
-          key: GEO_IP_MAXMIND_LICENSE_KEY
+          name: {{ $credsSecret }}
+          key: {{ $licenseKeyKey }}
     - name: GEOIPUPDATE_EDITION_IDS
       value: "{{ .Values.graylog.config.geolocation.maxmindGeoIp.editionIds }}"
     - name: GEOIPUPDATE_FREQUENCY
