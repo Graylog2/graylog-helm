@@ -17,56 +17,83 @@ data:
     SCHEDULE="${GEOIP_SCHEDULE:-0 0 * * *}"
     TIMESTAMP_FORMAT="+%Y-%m-%d %H:%M:%S UTC"
 
-    # Extract fields from cron schedule
+    # Extract fields from cron schedule.
+    # `set -f` first: the fields contain `*`, and an unquoted expansion is
+    # subject to pathname expansion, which would replace `*` with the names of
+    # the files in the working directory.
+    set -f
     set -- $SCHEDULE
     CRON_MINUTE="${1:-0}"
     CRON_HOUR="${2:-0}"
     CRON_DAY="${3:-*}"
     CRON_MONTH="${4:-*}"
     CRON_WEEKDAY="${5:-*}"
+    set +f
 
     echo "[$(date "$TIMESTAMP_FORMAT")] GeoIP Sidecar started"
     echo "[$(date "$TIMESTAMP_FORMAT")] Cron schedule: $SCHEDULE"
     echo "[$(date "$TIMESTAMP_FORMAT")] Database directory: $GEOIPUPDATE_DB_DIR"
 
+    # Strip leading zeros without turning "00" into an empty string.
+    # `sed 's/^0*//'` alone returns "" for "00", and "" never equals "0", so a
+    # schedule with 0 in the minute or hour field never matched.
+    denumber() {
+        _n=$(echo "$1" | sed 's/^0*//')
+        echo "${_n:-0}"
+    }
+
+    # cron_match FIELD CURRENT MAX
+    # Supports one cron field: "*", "N", "*/N", "A-B", "A-B/N", and
+    # comma-separated lists of those. Returns 0 when CURRENT matches.
+    # The list is split with parameter expansion rather than word splitting,
+    # because an unquoted `*` would be replaced by the working directory listing.
+    cron_match() {
+        _field="$1"
+        _cur="$2"
+        _max="$3"
+        _rest="$_field"
+        while [ -n "$_rest" ]; do
+            case "$_rest" in
+                *,*) _part="${_rest%%,*}"; _rest="${_rest#*,}" ;;
+                *)   _part="$_rest";       _rest="" ;;
+            esac
+            _step=1
+            case "$_part" in
+                *'/'*)
+                    _step="${_part##*/}"
+                    _part="${_part%%/*}"
+                    ;;
+            esac
+            case "$_step" in ''|*[!0-9]*) continue ;; esac
+            if [ "$_step" -lt 1 ]; then continue; fi
+            case "$_part" in
+                '*')   _lo=0;                _hi="$_max" ;;
+                *'-'*) _lo="${_part%%-*}";   _hi="${_part##*-}" ;;
+                *)     _lo="$_part";         _hi="$_part" ;;
+            esac
+            case "$_lo" in ''|*[!0-9]*) continue ;; esac
+            case "$_hi" in ''|*[!0-9]*) continue ;; esac
+            if [ "$_cur" -ge "$_lo" ] && [ "$_cur" -le "$_hi" ] &&
+               [ $(( (_cur - _lo) % _step )) -eq 0 ]; then
+                return 0
+            fi
+        done
+        return 1
+    }
+
     # Function to check if current time matches cron schedule
     should_update() {
-        local now_min=$(date +%M | sed 's/^0*//')
-        local now_hour=$(date +%H | sed 's/^0*//')
-        local now_day=$(date +%d | sed 's/^0*//')
-        local now_month=$(date +%m | sed 's/^0*//')
-        local now_wday=$(date +%w)
+        now_min=$(denumber "$(date +%M)")
+        now_hour=$(denumber "$(date +%H)")
+        now_day=$(denumber "$(date +%d)")
+        now_month=$(denumber "$(date +%m)")
+        now_wday=$(date +%w)
 
-        # Simple check: only support common patterns
-        case "$CRON_MINUTE" in
-            '*') ;;
-            "$now_min") ;;
-            *) return 1 ;;
-        esac
-
-        case "$CRON_HOUR" in
-            '*') ;;
-            "$now_hour") ;;
-            *) return 1 ;;
-        esac
-
-        case "$CRON_DAY" in
-            '*') ;;
-            "$now_day") ;;
-            *) return 1 ;;
-        esac
-
-        case "$CRON_MONTH" in
-            '*') ;;
-            "$now_month") ;;
-            *) return 1 ;;
-        esac
-
-        case "$CRON_WEEKDAY" in
-            '*') ;;
-            "$now_wday") ;;
-            *) return 1 ;;
-        esac
+        cron_match "$CRON_MINUTE"   "$now_min"   59 || return 1
+        cron_match "$CRON_HOUR"     "$now_hour"  23 || return 1
+        cron_match "$CRON_DAY"      "$now_day"   31 || return 1
+        cron_match "$CRON_MONTH"    "$now_month" 12 || return 1
+        cron_match "$CRON_WEEKDAY"  "$now_wday"   6 || return 1
 
         return 0
     }

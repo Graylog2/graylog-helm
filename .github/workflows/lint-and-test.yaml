@@ -79,6 +79,10 @@ jobs:
         if: always()
         run: sh charts/graylog/tests/scripts/init-graylog-behavior-test.sh
 
+      - name: GeoIP cron behaviour tests
+        if: always()
+        run: sh charts/graylog/tests/scripts/geoip-cron-behavior-test.sh
+
   helm-ct-install:
     runs-on: ubuntu-latest
     needs: [helm-ct-lint, helm-unittest]
