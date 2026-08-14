@@ -40,8 +40,8 @@ spec:
       volumes:
         - name: content
           configMap:
-            name: {{ include "graylog.fallback.name" . | printf "%s-content" }}
+            name: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fallback.name" .) "suffix" "content") }}
         - name: config
           configMap:
-            name: {{ include "graylog.fallback.name" . | printf "%s-config" }}
+            name: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fallback.name" .) "suffix" "config") }}
 {{- end }}

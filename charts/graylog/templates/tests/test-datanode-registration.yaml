@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: {{ include "graylog.fullname" . | printf "%s-test-datanode-registration" | trunc 63 | trimSuffix "-" }}
+  name: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "test-datanode-registration") }}
   {{- include "graylog.metadata.labels" (dict "context" $ "indent" 2) }}
   {{- $hooks := dict "helm.sh/hook" "test" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "fixed" $hooks "indent" 2) }}
@@ -56,12 +56,12 @@ spec:
         - name: GRAYLOG_ROOT_USERNAME
           valueFrom:
             secretKeyRef:
-              name: {{ include "graylog.fullname" . | printf "%s-test-credentials" | trunc 63 | trimSuffix "-" }}
+              name: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "test-credentials") }}
               key: GRAYLOG_ROOT_USERNAME
         - name: GRAYLOG_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ include "graylog.fullname" . | printf "%s-test-credentials" | trunc 63 | trimSuffix "-" }}
+              name: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "test-credentials") }}
               key: GRAYLOG_ROOT_PASSWORD
   restartPolicy: Never
 {{- end }}

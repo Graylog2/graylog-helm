@@ -44,7 +44,7 @@ spec:
           db: admin
         - name: restore
           db: admin
-      scramCredentialsSecretName: {{ include "graylog.mongodb.crName" . | printf "%s-admin" }}
+      scramCredentialsSecretName: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.mongodb.crName" .) "suffix" "admin") }}
     - name: {{ include "graylog.mongodb.crUsername" . }}
       db: {{ include "graylog.mongodb.crDatabase" . }}
       passwordSecretRef:
@@ -53,7 +53,7 @@ spec:
       roles:
         - name: readWrite
           db: {{ include "graylog.mongodb.crDatabase" . }}
-      scramCredentialsSecretName: {{ printf "%s-%s" (include "graylog.mongodb.crName" .) (include "graylog.mongodb.crUsername" .) }}
+      scramCredentialsSecretName: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.mongodb.crName" .) "suffix" (include "graylog.mongodb.crUsername" .)) }}
   statefulSet:
     spec:
       template:
@@ -85,7 +85,7 @@ spec:
                         # The MongoDB Community operator is the only thing that labels
                         # these pods, and it sets `app: <service name>` and nothing else.
                         # The chart's own labels are not present here.
-                        app: {{ include "graylog.mongodb.crName" . | printf "%s-svc" }}
+                        app: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.mongodb.crName" .) "suffix" "svc") }}
                     topologyKey: kubernetes.io/hostname
       volumeClaimTemplates:
         - metadata:

@@ -31,6 +31,58 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
+Join a base name and a suffix into a name that always fits the 63-character
+DNS label limit.
+
+The base is truncated to leave room for the suffix, so the suffix survives
+intact. Truncating the joined string instead would eat into the suffix and
+collapse distinct resources onto one name -- with a 62-character base, both
+"<base>-secrets" and "<base>-secrets-datanode" reduce to "<base>", silently
+making two Secrets share a name.
+
+Every derived name in this chart must go through this helper.
+
+Usage:
+  {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "datanode-svc") }}
+*/}}
+{{- define "graylog.name.suffixed" -}}
+{{- $suffix := .suffix | toString -}}
+{{- $base := .base | toString -}}
+{{- $reserve := .reserve | default 0 | int -}}
+{{- /* 62 = the 63-character limit minus the joining hyphen */ -}}
+{{- $room := sub 62 (len $suffix) | int -}}
+{{- $room = sub $room $reserve | int -}}
+{{- if lt $room 1 -}}
+{{- fail (printf "graylog.name.suffixed: suffix %q leaves no room for a base within 63 characters" $suffix) -}}
+{{- end -}}
+{{- printf "%s-%s" ($base | trunc $room | trimSuffix "-") $suffix -}}
+{{- end }}
+
+{{/*
+Characters reserved on any name that Kubernetes extends with a StatefulSet
+ordinal. Pod names are "<statefulset>-<ordinal>" and that whole string is the
+pod hostname, which must be a DNS label of at most 63 characters. Holding back
+4 characters keeps hostnames valid up to 999 replicas.
+
+This is a fixed reserve on purpose: deriving it from the replica count would
+rename the StatefulSet when scaling past 9 or 99, and a StatefulSet name cannot
+be changed in place.
+*/}}
+{{- define "graylog.name.ordinalReserve" -}}4{{- end }}
+
+{{/*
+Graylog StatefulSet name
+
+Kept separate from "graylog.fullname" because this name gains a pod ordinal.
+For every release name short enough to not need truncation the two are
+identical, so this does not rename anything on an existing install.
+*/}}
+{{- define "graylog.statefulset.name" -}}
+{{- $reserve := include "graylog.name.ordinalReserve" . | int -}}
+{{- include "graylog.fullname" . | trunc (sub 63 $reserve | int) | trimSuffix "-" -}}
+{{- end }}
+
+{{/*
 Common labels
 */}}
 {{- define "graylog.labels" -}}
@@ -148,7 +200,7 @@ Usage:
 Init script ConfigMap name
 */}}
 {{- define "graylog.cm.init.name" }}
-{{- include "graylog.fullname" . | printf "%s-init-cm" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "init-cm") }}
 {{- end }}
 
 {{/*
@@ -157,7 +209,7 @@ Service account name
 {{- define "graylog.serviceAccountName" }}
 {{- $defaultName := "default" }}
 {{- if .Values.serviceAccount.create }}
-{{- $defaultName = include "graylog.fullname" . | printf "%s-sa" | trunc 63 | trimSuffix "-" }}
+{{- $defaultName = include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "sa") }}
 {{- end }}
 {{- .Values.serviceAccount.nameOverride | default $defaultName }}
 {{- end }}
@@ -168,7 +220,7 @@ MongoDB service account name
 {{- define "graylog.mongodb.serviceAccountName" }}
 {{- $defaultName := "default" }}
 {{- if .Values.mongodb.serviceAccount.create }}
-{{- $defaultName = include "graylog.fullname" . | printf "%s-mongo-sa" | trunc 63 | trimSuffix "-" }}
+{{- $defaultName = include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "mongo-sa") }}
 {{- end }}
 {{- .Values.mongodb.serviceAccount.nameOverride | default $defaultName }}
 {{- end }}
@@ -309,7 +361,7 @@ Graylog secret pepper
 Graylog secret name
 */}}
 {{- define "graylog.secretsName" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-secrets" | trunc 63 | trimSuffix "-" }}
+{{- $defaultName := include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "secrets") }}
 {{- if .Values.global.existingSecretName }}
 {{- $defaultName = .Values.global.existingSecretName }}
 {{- end }}
@@ -320,21 +372,21 @@ Graylog secret name
 Graylog Datanode secret name
 */}}
 {{- define "graylog.datanode.secretsName" -}}
-{{- include "graylog.secretsName" . | printf "%s-datanode" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.secretsName" .) "suffix" "datanode") }}
 {{- end }}
 
 {{/*
 Graylog backup-secret name
 */}}
 {{- define "graylog.backupSecretName" -}}
-{{- include "graylog.fullname" . | printf "%s-backup-secret" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "backup-secret") }}
 {{- end }}
 
 {{/*
 MongoDB Community Resource name
 */}}
 {{- define "graylog.mongodb.crName" -}}
-{{- include "graylog.fullname" . | printf "%s-mongo-rs" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "mongo-rs") }}
 {{- end }}
 
 {{/*
@@ -353,6 +405,11 @@ MongoDB Community Resource main database
 
 {{/*
 MongoDB Community Resource Secret name
+
+Deliberately NOT routed through "graylog.name.suffixed". This names a Secret the
+MongoDB Community Operator creates, which the chart then looks up by name. The
+operator builds it as "<cr>-<user>-<db>" without truncating, so shortening it
+here would only make the lookup miss a Secret that does exist.
 */}}
 {{- define "graylog.mongodb.crSecretName" -}}
 {{- $crName := include "graylog.mongodb.crName" . }}
@@ -365,7 +422,7 @@ MongoDB Community Resource Secret name
 Graylog service name
 */}}
 {{- define "graylog.service.name" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-svc" | trunc 63 | trimSuffix "-" }}
+{{- $defaultName := include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "svc") }}
 {{- .Values.graylog.service.nameOverride | default $defaultName }}
 {{- end }}
 
@@ -418,14 +475,14 @@ Always exposed by the service; the forwarder polls it for configuration updates.
 Graylog configmap name
 */}}
 {{- define "graylog.configmap.name" -}}
-{{- include "graylog.fullname" . | printf "%s-config" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "config") }}
 {{- end }}
 
 {{/*
 Graylog data PVC/volume name
 */}}
 {{- define "graylog.volume.name" -}}
-{{- $defaultName := include "graylog.fullname" . | printf "%s-data" | trunc 63 | trimSuffix "-" }}
+{{- $defaultName := include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "data") }}
 {{- .Values.graylog.persistence.volumeNameOverride | default $defaultName }}
 {{- end }}
 
@@ -433,14 +490,14 @@ Graylog data PVC/volume name
 Graylog Datanode pod prefix
 */}}
 {{- define "graylog.datanode.name" -}}
-{{- include "graylog.fullname" . | printf "%s-datanode" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "datanode" "reserve" (include "graylog.name.ordinalReserve" . | int)) }}
 {{- end }}
 
 {{/*
 Graylog Datanode service name
 */}}
 {{- define "graylog.datanode.service.name" -}}
-{{- include "graylog.fullname" . | printf "%s-datanode-svc" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "datanode-svc") }}
 {{- end }}
 
 {{/*
@@ -458,7 +515,7 @@ Graylog Datanode hosts
 Datanode configmap name
 */}}
 {{- define "graylog.datanode.configmap.name" -}}
-{{- include "graylog.fullname" . | printf "%s-datanode-config" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "datanode-config") }}
 {{- end }}
 
 {{/*
@@ -645,7 +702,7 @@ Kept separate from the main Graylog secret so GRAYLOG_ELASTICSEARCH_HOSTS is inj
 even when the user supplies their own secret via global.existingSecretName.
 */}}
 {{- define "graylog.opensearch.secretName" -}}
-{{- include "graylog.fullname" . | printf "%s-opensearch" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "opensearch") }}
 {{- end }}
 
 {{/*
@@ -664,7 +721,7 @@ Provider-defined Storage Class name
 */}}
 {{- define "graylog.provider.storageClassName" }}
 {{- $names := dict }}
-{{- $_ := include "graylog.fullname" . | printf "%s-gp3" | trunc 63 | trimSuffix "-" | set $names "aws" -}}
+{{- $_ := include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "gp3") | set $names "aws" -}}
 {{/* add more entries here */}}
 {{- .Values.provider | default "" | get $names }}
 {{- end }}
@@ -865,28 +922,28 @@ Graylog Java Options
 Ingress name
 */}}
 {{- define "graylog.ingress.web.name" }}
-{{- include "graylog.fullname" . | printf "%s-web" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "web") }}
 {{- end }}
 
 {{/*
 Forwarder message channel ingress name
 */}}
 {{- define "graylog.ingress.forwarder.message.name" }}
-{{- include "graylog.fullname" . | printf "%s-forwarder-message-channel" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "forwarder-message-channel") }}
 {{- end }}
 
 {{/*
 Forwarder configuration channel ingress name
 */}}
 {{- define "graylog.ingress.forwarder.config.name" }}
-{{- include "graylog.fullname" . | printf "%s-forwarder-config-channel" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "forwarder-config-channel") }}
 {{- end }}
 
 {{/*
 Cert-manager issuer name
 */}}
 {{- define "graylog.cert-manager.issuer.name" }}
-{{- include "graylog.fullname" . | printf "%s-letsencrypt" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "letsencrypt") }}
 {{- end }}
 
 {{/*
@@ -911,7 +968,7 @@ Usage: if (include "cert-manager.issuer.exists.any" . | eq "true") ...
 Fallback service/deployment name
 */}}
 {{- define "graylog.fallback.name" }}
-{{- include "graylog.fullname" . | printf "%s-waiting-room" | trunc 63 | trimSuffix "-" }}
+{{- include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "waiting-room") }}
 {{- end }}
 
 {{/*

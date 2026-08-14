@@ -17,7 +17,7 @@ spec:
   acme:
     server: {{ .Values.ingress.config.tls.issuer.managed.staging | ternary "-staging" "" | printf "https://acme%s-v02.api.letsencrypt.org/directory" }}
     privateKeySecretRef:
-      name: {{ include "graylog.fullname" . | printf "%s-acme-pk" }}
+      name: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "acme-pk") }}
     solvers:
       - http01:
           ingress:
