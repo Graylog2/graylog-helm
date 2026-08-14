@@ -1,0 +1,214 @@
+suite: message journal durability and sizing guards (J-03, J-06)
+templates:
+  # The guards are validation helpers invoked from the secrets template, next to
+  # the BYO-OpenSearch and C-06 guards. Kept to this one template so the
+  # failedTemplate asserts cannot resolve against a template that renders fine —
+  # the rendered journal env is asserted in journal_config_test.yaml instead.
+  - config/secret/secrets.yaml
+release:
+  name: graylog
+  namespace: graylog
+set:
+  # Suite-wide so the generated-password path never interferes with these cases.
+  graylog.config.rootPassword: test-password
+tests:
+  # ---- the broken combination -------------------------------------------------
+  - it: rejects the default journal on a non-persistent data dir
+    set:
+      graylog.persistence.enabled: false
+    asserts:
+      # Anchored below the first line break: helm-unittest does not match the
+      # opening line of a multi-line fail message.
+      - failedTemplate:
+          errorPattern: "messageJournal.enabled is on while graylog.persistence.enabled=false"
+
+  - it: rejects it when the journal is enabled explicitly
+    set:
+      graylog.persistence.enabled: false
+      graylog.config.messageJournal.enabled: "true"
+    asserts:
+      - failedTemplate:
+          errorPattern: "messageJournal.enabled is on while graylog.persistence.enabled=false"
+
+  - it: explains the emptyDir consequence rather than just naming the values
+    set:
+      graylog.persistence.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "backed by an emptyDir volume"
+      - failedTemplate:
+          errorPattern: "lost on any pod restart, eviction, or upgrade"
+
+  - it: offers all three remedies
+    set:
+      graylog.persistence.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "Option A: Durable journal on chart-managed storage"
+      - failedTemplate:
+          errorPattern: "Option B: Durable journal on a pre-provisioned claim"
+      - failedTemplate:
+          errorPattern: "Option C: No journal at all"
+      # Option C is unusable without --set-string, since the schema types this
+      # value as a string and rejects a bare boolean. Saying so in the error is
+      # the difference between a fix and a second failed attempt.
+      - failedTemplate:
+          errorPattern: "Option C needs --set-string"
+
+  # ---- configurations that must keep working ---------------------------------
+  - it: allows the default durable journal
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: allows a journal with persistence explicitly enabled
+    set:
+      graylog.persistence.enabled: true
+      graylog.config.messageJournal.enabled: "true"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: allows no journal on a non-persistent data dir
+    set:
+      graylog.persistence.enabled: false
+      graylog.config.messageJournal.enabled: "false"
+    asserts:
+      - notFailedTemplate: {}
+
+  # persistence.enabled=false + existingClaim still mounts a real PVC, so the
+  # journal is durable. The guard must not fire on a legitimate BYO-claim setup.
+  - it: allows persistence.enabled=false when an existingClaim supplies the volume
+    set:
+      graylog.persistence.enabled: false
+      graylog.persistence.existingClaim: my-graylog-data
+    asserts:
+      - notFailedTemplate: {}
+
+  # No StatefulSet is rendered, so there is no pod and no journal to lose.
+  - it: does not fire when the Graylog server is disabled entirely
+    set:
+      graylog.enabled: false
+      graylog.persistence.enabled: false
+    asserts:
+      - notFailedTemplate: {}
+
+  # ---- the string-typed value ------------------------------------------------
+  # messageJournal.enabled is schema-typed as a string, so a truthiness test on
+  # it would be true even for "false" and the guard would reject the very config
+  # Option C recommends. These pin the comparison, not the truthiness.
+  - it: treats a mixed-case false as disabled
+    set:
+      graylog.persistence.enabled: false
+      graylog.config.messageJournal.enabled: "False"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: treats an unset journal value as enabled, per the config template default
+    set:
+      graylog.persistence.enabled: false
+      graylog.config.messageJournal.enabled: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "messageJournal.enabled is on while graylog.persistence.enabled=false"
+
+  # ---- journal cap vs volume size (J-06) -------------------------------------
+  # A cap the data volume cannot hold is the mistake: the journal shares the volume
+  # with the node-id, truststore, content packs and GeoIP databases. A full journal
+  # throttles inputs by design; a full data volume takes the node down.
+  - it: accepts the default cap on the default volume
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects a cap that claims more than 90% of the volume
+    set:
+      graylog.config.messageJournal.maxSize: "5gb"
+      graylog.persistence.size: "5Gi"
+    asserts:
+      - failedTemplate:
+          errorPattern: "claims more than 90% of graylog.persistence.size"
+
+  - it: rejects a cap larger than the volume outright
+    set:
+      graylog.config.messageJournal.maxSize: "16gb"
+      graylog.persistence.size: "8Gi"
+    asserts:
+      - failedTemplate:
+          errorPattern: "claims more than 90%"
+
+  - it: offers both a smaller cap and a bigger volume, with real numbers
+    set:
+      graylog.config.messageJournal.maxSize: "5gb"
+      graylog.persistence.size: "5Gi"
+    asserts:
+      # 90% of 5Gi in MiB, and 5gb/0.9 rounded up in MiB. Both round-trip through
+      # the guard — verified by the two acceptance cases below.
+      - failedTemplate:
+          errorPattern: "maxSize=4608mb"
+      - failedTemplate:
+          errorPattern: "size=5689Mi"
+      - failedTemplate:
+          errorPattern: "shrinking one is not supported"
+
+  - it: accepts the smaller cap it suggested
+    set:
+      graylog.config.messageJournal.maxSize: "4608mb"
+      graylog.persistence.size: "5Gi"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts the bigger volume it suggested
+    set:
+      graylog.config.messageJournal.maxSize: "5gb"
+      graylog.persistence.size: "5689Mi"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts a cap comfortably inside the volume
+    set:
+      graylog.config.messageJournal.maxSize: "2gb"
+      graylog.persistence.size: "8Gi"
+    asserts:
+      - notFailedTemplate: {}
+
+  # Kubernetes G is 10^9 while Graylog's gb is 2^30, so the suffixes must not be
+  # treated as equivalent. 8G is 8e9, which is less than 8Gi (8.59e9).
+  - it: distinguishes decimal from binary suffixes
+    set:
+      graylog.config.messageJournal.maxSize: "7gb"      # 7 x 2^30 = 7.52e9
+      graylog.persistence.size: "8G"                    # 8 x 10^9 = 8.0e9  -> 94%
+    asserts:
+      - failedTemplate:
+          errorPattern: "claims more than 90%"
+
+  # An existingClaim's capacity is not knowable at render time.
+  - it: skips the size check when an existingClaim supplies the volume
+    set:
+      graylog.config.messageJournal.maxSize: "500gb"
+      graylog.persistence.existingClaim: my-graylog-data
+    asserts:
+      - notFailedTemplate: {}
+
+  # A size the parser cannot read is not grounds for refusing to render. Fractional
+  # quantities are the known gap.
+  - it: skips the size check on an unparseable cap
+    set:
+      graylog.config.messageJournal.maxSize: "1.5gb"
+      graylog.persistence.size: "1Gi"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: skips the size check on an unparseable volume size
+    set:
+      graylog.config.messageJournal.maxSize: "5gb"
+      graylog.persistence.size: "1.5Gi"
+    asserts:
+      - notFailedTemplate: {}
+
+  # No journal, no cap to check.
+  - it: skips the size check when the journal is disabled
+    set:
+      graylog.config.messageJournal.enabled: "false"
+      graylog.config.messageJournal.maxSize: "500gb"
+      graylog.persistence.size: "1Gi"
+    asserts:
+      - notFailedTemplate: {}
+

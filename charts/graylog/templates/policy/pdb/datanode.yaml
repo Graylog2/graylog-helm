@@ -3,11 +3,10 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "graylog.fullname" . | printf "%s-pdb-datanode" }}
+  name: {{ include "graylog.fullname" . | printf "%s-pdb-datanode" | trunc 63 | trimSuffix "-" }}
   namespace: {{ .Release.Namespace }}
-  labels:
-    app: graylog-datanode
-    {{- include "graylog.labels" . | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.podDisruptionBudget.labels "fixed" (dict "app.kubernetes.io/component" "datanode" "app" "graylog-datanode") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.podDisruptionBudget.annotations "indent" 2) }}
 spec:
   minAvailable: {{ .Values.datanode.podDisruptionBudget.minAvailable | default 3 | int }}
   selector:

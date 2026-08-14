@@ -1,0 +1,243 @@
+suite: immutable fields under custom labels
+# Kubernetes accepts updates to only six StatefulSet spec fields: replicas,
+# ordinals, template, updateStrategy, persistentVolumeClaimRetentionPolicy and
+# minReadySeconds. Everything else — spec.selector and spec.volumeClaimTemplates
+# in particular — is rejected on update.
+#
+# That makes customization uniquely dangerous here: any chart-injected metadata
+# that reaches an immutable field rewrites it on every existing release and
+# makes `helm upgrade` fail outright, with no fix short of recreating the
+# workload. Worse, the chart's identity labels carry helm.sh/chart and
+# app.kubernetes.io/version, so the failure would recur on every version bump.
+#
+# The contract these tests pin:
+#   1. spec.selector.matchLabels contains ONLY the chart's fixed identity
+#      labels, whatever the user sets.
+#   2. spec.template.metadata.labels is a strict superset of it, so pods still
+#      match after custom labels are added. (template IS mutable.)
+#   3. spec.volumeClaimTemplates carries NO metadata unless the user explicitly
+#      asked for it — no chart labels, no global.commonLabels/commonAnnotations.
+# The same reasoning applies to Service and PodDisruptionBudget selectors, which
+# must keep matching pods created before the labels were added.
+#
+# If you add a new object or a new metadata call site, extend this suite. The
+# helper to use for anything immutable is "graylog.claim.metadata", never
+# "graylog.metadata.labels".
+templates:
+  - workload/statefulsets/graylog.yaml
+  - workload/statefulsets/datanode.yaml
+  - service/graylog.yaml
+  - service/datanode.yaml
+  - policy/pdb/graylog.yaml
+  - policy/pdb/datanode.yaml
+  - custom/mongo-rs.yaml
+  # The StatefulSets' checksum helpers `include` these templates by path, so
+  # helm-unittest's template filter has to list them for the includes to resolve.
+  - config/graylog.yaml
+  - config/datanode.yaml
+  - config/secret/secrets.yaml
+release:
+  name: graylog
+  namespace: graylog
+
+tests:
+  - it: keeps custom labels out of the Graylog StatefulSet selector
+    set:
+      global.commonLabels.env: dev
+      global.commonLabels.team: platform
+      graylog.labels.tier: backend
+      graylog.podLabels.custom: "yes"
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      # The selector is exactly the chart's identity labels — nothing else.
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app: graylog-app
+            app.kubernetes.io/name: graylog
+            app.kubernetes.io/instance: graylog
+      - notExists:
+          path: spec.selector.matchLabels.env
+      - notExists:
+          path: spec.selector.matchLabels.team
+      - notExists:
+          path: spec.selector.matchLabels.custom
+      - notExists:
+          path: spec.selector.matchLabels.tier
+      # ... while the pods carry them, and still match the selector.
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: graylog-app
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: graylog
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: graylog
+      - equal:
+          path: spec.template.metadata.labels.env
+          value: dev
+      - equal:
+          path: spec.template.metadata.labels.custom
+          value: "yes"
+
+  - it: keeps custom labels out of the Datanode StatefulSet selector
+    set:
+      global.commonLabels.env: dev
+      datanode.labels.tier: storage
+      datanode.podLabels.custom: "yes"
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app: graylog-datanode
+            app.kubernetes.io/name: graylog
+            app.kubernetes.io/instance: graylog
+      - notExists:
+          path: spec.selector.matchLabels.env
+      - notExists:
+          path: spec.selector.matchLabels.custom
+      - equal:
+          path: spec.template.metadata.labels.env
+          value: dev
+      - equal:
+          path: spec.template.metadata.labels.custom
+          value: "yes"
+
+  - it: keeps custom labels out of the Service selectors
+    set:
+      global.commonLabels.env: dev
+      graylog.service.labels.tier: edge
+      datanode.service.labels.tier: storage
+    asserts:
+      - equal:
+          path: spec.selector
+          value:
+            app: graylog-app
+            app.kubernetes.io/name: graylog
+            app.kubernetes.io/instance: graylog
+        template: service/graylog.yaml
+      - equal:
+          path: spec.selector
+          value:
+            app: graylog-datanode
+            app.kubernetes.io/name: graylog
+            app.kubernetes.io/instance: graylog
+        template: service/datanode.yaml
+      # The custom label still lands on the object itself.
+      - equal:
+          path: metadata.labels.tier
+          value: edge
+        template: service/graylog.yaml
+
+  - it: keeps custom labels out of the PodDisruptionBudget selectors
+    set:
+      global.commonLabels.env: dev
+      graylog.podDisruptionBudget.labels.tier: backend
+      datanode.podDisruptionBudget.labels.tier: storage
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app: graylog-app
+            app.kubernetes.io/name: graylog
+            app.kubernetes.io/instance: graylog
+        template: policy/pdb/graylog.yaml
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app: graylog-datanode
+            app.kubernetes.io/name: graylog
+            app.kubernetes.io/instance: graylog
+        template: policy/pdb/datanode.yaml
+
+  - it: leaves selectors identical whether or not custom labels are set
+    # Belt and braces: the default render, asserted against the same literal
+    # selector as the customized renders above.
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app: graylog-app
+            app.kubernetes.io/name: graylog
+            app.kubernetes.io/instance: graylog
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app: graylog-datanode
+            app.kubernetes.io/name: graylog
+            app.kubernetes.io/instance: graylog
+        template: workload/statefulsets/datanode.yaml
+
+  # --- volumeClaimTemplates: immutable, so chart metadata must never appear ---
+
+  - it: keeps chart and global metadata off the Graylog volume claim template
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+      graylog.labels.tier: backend
+      graylog.annotations.note: primary
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      # Nothing at all by default: adding any of these to a live release would
+      # make `helm upgrade` fail on an immutable field.
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.annotations
+
+  - it: keeps chart and global metadata off the Datanode volume claim templates
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+      datanode.labels.tier: storage
+      datanode.persistence.nativeLibs.enabled: true
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.annotations
+      - notExists:
+          path: spec.volumeClaimTemplates[1].metadata.labels
+      - notExists:
+          path: spec.volumeClaimTemplates[1].metadata.annotations
+
+  - it: keeps chart and global metadata off the MongoDB volume claim templates
+    # The operator propagates these into the StatefulSet it manages, so the same
+    # immutability rule applies one level removed.
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+      mongodb.labels.tier: database
+    template: custom/mongo-rs.yaml
+    asserts:
+      - notExists:
+          path: spec.statefulSet.spec.volumeClaimTemplates[0].metadata.labels
+      - notExists:
+          path: spec.statefulSet.spec.volumeClaimTemplates[0].metadata.annotations
+      - notExists:
+          path: spec.statefulSet.spec.volumeClaimTemplates[1].metadata.labels
+      - notExists:
+          path: spec.statefulSet.spec.volumeClaimTemplates[1].metadata.annotations
+
+  - it: still renders volume claim metadata the operator explicitly asked for
+    # Opt-in remains supported — it is then the operator's own one-time choice,
+    # not something the chart does to every existing release.
+    set:
+      global.commonLabels.env: dev
+      graylog.persistence.labels.tier: backend
+      graylog.persistence.annotations.note: graylog-data
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels.tier
+          value: backend
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.annotations.note
+          value: graylog-data
+      # ...and the globals still do not ride along.
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels.env

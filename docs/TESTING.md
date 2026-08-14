@@ -612,6 +612,6 @@ helm test graylog -n graylog
 
 ## Additional Resources
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Development setup and workflow
-- [README.md](README.md) - Chart usage and configuration reference
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Development setup and workflow
+- [README.md](../charts/graylog/README.md) - Chart usage and configuration reference
 - [Helm Testing Documentation](https://helm.sh/docs/topics/chart_tests/)

@@ -67,6 +67,18 @@ jobs:
       - name: Run helm unittest
         run: helm unittest charts/graylog
 
+      # helm-unittest can only assert on rendered text. These two run the shipped
+      # shell scripts for real: the preStop drain against a stubbed metrics
+      # endpoint, and the init script against fixture volumes (including the
+      # upgrade path, where an existing volume must not be clobbered).
+      - name: preStop drain behaviour tests
+        run: sh charts/graylog/tests/scripts/prestop-drain-behavior-test.sh
+
+      - name: init-script behaviour tests
+        # always() so a drain failure above does not hide an init failure here.
+        if: always()
+        run: sh charts/graylog/tests/scripts/init-graylog-behavior-test.sh
+
   helm-ct-install:
     runs-on: ubuntu-latest
     needs: [helm-ct-lint, helm-unittest]

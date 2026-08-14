@@ -1,8 +1,18 @@
 {{- if .Values.mongodb.communityResource.enabled }}
+{{/*
+Fail early with an actionable message when the MongoDB operator CRD is missing.
+The lookup guard skips the check for offline renders (helm template, unittest),
+where .Capabilities only contains built-in API versions.
+*/}}
+{{- if and (not (.Capabilities.APIVersions.Has "mongodbcommunity.mongodb.com/v1/MongoDBCommunity")) (lookup "v1" "Namespace" "" .Release.Namespace) }}
+{{- fail "The MongoDBCommunity CRD (mongodbcommunity.mongodb.com/v1) was not found in the cluster. Install the MongoDB Kubernetes Operator first (https://github.com/mongodb/mongodb-kubernetes), or set mongodb.communityResource.enabled=false and provide an external MongoDB via graylog.config.mongodb.customUri." }}
+{{- end }}
 apiVersion: mongodbcommunity.mongodb.com/v1
 kind: MongoDBCommunity
 metadata:
   name: {{ include "graylog.mongodb.crName" . }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.mongodb.labels "fixed" (dict "app.kubernetes.io/component" "mongodb" "app" "graylog-mongodb") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.mongodb.annotations "indent" 2) }}
 spec:
   {{- $replicas := .Values.mongodb.replicas | default 2 | int }}
   {{- $arbiters := .Values.mongodb.arbiters | default 0 | int }}
@@ -44,12 +54,25 @@ spec:
         - name: readWrite
           db: {{ include "graylog.mongodb.crDatabase" . }}
       scramCredentialsSecretName: {{ printf "%s-%s" (include "graylog.mongodb.crName" .) (include "graylog.mongodb.crUsername" .) }}
-    {{- with .Values.mongodb.users }}
-      {{- . | toYaml | nindent 4 }}
-    {{- end }}
   statefulSet:
     spec:
       template:
+        {{/*
+        No metadata block here on purpose.
+
+        The MongoDB Community operator owns the pod template of the StatefulSet
+        it manages: it sets `app: <crName>-svc` and nothing else, and that label
+        is also its (immutable) selector. Labels set here are discarded - the
+        chart used to render them and the resulting StatefulSet never carried
+        them - so exposing mongodb.podLabels/podAnnotations would promise
+        customization the operator cannot deliver. Worse, had the operator
+        honoured an `app` override, the pods would no longer have matched the
+        selector.
+
+        Pod-level metadata for MongoDB has to come from the operator's own API,
+        not from this chart. The MongoDBCommunity object itself still takes
+        mongodb.labels / mongodb.annotations.
+        */}}
         spec:
           serviceAccountName: {{ include "graylog.mongodb.serviceAccountName" . }}
           affinity:
@@ -67,6 +90,7 @@ spec:
       volumeClaimTemplates:
         - metadata:
             name: data-volume
+            {{- include "graylog.claim.metadata" (dict "labels" .Values.mongodb.persistence.labels "annotations" .Values.mongodb.persistence.annotations "indent" 12) }}
           spec:
             accessModes: ["ReadWriteOnce"]
             {{- with (include "graylog.mongodb.storageClassName" .) }}
@@ -77,6 +101,7 @@ spec:
                 storage: {{ .Values.mongodb.persistence.size.data | default "10G" | quote }}
         - metadata:
             name: logs-volume
+            {{- include "graylog.claim.metadata" (dict "labels" .Values.mongodb.persistence.labels "annotations" .Values.mongodb.persistence.annotations "indent" 12) }}
           spec:
             accessModes: [ "ReadWriteOnce" ]
             {{- with (include "graylog.mongodb.storageClassName" .) }}

@@ -1,0 +1,699 @@
+suite: graylog preStop journal drain
+templates:
+  # The StatefulSet's pod-spec annotations reference two checksum helpers that
+  # `include` other templates by path. helm-unittest's `templates:` filter must
+  # list those dependencies so the includes resolve.
+  - workload/statefulsets/graylog.yaml
+  - config/graylog.yaml         # checksum/config dependency
+  - config/secret/secrets.yaml  # checksum/secret dependency
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: sets terminationGracePeriodSeconds on the pod spec, not the container
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 300
+        template: workload/statefulsets/graylog.yaml
+      # Regression guard: this used to render as a misspelled container-level
+      # "terminationGracePeriodSecond", which the API server silently dropped.
+      - notExists:
+          path: spec.template.spec.containers[0].terminationGracePeriodSecond
+        template: workload/statefulsets/graylog.yaml
+      - notExists:
+          path: spec.template.spec.containers[0].terminationGracePeriodSeconds
+        template: workload/statefulsets/graylog.yaml
+
+  - it: honours an overridden terminationGracePeriodSeconds
+    set:
+      graylog.terminationGracePeriodSeconds: 600
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 600
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits the lifecycle block when the drain is disabled (the default)
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+        template: workload/statefulsets/graylog.yaml
+
+  - it: renders a preStop exec hook when the drain is enabled
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[0]
+          value: /bin/sh
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[1]
+          value: -c
+        template: workload/statefulsets/graylog.yaml
+
+  - it: reads the unauthenticated journal gauge from the metrics port
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.service.ports.metrics: 9999
+    asserts:
+      # The endpoint is supplied as env, so the script itself stays free of
+      # template syntax; only the gauge name is baked in.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GL_DRAIN_METRICS_URL
+            value: "http://127.0.0.1:9999/metrics"
+        template: workload/statefulsets/graylog.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "gl_journal_entries_uncommitted"
+        template: workload/statefulsets/graylog.yaml
+
+  - it: derives the drain budget as grace minus settle minus reserve
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.terminationGracePeriodSeconds: 120
+      graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds: 15
+      graylog.lifecycle.preStopDrain.shutdownReserveSeconds: 45
+    asserts:
+      # 120 - 15 - 45 = 60. The budget must never be the full grace period, or
+      # the hook gets SIGKILLed before Graylog can flush its in-memory buffers.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GL_DRAIN_BUDGET_SECONDS
+            value: "60"
+        template: workload/statefulsets/graylog.yaml
+
+  - it: passes the tuning values through as environment
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStopDrain.pollIntervalSeconds: 7
+      graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds: 3
+      graylog.lifecycle.preStopDrain.stallPolls: 4
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: GL_DRAIN_POLL_SECONDS, value: "7" }
+        template: workload/statefulsets/graylog.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: GL_DRAIN_SETTLE_SECONDS, value: "3" }
+        template: workload/statefulsets/graylog.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: GL_DRAIN_STALL_POLLS, value: "4" }
+        template: workload/statefulsets/graylog.yaml
+
+  - it: bounds the drain by wall clock rather than by poll count
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # Counting poll ticks would let a slow metrics endpoint overrun the budget
+      # by curl-timeout per iteration and defeat the shutdown reserve.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'while \[ "\$\(date \+%s\)" -lt "\$\{deadline\}" \]'
+        template: workload/statefulsets/graylog.yaml
+
+  - it: fails when the drain is enabled without the metrics exporter
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.service.metrics.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "The drain reads journal depth from the Prometheus exporter"
+
+  - it: fails when the reserve leaves no room to drain
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.terminationGracePeriodSeconds: 30
+      graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds: 15
+      graylog.lifecycle.preStopDrain.shutdownReserveSeconds: 45
+    asserts:
+      - failedTemplate:
+          errorPattern: "The drain budget must be positive"
+
+  - it: does not validate the drain budget when the drain is disabled
+    set:
+      graylog.terminationGracePeriodSeconds: 30
+      graylog.service.metrics.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle
+        template: workload/statefulsets/graylog.yaml
+
+
+  - it: measures progress against the best depth seen, not the previous sample
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # Live gauges oscillate under ingest (observed 31->82->36->126->231->9->3...),
+      # so an equality test against the previous sample never fires and the hook
+      # burns its entire budget. Progress must mean "a new low".
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\[ "\$\{n\}" -lt "\$\{best\}" \]'
+        template: workload/statefulsets/graylog.yaml
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\[ "\$\{n\}" = "\$\{last\}" \]'
+        template: workload/statefulsets/graylog.yaml
+      # The give-up message must report the ingest rate, since that is the actual
+      # reason a drain cannot complete.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "still ingesting \\$\\{rate\\} msg/s"
+        template: workload/statefulsets/graylog.yaml
+
+  - it: logs its configuration before doing anything
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # An operator reading the container log should be able to see what the hook
+      # was configured with, without cross-referencing values.yaml.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'config: budget=\$\{BUDGET\}s retries=\$\{METRICS_RETRIES\} poll=\$\{POLL\}s settle=\$\{SETTLE\}s'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'config: metrics=\$\{URL\} depthGauge=\$\{DEPTH_GAUGE\}'
+      # The budget is derived, so show the arithmetic rather than just the result.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'terminationGracePeriodSeconds\(\$\{GRACE\}s\)'
+
+  - it: emits INFO, WARN, ERROR and CRIT levels
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'info\(\)  \{ log "INFO " '
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'warn\(\)  \{ log "WARN " '
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'error\(\) \{ log "ERROR" '
+      # CRIT is reserved for the feasibility abort: the one verdict that means
+      # data loss is already committed and only manual action can prevent it.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'crit\(\)  \{ log "CRIT " '
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "date -u '\\+%Y-%m-%dT%H:%M:%SZ'"
+
+  # Checked before the settle wait, so a broken exporter is reported immediately
+  # rather than after burning the budget.
+  - it: preflights the metrics endpoint and reports the starting backlog
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "metrics endpoint reachable"
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'journal at start: \$\{start_depth\} messages on disk awaiting processing'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'did not answer after \$\{METRICS_RETRIES\} attempts, or \$\{DEPTH_GAUGE\} is absent'
+
+  # Every exit path must state whether the journal actually emptied before the
+  # cutoff -- that is the whole point of the hook.
+  - it: reports a verdict on every exit path
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "RESULT: SUCCESS - journal fully drained"
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'RESULT: INCOMPLETE - \$\{BUDGET\}s timeout cutoff reached'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "RESULT: INCOMPLETE - \\$\\{depth\\} messages still queued"
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "RESULT: UNKNOWN - "
+      # The operationally important consequence of an incomplete drain.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "will be stranded in its PVC"
+
+  - it: logs progress on a throttle separate from the poll interval
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStopDrain.statusIntervalSeconds: 25
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: GL_DRAIN_STATUS_INTERVAL_SECONDS, value: "25" }
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'elapsed - last_status \)\) -ge "\$\{STATUS_EVERY\}"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'draining: \$\{n\} messages queued \(best \$\{best\}\)'
+
+  - it: guards the PID 1 log redirect instead of relying on 2>/dev/null
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\[ -w /proc/1/fd/1 \]'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '>> /proc/1/fd/1'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'echo "\$\{line\}" > /proc/1/fd/1'
+
+  # The point of the env indirection: the script file is plain shell, so an editor
+  # or shellcheck can read it and it can be run by hand inside a pod.
+  - it: renders a script with no template syntax in it
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\{\{'
+      # Missing configuration must fail loudly rather than default to empty and
+      # produce nonsense arithmetic further down.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'GL_DRAIN_BUDGET_SECONDS:\?GL_DRAIN_BUDGET_SECONDS is not set'
+
+  - it: adds no drain environment when the drain is disabled
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].env[*].name
+          pattern: "^GL_DRAIN_"
+
+  # The verdict says whether it finished; this says how far it got. Baseline is the
+  # preflight sample, i.e. what was on disk when termination began.
+  - it: reports what percentage of the starting backlog was drained
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'drained \$\(\( \(base - depth\) \* 100 / base \)\)% of the starting backlog'
+      # Ingest can outrun processing, so the backlog may be larger at the end than
+      # at the start. A negative percentage would be noise; report 0% and the two
+      # absolute numbers instead.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "drained 0% of the starting backlog - it grew from"
+      # Dividing by a zero baseline must not happen.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "drained n/a - the journal was already empty"
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'base="\$\{start_depth:-0\}"'
+
+  # The poll loop's clock starts AFTER the settle wait, so quoting it alone reports
+  # "0s" for a journal that actually took settle+poll to clear. Report the total
+  # and break it down, and say plainly when the settle wait did the work.
+  - it: reports total elapsed, not just the poll loop's clock
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'total=\$\(\( now - hook_started \)\)'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'spent="\$\{total\}s total \(\$\(\( settle_started - hook_started \)\)s preflight'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "it cleared during the \\$\\{SETTLE\\}s settle wait"
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'depth held at 0 across \$\{zero_streak\} consecutive polls'
+      # hook_started must be stamped before any work, or the total is wrong.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'hook_started=\$\(date \+%s\)\ninfo "journal drain starting'
+
+  # Reporting the configured SETTLE unconditionally produced a self-contradicting
+  # line on the preflight path: "0s total (15s settle + 0s draining)" for an exit
+  # that happens before the wait even starts. Each phase must be measured.
+  - it: only reports phases that actually ran
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'spent="\$\{total\}s total, before the settle wait began"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'spent="\$\{total\}s total, during the settle wait"'
+      # Measured from timestamps, not from the configured value.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\$\(\( loop_started - settle_started \)\)s settle'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\$\{SETTLE\}s settle \+'
+      # A failure before the drain starts is not the same as one that abandons it.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "RESULT: UNKNOWN - no drain attempted"
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "RESULT: UNKNOWN - drain abandoned"
+
+  # A single zero reading is not proof of a drain: under live ingest the depth
+  # oscillates and momentarily touches zero while messages are still arriving.
+  # Exiting on that declares success, yields to SIGTERM, and lets whatever arrives
+  # next be journaled and then orphaned.
+  - it: requires the depth to hold at zero before declaring success
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStopDrain.confirmPolls: 4
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: GL_DRAIN_CONFIRM_POLLS, value: "4" }
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'zero_streak" \] -ge "\$\{CONFIRM_POLLS\}"|zero_streak\}" -ge "\$\{CONFIRM_POLLS\}"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "depth rose back to \\$\\{n\\} after \\$\\{zero_streak\\} zero reading"
+      # Leaving best at 0 after a zero would make every later reading "no new low",
+      # so the stall counter would climb and report INCOMPLETE mid-drain.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'zero_streak=0\n    # Restart the progress baseline'
+
+  - it: retries the metrics probe before giving up
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStopDrain.metricsRetries: 9
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: GL_DRAIN_METRICS_RETRIES, value: "9" }
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'attempt\}" -ge "\$\{METRICS_RETRIES\}"'
+      # sample_retry sets a global rather than echoing: warn() inside a $( ) would
+      # otherwise be captured into the caller's value instead of reaching the log.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "if SAMPLE=\\$\\(sample\\); then"
+
+  # Preflight retries and an overrunning settle both consume wall clock before the
+  # loop starts. Deriving the deadline from BUDGET alone would push past the grace
+  # period and get the container SIGKILLed with buffers unflushed.
+  - it: anchors the deadline so the shutdown reserve always survives
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'deadline=\$\(\( hook_started \+ GRACE - RESERVE \)\)'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'deadline=\$\(\(loop_started \+ BUDGET\)\)'
+
+  # The safety net for messages that are left behind anyway: the claim must survive.
+  - it: pins the PVC retention policy to Retain
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
+          value: Retain
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Retain
+
+  - it: refuses whenScaled Delete, which would destroy a scaled-in journal
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.persistence.retentionPolicy.whenScaled: Delete
+    asserts:
+      - failedTemplate:
+          errorPattern: "Scaling in removes the highest ordinal"
+
+  - it: allows whenDeleted Delete, which only applies on uninstall
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.persistence.retentionPolicy.whenDeleted: Delete
+    asserts:
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Delete
+      - equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenScaled
+          value: Retain
+
+  # RESERVE is the guaranteed floor, not what is actually left. Quoting the floor
+  # understated it badly: 45s reported on a drain that finished 20s into a 300s
+  # grace period, where 280s in fact remained.
+  - it: reports the grace period actually remaining, not the configured floor
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'left=\$\(\( GRACE - total \)\)'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'handing over to SIGTERM with ~\$\{left\}s of the \$\{GRACE\}s grace period left'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'Graylog has ~\$\{RESERVE\}s reserved'
+      # The three phases must sum to the total, or the line invites "where did the
+      # rest go?" - metrics retries can put real time into preflight.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 's preflight \+ \$\(\( loop_started - settle_started \)\)s settle \+'
+      # A second or two on the preflight scrape is not worth a warning.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'remaining_budget\}" -lt \$\(\( BUDGET - 10 \)\)'
+
+  # ---- feasibility gate -------------------------------------------------
+  # The stall detector only notices a journal that has stopped falling. It cannot
+  # notice one falling far too slowly to matter, because every new low resets the
+  # counter — so against a deep backlog the hook held termination for its whole
+  # budget, cleared ~2% and stranded the rest. Observed on a flooded cluster:
+  # 7.24M messages at ~1k msg/s needed ~2h against a 240s budget.
+  - it: projects whether the drain can finish, and aborts early when it cannot
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'FEASIBILITY: drain cannot finish in the time available'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'finish infeasible "\$\{n\}"'
+      # A depth that is flat or growing can never finish, and must be reported as
+      # such rather than as a very large ETA.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'FEASIBILITY: journal is NOT draining'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'time to clear:   never at this rate'
+
+  - it: projects the ETA by multiplication so a floored rate cannot divide by zero
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # depth / (cleared/observed) would be 0 for any drain slower than 1 msg/s,
+      # and `$(( n / 0 ))` aborts the shell mid-hook. The algebraically equal
+      # n * observed / cleared has no such hole and keeps sub-1-msg/s precision.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'eta=\$\(\( n \* observed / cleared \)\)'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'eta=\$\(\( n / drain_rate \)\)'
+      # The observation window is guarded too: a fast loop can measure it as 0s.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\[ "\$\{observed\}" -lt 1 \] && observed=1'
+
+  - it: reports disk size and processing time in the abort verdict
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # An operator has seconds to act on this, so the verdict must carry the
+      # numbers that decide what to do next: how much is on disk, how fast it is
+      # actually moving, how long it would take, and how far short that falls.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'journal on disk: \$\(fmt_bytes "\$\{S_SIZE\}"\) of \$\(fmt_bytes "\$\{S_LIMIT\}"\) cap'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'drain rate:      \$\{drain_rate\} msg/s measured over \$\{observed\}s'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'time to clear:   ~\$\(fmt_duration "\$\{eta\}"\) at that rate'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'short by:        ~\$\(fmt_duration \$\(\( eta - budget_left \)\)\)'
+      # Bytes and seconds are formatted for humans; a raw 5390146435 or 7452 does
+      # not communicate urgency. No floating point in POSIX sh, hence the
+      # scale-then-divide arithmetic.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "printf '%d\\.%01dGiB'"
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: "printf '%dh%dm'"
+
+  - it: warns when the journal is at its cap and already discarding messages
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # A journal at its size cap evicts the oldest segments to make room, so
+      # messages are being lost before the hook ever runs. Reporting a drain
+      # percentage without saying that would be misleading.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'the journal is AT its cap'
+      # Dividing by an unpublished limit gauge would abort the hook.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'if \[ "\$\{S_LIMIT\}" -gt 0 \]'
+
+  - it: anchors the size gauge so it cannot match the limit gauge
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # gl_journal_size is a strict prefix of gl_journal_size_limit, so an
+      # unanchored match would read the cap as the current size. Requiring "{"
+      # or a space immediately after the name is what separates them — the same
+      # guard that keeps the data-lake and kafka journal gauges out.
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'SIZE_GAUGE="gl_journal_size"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'LIMIT_GAUGE="gl_journal_size_limit"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: '\$1 ~ "\^"s"\[\{ \]" \|\| index\(\$1, s"\{"\) == 1'
+
+  - it: passes the feasibility warmup through as environment
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStopDrain.feasibilityWarmupPolls: 8
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: GL_DRAIN_FEASIBILITY_WARMUP_POLLS, value: "8" }
+
+  - it: allows the projection to be disabled with zero
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStopDrain.feasibilityWarmupPolls: 0
+    asserts:
+      # `| default` would coerce an intentional 0 back to the chart default and
+      # silently re-enable the gate, so the template uses `int` alone.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: GL_DRAIN_FEASIBILITY_WARMUP_POLLS, value: "0" }
+      - matchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'projection disabled \(feasibilityWarmupPolls=0\)'
+
+  - it: carries no leftover debug hold on the success path
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+    asserts:
+      # Regression guard: a `sleep 60` debug hold shipped on the drained branch
+      # once. It only fires on healthy fast drains, so a flooded test cluster
+      # never reaches it — exactly the shape of thing that survives manual
+      # testing and must be caught here instead.
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'Sleeping 60'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'remove before merging'
+      # Only the settle wait and the poll interval may sleep; nothing constant.
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          pattern: 'sleep [0-9]'
+
+  # User-supplied hooks share graylog.lifecycle with the chart-managed drain.
+  - it: renders a user-supplied preStop hook when the drain is off
+    set:
+      graylog.lifecycle.preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 10"]
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command[2]
+          value: sleep 10
+
+  - it: renders a user-supplied postStart hook alongside the drain
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.postStart:
+        exec:
+          command: ["/bin/sh", "-c", "echo started"]
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.postStart.exec.command[2]
+          value: echo started
+      # The drain still owns preStop.
+      - isNotEmpty:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+
+  - it: fails when a user preStop hook collides with the drain
+    set:
+      graylog.lifecycle.preStopDrain.enabled: true
+      graylog.lifecycle.preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 10"]
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      # helm-unittest matches a later portion of a multi-line fail message, not
+      # its opening sentence — anchor on one of the remedy lines.
+      - failedTemplate:
+          errorPattern: "Drop graylog\\.lifecycle\\.preStop and let the chart's journal drain run"

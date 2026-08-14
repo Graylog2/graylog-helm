@@ -1,43 +1,62 @@
-{{- if and .Values.ingress.enabled .Values.ingress.forwarder.enabled -}}
+{{- if and .Values.graylog.enabled .Values.ingress.enabled .Values.ingress.forwarder.enabled -}}
+{{- $root := . -}}
+{{- $defaultPath := include "graylog.ingress.defaultPath" . -}}
+{{- $defaultPathType := include "graylog.ingress.defaultPathType" . -}}
+{{/*
+A forwarder needs both gRPC channels reachable: the message channel (13301) it
+sends log data on, and the configuration channel (13302) it polls for updates.
+They listen on separate ports, and an Ingress routes on host/path rather than
+listener port, so each channel gets its own Ingress resource.
+*/}}
+{{- $channels := list
+      (dict "name" (include "graylog.ingress.forwarder.message.name" .)
+            "portName" (include "graylog.service.port.forwarder.message" .)
+            "channel" .Values.ingress.forwarder.messageChannel)
+      (dict "name" (include "graylog.ingress.forwarder.config.name" .)
+            "portName" (include "graylog.service.port.forwarder.config" .)
+            "channel" .Values.ingress.forwarder.configChannel) -}}
+{{- range $channels }}
+{{- if .channel.enabled }}
+{{- $channel := .channel }}
+{{- $portName := .portName }}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "graylog.fullname" . | printf "%s-forwarder" }}
-  labels:
-    {{- include "graylog.labels" . | nindent 4 }}
-  {{- with .Values.ingress.forwarder.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+  name: {{ .name }}
+  {{- include "graylog.metadata.labels" (dict "context" $root "labels" $channel.labels "fixed" (dict "app.kubernetes.io/component" "forwarder") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $root "annotations" $channel.annotations "indent" 2) }}
 spec:
-  {{- with .Values.ingress.forwarder.className }}
+  {{- with $channel.className }}
   ingressClassName: {{ . }}
   {{- end }}
-  {{- if .Values.ingress.forwarder.tls }}
+  {{- if $channel.tls }}
   tls:
-    {{- range .Values.ingress.forwarder.tls }}
+    {{- range $channel.tls }}
     - hosts:
         {{- range .hosts }}
         - {{ . | quote }}
         {{- end }}
-      secretName: {{ .secretName }}
+      secretName: {{ .secretName | default (include "graylog.fullname" $root | printf "%s-tls") }}
     {{- end }}
   {{- end }}
   rules:
-    {{- range .Values.ingress.forwarder.hosts }}
-    - host: {{ .host | quote }}
+    {{- range $channel.hosts }}
+    - {{ with .host -}}
+      host: {{ . | quote }}
+      {{- end }}
       http:
         paths:
           {{- range .paths }}
-          - path: {{ .path }}
-            {{- with .pathType }}
-            pathType: {{ . }}
-            {{- end }}
+          - path: {{ .path | default $defaultPath }}
+            pathType: {{ .pathType | default $defaultPathType }}
             backend:
               service:
-                name: {{ include "graylog.service.name" $ }}
+                name: {{ include "graylog.service.name" $root }}
                 port:
-                  name: input-forwarder
+                  name: {{ $portName }}
           {{- end }}
     {{- end }}
+{{- end }}
+{{- end }}
 {{- end }}

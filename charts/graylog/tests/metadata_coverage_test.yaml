@@ -1,0 +1,555 @@
+suite: object labels and annotations coverage
+# Companion to metadata_test.yaml. That suite pins the precedence rules on a few
+# representative objects; this one walks every remaining object the chart renders
+# so a new template can never ship without the metadata helpers.
+templates:
+  - auth/mongo-sa.yaml
+  - config/datanode.yaml
+  - config/init-graylog.yaml
+  - config/geoip-sidecar-entrypoint.yaml
+  - config/sc/aws-gp3.yaml
+  - config/secret/datanode.yaml
+  - config/secret/opensearch.yaml
+  - config/secret/secrets.yaml
+  - custom/issuer.yaml
+  - custom/mongo-rs.yaml
+  - policy/pdb/datanode.yaml
+  - service/ingress/graylog.yaml
+  - service/ingress/graylog-forwarder.yaml
+  - tests/test-graylog-api-health.yaml
+  - tests/test-graylog-cluster-status.yaml
+  - tests/test-mongodb-connectivity.yaml
+  - tests/test-datanode-registration.yaml
+  - config/fallback.yaml
+  - service/fallback.yaml
+  - workload/fallback.yaml
+  # The StatefulSets' checksum helpers `include` these templates by path, so
+  # helm-unittest's template filter has to list them for the includes to resolve.
+  - config/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: applies global.commonLabels and commonAnnotations to the ConfigMaps and Secrets
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/datanode.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/datanode.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/init-graylog.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/init-graylog.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/secret/datanode.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/secret/datanode.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/secret/secrets.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/secret/secrets.yaml
+        documentIndex: 1
+
+  - it: renders per-object labels and annotations on the ConfigMaps and Secrets
+    set:
+      graylog.labels.tier: backend
+      graylog.annotations.note: primary
+      datanode.labels.tier: storage
+      datanode.annotations.note: search
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: backend
+        template: config/init-graylog.yaml
+      - equal:
+          path: metadata.annotations.note
+          value: primary
+        template: config/init-graylog.yaml
+      - equal:
+          path: metadata.labels.app
+          value: graylog-app
+        template: config/init-graylog.yaml
+      - equal:
+          path: metadata.labels.tier
+          value: storage
+        template: config/datanode.yaml
+      - equal:
+          path: metadata.annotations.note
+          value: search
+        template: config/datanode.yaml
+      - equal:
+          path: metadata.labels.app
+          value: graylog-datanode
+        template: config/datanode.yaml
+      - equal:
+          path: metadata.labels.tier
+          value: storage
+        template: config/secret/datanode.yaml
+      - equal:
+          path: metadata.annotations.note
+          value: search
+        template: config/secret/datanode.yaml
+
+  - it: keeps the resource-policy annotation on the backup secret when custom annotations are set
+    set:
+      graylog.annotations:
+        helm.sh/resource-policy: delete
+        note: primary
+      global.commonAnnotations.owner: platform-team
+    template: config/secret/secrets.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - equal:
+          path: metadata.annotations.note
+          value: primary
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  - it: labels and annotates the GeoIP sidecar entrypoint ConfigMap
+    set:
+      global.existingSecretName: graylog-external-secret
+      graylog.config.mongodb.customUri: mongodb://mongo:27017/graylog
+      mongodb.communityResource.enabled: false
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.labels.tier: backend
+      graylog.annotations.note: primary
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: config/geoip-sidecar-entrypoint.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: backend
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.labels.app
+          value: graylog-app
+      - equal:
+          path: metadata.annotations.note
+          value: primary
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  - it: labels the provider StorageClass and keeps its Helm hook annotations
+    set:
+      provider: aws
+      global.commonLabels.env: dev
+      global.commonAnnotations:
+        helm.sh/hook: post-install
+        owner: platform-team
+    template: config/sc/aws-gp3.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-install,pre-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-10"
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  - it: labels and annotates the chart-managed cert-manager Issuer
+    set:
+      ingress.enabled: true
+      ingress.config.tls.issuer.managed.enabled: true
+      ingress.config.tls.issuer.labels.tier: edge
+      ingress.config.tls.issuer.annotations.note: letsencrypt
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: custom/issuer.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: edge
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.annotations.note
+          value: letsencrypt
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  - it: labels and annotates the Datanode PodDisruptionBudget
+    set:
+      datanode.podDisruptionBudget.enabled: true
+      datanode.podDisruptionBudget.labels.tier: storage
+      datanode.podDisruptionBudget.annotations.note: keep-two
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: policy/pdb/datanode.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: storage
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.labels.app
+          value: graylog-datanode
+      - equal:
+          path: metadata.annotations.note
+          value: keep-two
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  - it: labels and annotates the MongoDB ServiceAccount, Role and RoleBinding
+    set:
+      mongodb.serviceAccount.labels.tier: identity
+      mongodb.serviceAccount.annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/mongodb
+      mongodb.serviceAccount.role.labels.tier: rbac
+      mongodb.serviceAccount.role.annotations.note: least-privilege
+      global.commonLabels.env: dev
+    template: auth/mongo-sa.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: identity
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["eks.amazonaws.com/role-arn"]
+          value: arn:aws:iam::123456789012:role/mongodb
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.tier
+          value: rbac
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations.note
+          value: least-privilege
+        documentIndex: 1
+      - equal:
+          path: metadata.labels.tier
+          value: rbac
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations.note
+          value: least-privilege
+        documentIndex: 2
+
+  - it: labels and annotates the MongoDBCommunity object and its volume claims
+    set:
+      mongodb.labels.tier: database
+      mongodb.annotations.note: replica-set
+      mongodb.persistence.labels.tier: database
+      mongodb.persistence.annotations.note: mongo-data
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: custom/mongo-rs.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: database
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.labels.app
+          value: graylog-mongodb
+      - equal:
+          path: metadata.annotations.note
+          value: replica-set
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+      # The operator owns the pod template of the StatefulSet it manages and
+      # discards anything the chart puts there, so the chart renders no pod
+      # metadata at all rather than promising customization it cannot deliver.
+      - notExists:
+          path: spec.statefulSet.spec.template.metadata
+      - equal:
+          path: spec.statefulSet.spec.volumeClaimTemplates[0].metadata.labels.tier
+          value: database
+      - equal:
+          path: spec.statefulSet.spec.volumeClaimTemplates[0].metadata.annotations.note
+          value: mongo-data
+      - equal:
+          path: spec.statefulSet.spec.volumeClaimTemplates[1].metadata.labels.tier
+          value: database
+      - equal:
+          path: spec.statefulSet.spec.volumeClaimTemplates[1].metadata.annotations.note
+          value: mongo-data
+
+  - it: labels the web Ingress and keeps the chart's own annotations
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.className: nginx
+      ingress.web.labels.tier: edge
+      ingress.web.annotations:
+        nginx.ingress.kubernetes.io/proxy-body-size: 100m
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: service/ingress/graylog.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: edge
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]
+          value: 100m
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/default-backend"]
+          value: graylog-waiting-room
+
+  - it: does not let custom annotations override the cert-manager issuer annotation
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.tls:
+        - secretName: graylog-tls
+          hosts: ["graylog.example.com"]
+      ingress.config.tls.clusterIssuer.existingName: letsencrypt-prod
+      ingress.web.annotations:
+        cert-manager.io/cluster-issuer: hijacked
+    template: service/ingress/graylog.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt-prod
+
+  # Each forwarder gRPC channel renders its own Ingress, so per-object labels
+  # and annotations are set per channel; the globals land on both.
+  - it: labels and annotates the forwarder message-channel Ingress
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.configChannel.enabled: false
+      ingress.forwarder.messageChannel.labels.tier: edge
+      ingress.forwarder.messageChannel.annotations.note: forwarder
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: service/ingress/graylog-forwarder.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: edge
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: forwarder
+      - equal:
+          path: metadata.annotations.note
+          value: forwarder
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  - it: labels and annotates the forwarder config-channel Ingress
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+      ingress.forwarder.messageChannel.enabled: false
+      ingress.forwarder.configChannel.labels.tier: edge
+      ingress.forwarder.configChannel.annotations.note: forwarder-config
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: service/ingress/graylog-forwarder.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: edge
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.annotations.note
+          value: forwarder-config
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  # The waiting-room objects are internal and deliberately have no per-object
+  # values surface, but the chart-wide globals still have to reach them.
+  - it: applies the global metadata to the ingress waiting-room objects
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.className: nginx
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/fallback.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/fallback.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/fallback.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: service/fallback.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: service/fallback.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: workload/fallback.yaml
+      - equal:
+          path: spec.template.metadata.labels.env
+          value: dev
+        template: workload/fallback.yaml
+      - equal:
+          path: spec.template.metadata.annotations.owner
+          value: platform-team
+        template: workload/fallback.yaml
+
+  - it: keeps the waiting-room selector matching its pods
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.className: nginx
+      global.commonLabels:
+        graylog-app: hijacked
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["graylog-app"]
+          value: graylog-waiting-room
+        template: workload/fallback.yaml
+      - equal:
+          path: spec.template.metadata.labels["graylog-app"]
+          value: graylog-waiting-room
+        template: workload/fallback.yaml
+      - equal:
+          path: spec.selector["graylog-app"]
+          value: graylog-waiting-room
+        template: service/fallback.yaml
+      - equal:
+          path: metadata.labels["graylog-app"]
+          value: graylog-waiting-room
+        template: service/fallback.yaml
+
+  - it: labels the helm test hooks and keeps their hook annotations
+    set:
+      global.commonLabels.env: dev
+      global.commonAnnotations:
+        helm.sh/hook: pre-install
+        owner: platform-team
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: tests/test-graylog-api-health.yaml
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+        template: tests/test-graylog-api-health.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: tests/test-graylog-api-health.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: tests/test-graylog-cluster-status.yaml
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+        template: tests/test-graylog-cluster-status.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: tests/test-mongodb-connectivity.yaml
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+        template: tests/test-mongodb-connectivity.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: tests/test-datanode-registration.yaml
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+        template: tests/test-datanode-registration.yaml
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+        template: tests/test-datanode-registration.yaml
+
+  # The external-OpenSearch secret is only rendered in the BYO-OpenSearch
+  # topology, so it misses any assertion made under the default values.
+  - it: labels and annotates the external OpenSearch Secret
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts:
+        - https://os.example.com:9200
+      opensearch.auth.username: admin
+      opensearch.auth.password: opensearch-admin-pw
+      opensearch.tls.enabled: false
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: config/secret/opensearch.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: server

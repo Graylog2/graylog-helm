@@ -4,11 +4,8 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "graylog.fullname" . }}
-  labels:
-    app: graylog-app
-    {{- include "graylog.labels" . | nindent 4 }}
-  annotations:
-    {{- include "graylog.annotations" . | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.labels "fixed" (dict "app" "graylog-app" "app.kubernetes.io/component" "server") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.annotations "indent" 2) }}
 spec:
   replicas: {{ include "graylog.replicas" . | default 2 | int }}
   serviceName: {{ include "graylog.service.name" . }}
@@ -25,27 +22,57 @@ spec:
       partition: {{ int . }}
       {{- end }}
     {{- end }}
+  {{- $ret := .Values.graylog.persistence.retentionPolicy }}
+  {{- if eq ($ret.whenScaled | default "Retain") "Delete" }}
+  {{- fail "graylog.persistence.retentionPolicy.whenScaled=Delete would destroy the journal of any scaled-in node.\n  Scaling in removes the highest ordinal; anything still unprocessed in its journal exists only on that claim, and nothing replays an orphaned journal.\n  Delete makes that loss silent and unrecoverable.\n  Either:\n    Leave whenScaled=Retain and delete claims by hand once verified empty (see docs/graylog-message-handling.md)\n    Or set graylog.persistence.enabled=false if this deployment does not need a durable journal." }}
+  {{- end }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ $ret.whenDeleted | default "Retain" }}
+    whenScaled: {{ $ret.whenScaled | default "Retain" }}
   template:
     metadata:
-      labels:
-        app: graylog-app
-        {{- include "graylog.selectorLabels" . | nindent 8 }}
-      annotations:
-        checksum/config: {{ include "graylog.configChecksum" . }}
-        checksum/secret: {{ include "graylog.secretsChecksum" . }}
-      {{- with .Values.graylog.podAnnotations }}
+      {{- include "graylog.pod.labels" (dict "context" $ "labels" .Values.graylog.podLabels "fixed" (dict "app" "graylog-app" "app.kubernetes.io/component" "server") "indent" 6) }}
+      {{- $podAnnotations := dict "checksum/config" (include "graylog.configChecksum" .) "checksum/secret" (include "graylog.secretsChecksum" .) }}
+      {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.podAnnotations "fixed" $podAnnotations "indent" 6) }}
+    spec:
+      dnsPolicy: {{ .Values.graylog.dnsPolicy | default "ClusterFirst" }}
+      {{- with .Values.graylog.dnsConfig }}
+      dnsConfig:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-    spec:
-      dnsPolicy: ClusterFirst
-      {{- with .Values.graylog.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      {{- with .Values.graylog.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.graylog.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.graylog.schedulerName }}
+      schedulerName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.graylog.runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
+      {{- if not (kindIs "invalid" .Values.graylog.terminationGracePeriodSeconds) }}
+      terminationGracePeriodSeconds: {{ .Values.graylog.terminationGracePeriodSeconds | int }}
+      {{- end }}
+      {{- $pullSecrets := (.Values.graylog.image.imagePullSecrets | default .Values.global.imagePullSecrets) | default list }}
+      {{- $geolocation := .Values.graylog.config.geolocation }}
+      {{- if and $geolocation.enabled $geolocation.sidecar.enabled $geolocation.sidecar.image.imagePullSecrets }}
+      {{- $pullSecrets = concat $pullSecrets $geolocation.sidecar.image.imagePullSecrets | uniq }}
+      {{- end }}
+      {{- with $pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.graylog.nodeSelector }}
       nodeSelector: {{ . | toYaml | nindent 8 }}
       {{- end }}
-      {{- if .Values.serviceAccount.create }}
+      {{- with .Values.graylog.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.nameOverride }}
       serviceAccountName: {{ include "graylog.serviceAccountName" . }}
       {{- end }}
       {{- with .Values.graylog.podSecurityContext }}
@@ -71,6 +98,10 @@ spec:
                 name: {{ include "graylog.configmap.name" . }}
             - secretRef:
                 name: {{ include "graylog.secretsName" . }}
+            {{- if .Values.opensearch.enabled }}
+            - secretRef:
+                name: {{ include "graylog.opensearch.secretName" . }}
+            {{- end }}
           volumeMounts:
             - name: {{ include "graylog.volume.name" . }}
               mountPath: /mnt/data
@@ -81,6 +112,14 @@ spec:
               mountPath: /mnt/tls/tls.crt
               subPath: tls.crt
               readOnly: true
+            {{- end }}
+            {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+            - name: os-ca
+              mountPath: /mnt/os-tls
+              readOnly: true
+            {{- end }}
+            {{- with .Values.graylog.extraInitVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
         {{- if .Values.graylog.config.plugins.enabled }}
             - name: init-plugins
@@ -109,6 +148,9 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
+        {{- with .Values.graylog.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       containers:
         - name: graylog-app
           image: {{ include "graylog.image" . }}
@@ -127,11 +169,18 @@ spec:
           {{- if or .Values.graylog.env .Values.graylog.extraEnv }}
             {{- include "graylog.env" .Values.graylog | indent 12 }}
           {{- end }}
+          {{/* Config for the preStop drain hook, which inherits this container's
+               environment. Renders nothing when the drain is disabled. */}}
+          {{- include "graylog.prestopDrain.env" . | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ include "graylog.configmap.name" . }}
             - secretRef:
                 name: {{ include "graylog.secretsName" . }}
+            {{- if .Values.opensearch.enabled }}
+            - secretRef:
+                name: {{ include "graylog.opensearch.secretName" . }}
+            {{- end }}
           ports:
             - name: app
               containerPort: {{ .Values.graylog.service.ports.app | int }}
@@ -144,7 +193,7 @@ spec:
               containerPort: {{ .targetPort | default .port | int }}
               protocol: {{ .protocol }}
             {{- end }}
-            - name: input-fwd-conf
+            - name: {{ include "graylog.service.port.forwarder.config" . }}
               containerPort: 13302
               protocol: TCP
           {{- if .Values.graylog.livenessProbe.enabled }}
@@ -167,6 +216,7 @@ spec:
             failureThreshold: {{ .Values.graylog.readinessProbe.failureThreshold | int }}
             successThreshold: {{ .Values.graylog.readinessProbe.successThreshold | int }}
           {{- end }}
+          {{- include "graylog.lifecycle" . | nindent 10 }}
           {{- with .Values.graylog.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -182,7 +232,15 @@ spec:
             - name: init-plugins
               mountPath: /usr/share/graylog/plugin
             {{- end }}
-        {{- include "graylog.geolocation.sidecar" . | nindent 8 }}
+            {{- with .Values.graylog.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with (include "graylog.geolocation.sidecar" . | trim) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.graylog.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       tolerations:
       {{- with .Values.graylog.tolerations }}
         {{- toYaml . | nindent 8 }}
@@ -212,6 +270,9 @@ spec:
         configMap:
           name: {{ include "graylog.cm.init.name" . }}
           defaultMode: 0755
+      {{- with .Values.graylog.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
       {{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.geolocation.sidecar.enabled }}
       - name: geoip-entrypoint
         configMap:
@@ -224,6 +285,11 @@ spec:
       - name: tls-creds
         secret:
           secretName: {{ .Values.graylog.config.tls.secretName | quote }}
+      {{- end }}
+      {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+      - name: os-ca
+        secret:
+          secretName: {{ .Values.opensearch.tls.caSecret }}
       {{- end }}
       {{- if .Values.graylog.config.plugins.enabled }}
       - name: init-plugins
@@ -251,14 +317,7 @@ spec:
       kind: PersistentVolumeClaim
       metadata:
         name: {{ include "graylog.volume.name" . }}
-        {{- with .Values.graylog.persistence.annotations }}
-        annotations:
-          {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- with .Values.graylog.persistence.labels }}
-        labels:
-          {{- toYaml . | nindent 8 }}
-        {{- end }}
+        {{- include "graylog.claim.metadata" (dict "labels" .Values.graylog.persistence.labels "annotations" .Values.graylog.persistence.annotations "indent" 8) }}
       spec:
         {{- with (include "graylog.storageClassName" .) }}
         storageClassName: {{ . | quote }}
