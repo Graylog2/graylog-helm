@@ -253,8 +253,14 @@ If the password is lost and you cannot set a new one through Helm (for example w
 your values are managed by GitOps), patch the new password's SHA-256 into both
 Secrets and restart Graylog:
 
+These patch the Secrets' `data` field, so the value *is* base64 here — unlike
+[an externally managed Secret](../../docs/graylog-secrets.md), which uses `stringData`
+and takes plain text. Both `printf '%s'` calls matter: `echo` would append a newline
+and the hash would not match.
+
 ```sh
 PASS="your-new-password"
+# macOS: shasum -a 256 instead of sha256sum, and plain `base64` (no -w flag).
 SHA=$(printf '%s' "$PASS" | sha256sum | awk '{print $1}')
 SHA64=$(printf '%s' "$SHA" | base64 -w0)
 kubectl patch secret graylog-secrets --namespace graylog -p "{\"data\":{\"GRAYLOG_ROOT_PASSWORD_SHA2\":\"$SHA64\"}}"
