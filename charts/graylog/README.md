@@ -22,6 +22,7 @@ Official Helm chart for Graylog.
   * [Scale DataNode](#scale-datanode)
   * [Data Node Replicas and Data Redundancy](#data-node-replicas-and-data-redundancy)
   * [High Availability Defaults](#high-availability-defaults)
+  * [Health Probes](#health-probes)
   * [Scale MongoDB](#scale-mongodb)
   * [MongoDB Topology](#mongodb-topology)
   * [Modify Graylog `server.conf` parameters](#modify-graylog-serverconf-parameters)
@@ -479,6 +480,93 @@ clusters and need no configuration for the common case.
 > A PDB makes node drains block rather than proceed destructively. On a cluster
 > with too few nodes to satisfy `minAvailable`, a drain will wait instead of
 > completing — this is the intended protection, not a failure.
+
+## Health Probes
+
+A StatefulSet has exactly one rollout throttle: the readiness probe. Nothing else
+paces a rolling update, so a probe that answers faster than the application
+recovers lets the rollout outrun it. The defaults are chosen accordingly.
+
+| Tier | Startup / Readiness | Liveness |
+|---|---|---|
+| Graylog | `GET /api/system/lbstatus` | TCP connect on the app port |
+| Data Node | TCP connect on the OpenSearch port (`9200`) | TCP connect on the Data Node API port (`8999`) |
+
+**Graylog** readiness uses `/api/system/lbstatus`, Graylog's own unauthenticated
+load-balancer status endpoint (`200 ALIVE` / `503 DEAD`). A TCP connect goes green
+the moment Jetty binds the port — before the node has rejoined the cluster,
+restarted its inputs, or worked through journal recovery.
+
+Liveness deliberately stays a TCP connect. `DEAD` means "stop sending me traffic",
+which is exactly what graceful shutdown and a manual drain both set; liveness on
+`lbstatus` would have kubelet kill a healthy pod that is draining or parked for
+maintenance.
+
+That split is what makes draining work. Setting `lb_status` to `dead` now takes a
+pod out of the Service endpoints on its own, without deleting it:
+
+```sh
+# take a pod out of rotation (readiness drops it from endpoints within ~1 minute)
+kubectl exec -n graylog deploy/curl -- curl -sS -u "admin:$PASSWORD" \
+  -H 'X-Requested-By: cli' -X PUT \
+  "http://graylog-0.graylog-svc.graylog:9000/api/system/lbstatus/override/dead"
+```
+
+> [!IMPORTANT]
+> Address the pod directly, not the Service. Once readiness drops the pod, the
+> Service no longer routes to it, so a request sent to the Service cannot reach it
+> to put it back. Use the pod's DNS name or IP (or `kubectl port-forward`) to flip
+> it back to `alive`.
+
+**Data Node** readiness watches the OpenSearch HTTP port rather than the Data Node
+API port. The Data Node binds its own REST API well before it starts OpenSearch —
+roughly 30 seconds apart on an idle single-node cluster, and longer with shards to
+recover — so probing `8999` reports `Ready` while OpenSearch is still down, and a
+rolling update would take down the next Data Node on the strength of that.
+
+> [!NOTE]
+> Data Node readiness proves OpenSearch is listening; it cannot gate on shard
+> recovery or cluster-green. Both Data Node ports serve HTTPS with authentication
+> and the image ships no HTTP client, so there is no unauthenticated health
+> endpoint to probe. Verify cluster health yourself between Data Node restarts.
+
+**Startup probes** on both tiers hold liveness and readiness off until the process
+has finished booting, so a first-node MongoDB migration or a large journal replay
+cannot trip the liveness budget. `failureThreshold x periodSeconds` is the whole
+boot budget — 5 minutes by default. Raise that rather than loosening liveness.
+
+Every probe accepts its own handler (`httpGet`, `tcpSocket`, `exec`, `grpc`) in
+standard Kubernetes syntax, which replaces the chart default for that probe:
+
+```yaml
+datanode:
+  readinessProbe:
+    httpGet:
+      path: /_cluster/health
+      port: 9200
+      scheme: HTTPS
+```
+
+### Data Node pod management
+
+`datanode.podManagementPolicy` defaults to `OrderedReady`. `Parallel` is the
+established pattern for OpenSearch-style quorum clusters, where waiting for pod
+N-1 to be `Ready` before starting pod N can deadlock a cluster that needs a quorum
+to become healthy in the first place.
+
+> [!WARNING]
+> `podManagementPolicy` is **immutable**. Kubernetes forbids updates to any
+> StatefulSet spec field other than `replicas`, `ordinals`, `template`,
+> `updateStrategy`, `revisionHistoryLimit`,
+> `persistentVolumeClaimRetentionPolicy` and `minReadySeconds`, so changing it on
+> a live release makes `helm upgrade` fail outright. Set it on a fresh install, or
+> recreate the StatefulSet to change it:
+>
+> ```sh
+> # --cascade=orphan leaves the running pods and their PVCs in place
+> kubectl delete statefulset graylog-datanode -n graylog --cascade=orphan
+> helm upgrade graylog graylog/graylog -n graylog --set datanode.podManagementPolicy=Parallel
+> ```
 
 ## Scale MongoDB
 ```sh
@@ -1214,18 +1302,23 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.persistence.size`                                            | Size of the persistent volume.                              | `""`                            |
 | `graylog.persistence.annotations`                                     | Annotations for the persistent volume claim.                | `{}`                            |
 | `graylog.persistence.labels`                                          | Labels for the persistent volume claim.                     | `{}`                            |
+| `graylog.startupProbe.enabled`                                        | Enable startup probe. Holds liveness/readiness off until Graylog has booted. | `true`          |
+| `graylog.startupProbe.initialDelaySeconds`                            | Initial delay for startup probe.                            | `30`                            |
+| `graylog.startupProbe.periodSeconds`                                  | Period between startup probe checks.                        | `10`                            |
+| `graylog.startupProbe.timeoutSeconds`                                 | Timeout for the startup probe.                              | `5`                             |
+| `graylog.startupProbe.failureThreshold`                               | Failure threshold. x `periodSeconds` is the whole boot budget (default 5 min). | `30`         |
 | `graylog.livenessProbe.enabled`                                       | Enable liveness probe.                                      | `true`                          |
 | `graylog.livenessProbe.initialDelaySeconds`                           | Initial delay for liveness probe.                           | `60`                            |
 | `graylog.livenessProbe.periodSeconds`                                 | Period between liveness probe checks.                       | `10`                            |
 | `graylog.livenessProbe.timeoutSeconds`                                | Timeout for the liveness probe.                             | `5`                             |
 | `graylog.livenessProbe.failureThreshold`                              | Failure threshold for the liveness probe.                   | `6`                             |
-| `graylog.livenessProbe.successThreshold`                              | Success threshold for the liveness probe.                   | `1`                             |
 | `graylog.readinessProbe.enabled`                                      | Enable readiness probe.                                     | `true`                          |
 | `graylog.readinessProbe.initialDelaySeconds`                          | Initial delay for readiness probe.                          | `30`                            |
 | `graylog.readinessProbe.periodSeconds`                                | Period between readiness probe checks.                      | `10`                            |
 | `graylog.readinessProbe.timeoutSeconds`                               | Timeout for the readiness probe.                            | `5`                             |
 | `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                  | `6`                             |
 | `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                  | `1`                             |
+| `graylog.{startup,liveness,readiness}Probe.{httpGet,tcpSocket,exec,grpc}` | Custom probe handler, standard Kubernetes syntax. Replaces the chart default for that probe. | _(unset)_ |
 | `graylog.terminationGracePeriodSeconds`                               | Shutdown budget before SIGKILL. Covers the preStop hook and Graylog's own graceful shutdown. | `300`  |
 | `graylog.lifecycle.postStart`                                         | Your own postStart hook on the graylog-app container.       | `{}`                            |
 | `graylog.lifecycle.preStop`                                           | Your own preStop hook. Mutually exclusive with `preStopDrain.enabled`. | `{}`                  |
@@ -1344,18 +1437,24 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.persistence.nativeLibs.size`                 | Size of the native libs volume.                 | `"2Gi"`           |
 | `datanode.persistence.nativeLibs.annotations`          | Annotations for native libs PVC.                | `{}`              |
 | `datanode.persistence.nativeLibs.labels`               | Labels for native libs PVC.                     | `{}`              |
+| `datanode.startupProbe.enabled`                        | Enable startup probe.                           | `true`            |
+| `datanode.startupProbe.initialDelaySeconds`            | Initial delay for startup probe.                | `30`              |
+| `datanode.startupProbe.periodSeconds`                  | Period between startup probe checks.            | `10`              |
+| `datanode.startupProbe.timeoutSeconds`                 | Timeout for the startup probe.                  | `5`               |
+| `datanode.startupProbe.failureThreshold`               | Failure threshold. x `periodSeconds` is the boot budget. | `30`     |
 | `datanode.livenessProbe.enabled`                       | Enable liveness probe.                          | `true`            |
 | `datanode.livenessProbe.initialDelaySeconds`           | Initial delay for liveness probe.               | `30`              |
 | `datanode.livenessProbe.periodSeconds`                 | Period between liveness probe checks.           | `10`              |
 | `datanode.livenessProbe.timeoutSeconds`                | Timeout for the liveness probe.                 | `5`               |
 | `datanode.livenessProbe.failureThreshold`              | Failure threshold for the liveness probe.       | `6`               |
-| `datanode.livenessProbe.successThreshold`              | Success threshold for the liveness probe.       | `1`               |
 | `datanode.readinessProbe.enabled`                      | Enable readiness probe.                         | `true`            |
 | `datanode.readinessProbe.initialDelaySeconds`          | Initial delay for readiness probe.              | `10`              |
 | `datanode.readinessProbe.periodSeconds`                | Period between readiness probe checks.          | `10`              |
 | `datanode.readinessProbe.timeoutSeconds`               | Timeout for the readiness probe.                | `5`               |
 | `datanode.readinessProbe.failureThreshold`             | Failure threshold for the readiness probe.      | `6`               |
 | `datanode.readinessProbe.successThreshold`             | Success threshold for the readiness probe.      | `1`               |
+| `datanode.{startup,liveness,readiness}Probe.{httpGet,tcpSocket,exec,grpc}` | Custom probe handler, standard Kubernetes syntax. Replaces the chart default. | _(unset)_ |
+| `datanode.podManagementPolicy`                         | `OrderedReady` or `Parallel`. **Immutable** once the StatefulSet exists. | `OrderedReady` |
 | `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
 | `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
 | `datanode.podDisruptionBudget.annotations`             | Annotations for the PodDisruptionBudget.        | `{}`              |

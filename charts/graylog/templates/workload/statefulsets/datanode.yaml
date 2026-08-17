@@ -8,6 +8,10 @@ metadata:
 spec:
   replicas: {{ include "graylog.datanode.replicas" . | int }}
   serviceName: {{ include "graylog.datanode.service.name" . }}
+  {{/* Immutable once the StatefulSet exists - see the values comment. Rendered
+       unconditionally so the field is explicit in the manifest rather than
+       inherited from an API-server default that could change. */}}
+  podManagementPolicy: {{ .Values.datanode.podManagementPolicy | default "OrderedReady" }}
   selector:
     matchLabels:
       app: graylog-datanode
@@ -145,26 +149,25 @@ spec:
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.datanode.livenessProbe.enabled }}
-          livenessProbe:
-            tcpSocket:
-              port: {{ .Values.datanode.service.ports.api | default 8999 | int }}
-            initialDelaySeconds: {{ .Values.datanode.livenessProbe.initialDelaySeconds | int }}
-            periodSeconds: {{ .Values.datanode.livenessProbe.periodSeconds | int }}
-            timeoutSeconds: {{ .Values.datanode.livenessProbe.timeoutSeconds | int }}
-            failureThreshold: {{ .Values.datanode.livenessProbe.failureThreshold | int }}
-            successThreshold: {{ .Values.datanode.livenessProbe.successThreshold | int }}
-          {{- end }}
-          {{- if .Values.datanode.readinessProbe.enabled }}
-          readinessProbe:
-            tcpSocket:
-              port: {{ .Values.datanode.service.ports.api | default 8999 | int }}
-            initialDelaySeconds: {{ .Values.datanode.readinessProbe.initialDelaySeconds | int }}
-            periodSeconds: {{ .Values.datanode.readinessProbe.periodSeconds | int }}
-            timeoutSeconds: {{ .Values.datanode.readinessProbe.timeoutSeconds | int }}
-            failureThreshold: {{ .Values.datanode.readinessProbe.failureThreshold | int }}
-            successThreshold: {{ .Values.datanode.readinessProbe.successThreshold | int }}
-          {{- end }}
+          {{- /* Probe handlers and the reasoning behind them: _probes.tpl.
+                 Readiness and startup watch the OpenSearch HTTP port, which the
+                 Data Node binds well after its own REST API; liveness watches the
+                 REST API, because that is the process being alive. */}}
+          {{- include "graylog.probe" (dict
+                "name" "startupProbe"
+                "probe" .Values.datanode.startupProbe
+                "default" (include "graylog.probe.handler.datanodeDataTcp" .)
+                "indent" 10) -}}
+          {{- include "graylog.probe" (dict
+                "name" "livenessProbe"
+                "probe" .Values.datanode.livenessProbe
+                "default" (include "graylog.probe.handler.datanodeApiTcp" .)
+                "indent" 10) -}}
+          {{- include "graylog.probe" (dict
+                "name" "readinessProbe"
+                "probe" .Values.datanode.readinessProbe
+                "default" (include "graylog.probe.handler.datanodeDataTcp" .)
+                "indent" 10) -}}
           {{- with .Values.datanode.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
