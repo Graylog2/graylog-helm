@@ -32,6 +32,32 @@ jobs:
       - name: Run ct lint
         run: ct lint --config .github/ct.yaml --all
 
+      # `ct lint` never looks at examples/, so a shipped example could reference a
+      # removed key, miss a required one, or trip a template-time guard and no one
+      # would find out until a user copied it. `helm template` also enforces
+      # values.schema.json, so this covers schema drift in the examples too.
+      #
+      # Raw manifests in examples/ (Secrets, Pods) are not values overlays and are
+      # skipped by looking for a top-level `apiVersion:`.
+      - name: Render shipped examples
+        run: |
+          set -u
+          rc=0
+          while IFS= read -r f; do
+            if grep -q '^apiVersion:' "$f"; then
+              echo "skip     $f (raw manifest, not a values overlay)"
+              continue
+            fi
+            if out=$(helm template ci-examples charts/graylog -f "$f" 2>&1); then
+              echo "ok       $f"
+            else
+              echo "FAILED   $f"
+              printf '%s\n' "$out" | sed 's/^/           /'
+              rc=1
+            fi
+          done < <(find examples -name '*.yaml' | sort)
+          exit $rc
+
   helm-unittest:
     runs-on: ubuntu-latest
     strategy:
