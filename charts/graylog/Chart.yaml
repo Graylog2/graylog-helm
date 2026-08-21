@@ -35,7 +35,11 @@ annotations:
       platforms:
         - linux/amd64
         - linux/arm64
-  # Changelog
+  # Changelog. Regenerated from CHANGELOG.md when the chart is packaged for a
+  # release, so the published chart always matches the release notes and the
+  # entries below are only what shipped last. Edit CHANGELOG.md on the release
+  # PR to change what ArtifactHub shows; hand edits here are not published. The
+  # key itself must stay - packaging fails without it.
   artifacthub.io/changes: |
     - kind: added
       description: "add LICENSE"

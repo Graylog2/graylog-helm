@@ -8,6 +8,11 @@ to the pull request that introduced it so entries carry named PR links.
 
 ArtifactHub expects the annotation to describe only the changes introduced by
 this chart version, so the previous contents are replaced, not appended to.
+
+Run at packaging time, against a checkout of the release tag, and the result is
+never committed: ArtifactHub reads the annotation from the packaged tarball it
+fetches through index.yaml, so CHANGELOG.md stays the single source of truth and
+nothing has to race release-please's force-push of the release branch.
 """
 
 from __future__ import annotations
