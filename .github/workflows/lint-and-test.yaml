@@ -7,8 +7,83 @@ on:
     branches: ["main"]
 
 jobs:
+  # Decides which test jobs are worth running for this change.
+  #
+  # Deliberately not `on.<event>.paths`: a workflow skipped by a path filter
+  # creates no check runs at all, so if these checks are ever made required, a
+  # docs-only PR waits forever on checks that will never report. Jobs skipped by
+  # an `if:` condition still report - as skipped, which branch protection
+  # accepts - and cost a few seconds rather than a runner.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      chart: ${{ steps.filter.outputs.chart }}
+      examples: ${{ steps.filter.outputs.examples }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: filter
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -u
+          # On anything unexpected, fall through to running everything: a false
+          # negative here silently ships an untested chart.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch --quiet origin "$BASE_REF"
+            range="origin/${BASE_REF}...HEAD"
+          elif [[ -n "${BEFORE:-}" ]] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            range="${BEFORE}..HEAD"
+          else
+            echo "no usable diff range; running every test job"
+            {
+              echo "chart=true"
+              echo "examples=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files="$(git diff --name-only "$range")"
+          echo "::group::changed files ($range)"
+          printf '%s\n' "$files"
+          echo "::endgroup::"
+
+          chart=false
+          examples=false
+          while IFS= read -r f; do
+            [[ -n "$f" ]] || continue
+            case "$f" in
+              # Markdown inside the chart is documentation - the values
+              # reference and the chart README. It cannot change a rendered
+              # manifest, so it does not earn a four-leg install matrix.
+              charts/graylog/*)
+                if [[ "$f" != *.md ]]; then chart=true; fi
+                ;;
+              # Shipped examples are values overlays, rendered by the lint job.
+              examples/*)
+                examples=true
+                ;;
+              # The CI definition itself: run everything, or a change to how the
+              # chart is tested would never be tested.
+              .github/workflows/lint-and-test.yaml|.github/ct.yaml)
+                chart=true
+                examples=true
+                ;;
+            esac
+          done <<< "$files"
+
+          echo "chart=$chart"       | tee -a "$GITHUB_OUTPUT"
+          echo "examples=$examples" | tee -a "$GITHUB_OUTPUT"
+
   helm-ct-lint:
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.chart == 'true' || needs.changes.outputs.examples == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +135,10 @@ jobs:
 
   helm-unittest:
     runs-on: ubuntu-latest
+    needs: changes
+    # Templates, values and the suites themselves all live under
+    # charts/graylog/, so a chart change is the only thing this can regress.
+    if: needs.changes.outputs.chart == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -107,7 +186,11 @@ jobs:
 
   helm-ct-install:
     runs-on: ubuntu-latest
-    needs: [helm-ct-lint, helm-unittest]
+    needs: [changes, helm-ct-lint, helm-unittest]
+    # The expensive job: four legs, each standing up Graylog, a datanode and a
+    # MongoDB replica set. Only a change that alters what the chart renders can
+    # justify it.
+    if: needs.changes.outputs.chart == 'true'
     # Backstop only. A healthy leg spends ~2 minutes on setup and a few more
     # bringing the stack up; the default job ceiling is 360 minutes, so without
     # this a wedged install burns hours per leg before anyone notices. Namespace
