@@ -35,36 +35,12 @@ annotations:
       platforms:
         - linux/amd64
         - linux/arm64
-  # Changelog. Regenerated from CHANGELOG.md when the chart is packaged for a
-  # release, so the published chart always matches the release notes and the
-  # entries below are only what shipped last. Edit CHANGELOG.md on the release
-  # PR to change what ArtifactHub shows; hand edits here are not published. The
-  # key itself must stay - packaging fails without it.
+  # Changelog. Left empty on purpose: it is generated from CHANGELOG.md when the
+  # chart is packaged for a release, so the published chart always matches the
+  # release notes. Edit CHANGELOG.md on the release PR to change what ArtifactHub
+  # shows; entries written here are replaced at packaging and never published.
+  # The key itself must stay - packaging fails without it.
   artifacthub.io/changes: |
-    - kind: added
-      description: "add LICENSE"
-      links:
-        - name: "Create LICENSE"
-          url: "https://github.com/Graylog2/graylog-helm/pull/59"
-    - kind: added
-      description: "Support for official MongoDB Kubernetes Operator"
-      links:
-        - name: "Replace bitnami/mongodb dependency"
-          url: "https://github.com/Graylog2/graylog-helm/issues/48"
-        - name: "Use MongoDB Kubernetes Operator"
-          url: "https://github.com/Graylog2/graylog-helm/pull/55"
-    - kind: changed
-      description: "Bump appVersion to '7.0'"
-    - kind: fixed
-      description: "Forwarder ingress TLS condition"
-      links:
-        - name: "fix: forwarder TLS condition"
-          url: "https://github.com/Graylog2/graylog-helm/pull/60"
-    - kind: removed
-      description: "Remove global size preset value"
-      links:
-        - name: "Remove global size preset"
-          url: "https://github.com/Graylog2/graylog-helm/pull/56"
   artifacthub.io/containsSecurityUpdates: "true"
 # This is the chart version.
 version: 1.0.0
