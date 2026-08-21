@@ -43,10 +43,17 @@ supply it.
 > `datanode.config.s3ClientDefaultEndpoint`. A `GRAYLOG_S3_CLIENT_DEFAULT_*` key in this Secret
 > reaches the Graylog server container and does not configure searchable snapshots.
 
-`GEO_IP_MAXMIND_ACCOUNT_ID` and `GEO_IP_MAXMIND_LICENSE_KEY`: MaxMind credentials for the GeoIP
-update sidecar. Supply both when `graylog.config.geolocation.enabled` and
-`graylog.config.geolocation.sidecar.enabled` are both `true`. The sidecar reads them with a
-`secretKeyRef`, so the pod does not start when a key is absent from the Secret.
+> [!NOTE]
+> MaxMind GeoIP credentials do not belong in this Secret either. The GeoIP update sidecar reads
+> them from a Secret of its own, named by
+> `graylog.config.geolocation.maxmindGeoIp.existingSecret`, with the key names
+> `GEO_IP_MAXMIND_ACCOUNT_ID` and `GEO_IP_MAXMIND_LICENSE_KEY` (both overridable via
+> `accountIdKey` / `licenseKeyKey`). Putting them in this Secret has no effect: with
+> `global.existingSecretName` set, the sidecar never reads this Secret, and supplying the inline
+> `maxmindGeoIp.accountId` / `licenseKey` values alongside an external Secret is refused at render
+> time. The sidecar reads its keys with a `secretKeyRef`, so the pod does not start when one is
+> absent from the GeoIP Secret. See
+> [examples/graylog-geoip-secret.yaml](../examples/graylog-geoip-secret.yaml).
 
 ## Secret Example
 
@@ -54,9 +61,14 @@ The following is an example of a Kubernetes Secret managed externally from the G
 The example uses `stringData`, so you supply plain text and Kubernetes encodes it for you.
 
 > [!CAUTION]
-> Replace every `<...>` value before you apply this file. Keep or change `admin` as you prefer,
-> and leave the optional S3 keys empty when you do not use an S3 backend. Never commit real
-> credentials.
+> Replace every `<...>` value before you apply this file. Keep or change `admin` as you prefer.
+> Never commit real credentials.
+
+> [!IMPORTANT]
+> Because this is `stringData`, do not base64 encode the values yourself — a base64 string here is
+> encoded a second time, and Graylog then reads the base64 text itself as the username, pepper or
+> hash. Avoid trailing newlines for the same reason, which is why the commands above use
+> `printf %s` rather than `echo`.
 
 ```yaml
 apiVersion: v1
@@ -71,8 +83,10 @@ stringData:
   GRAYLOG_PASSWORD_SECRET: "<96-character-random-string>"
   # SHA-256 hash of the admin login password: 64 lowercase hexadecimal characters.
   GRAYLOG_ROOT_PASSWORD_SHA2: "<64-character-sha256-hex-digest>"
-  # Optional. Only necessary for features that reach S3 with keys.
 ```
+
+That is the whole Secret. S3 and MaxMind credentials are deliberately absent — see the two notes
+above for where each of those belongs.
 
 ## Setting Your Secret
 
