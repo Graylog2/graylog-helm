@@ -18,11 +18,6 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      # The annotation sync below works on a real tree, not through the API.
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - uses: googleapis/release-please-action@v5
         id: release
         with:
@@ -38,14 +33,9 @@ jobs:
           # chart-releaser is retired.
           skip-github-release: true
 
-      # release-please renders release notes only as Markdown, so the
-      # artifacthub.io/changes annotation has to be generated separately and
-      # committed onto the release PR before it is merged. Runs on every
-      # invocation: release-please force-pushes its branch whenever it
-      # regenerates the PR, which would otherwise discard the annotation commit.
-      - name: Sync artifacthub.io/changes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TARGET_BRANCH: main
-        run: .github/scripts/sync-artifacthub-changes.sh
+      # No artifacthub.io/changes step here on purpose. The annotation is
+      # generated from CHANGELOG.md when the chart is packaged, not committed
+      # onto the release PR: a commit here would race release-please's own
+      # force-push of the branch, and it would make hand edits to the annotation
+      # depend on being the last change before the merge. See
+      # .github/scripts/artifacthub_changes.py.
