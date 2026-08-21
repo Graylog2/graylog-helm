@@ -1,0 +1,166 @@
+name: Release Graylog Chart
+
+# Packages the chart for a release release-please has already cut, attaches the
+# tarball to that release, and merges a new entry into the Helm repository index
+# on gh-pages.
+#
+# Deliberately not chart-releaser: cr's default release name is
+# "{{ .Name }}-{{ .Version }}", identical to the graylog-X.Y.Z tags release-please
+# owns, so cr finds the release already present and - with skip_existing -
+# silently declines to upload anything. A green run, and no chart published.
+#
+# Called from release-please.yaml rather than triggered by a tag or release
+# event: refs created with GITHUB_TOKEN raise no workflow events, so
+# `on: release: published` and tag-push triggers never fire. Do not "simplify"
+# this into a release-triggered workflow.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to attach the packaged chart to
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to attach the packaged chart to (e.g. graylog-2.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  # Serialise: publishes read-modify-write a single shared index.yaml.
+  group: publish-chart
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      CHART_DIR: charts/graylog
+      PACKAGE_DIR: .cr-release-packages
+      TAG: ${{ inputs.tag }}
+    steps:
+      # This workflow writes release assets and rewrites the published Helm
+      # index. A fork running it via workflow_dispatch would publish into its own
+      # releases while claiming the upstream index URL, so refuse outright.
+      - name: Guard against publishing outside the chart repository
+        run: |
+          if [[ "${{ github.repository }}" != "Graylog2/graylog-helm" ]]; then
+            echo "::error::refusing to publish charts from ${{ github.repository }}"
+            exit 1
+          fi
+          echo "publishing within ${{ github.repository }}"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Check out the Helm repository index
+        uses: actions/checkout@v6
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: v3.16.4
+
+      # release-please renders release notes only as Markdown, so no updater can
+      # write changelog content into a YAML field. The annotation is generated
+      # here, from the CHANGELOG.md of the tag being published, and never
+      # committed: ArtifactHub reads it from the packaged tarball it fetches
+      # through index.yaml. CHANGELOG.md therefore stays the single source of
+      # truth, editable on the release PR like the rest of the release.
+      - name: Generate the artifacthub.io/changes annotation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 .github/scripts/artifacthub_changes.py \
+            --chart-dir "$CHART_DIR" --repo "$GITHUB_REPOSITORY"
+          helm show chart "$CHART_DIR" | yq e '.annotations."artifacthub.io/changes"' -
+
+      - name: Package the chart
+        run: |
+          helm package "$CHART_DIR" --destination "$PACKAGE_DIR"
+          ls -l "$PACKAGE_DIR"
+
+      # The tag encodes the version release-please released; the chart must agree,
+      # or the index would advertise a version the package does not contain.
+      - name: Verify the packaged version matches the tag
+        run: |
+          chart_version="$(helm show chart "$CHART_DIR" | yq e '.version' -)"
+          tag_version="${TAG#graylog-}"
+          if [[ "$chart_version" != "$tag_version" ]]; then
+            echo "::error::Chart.yaml is $chart_version but the tag says $tag_version"
+            exit 1
+          fi
+          echo "version=$chart_version" >> "$GITHUB_ENV"
+
+      - name: Attach the package to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$TAG" "$PACKAGE_DIR"/*.tgz --clobber
+
+      # The index is merged, never regenerated. Packages are served from the
+      # release assets they are attached to, so gh-pages holds no tarballs -
+      # regenerating the index from that directory would drop every historical
+      # entry. `--merge` keeps entries whose tarball is absent and refreshes the
+      # URL of the version being published.
+      - name: Merge the new version into the Helm repository index
+        run: |
+          index=gh-pages/index.yaml
+          before="$(yq e '.entries.graylog[] | .version + " " + .urls[0]' "$index" | sort | sed '/^$/d')"
+
+          helm repo index "$PACKAGE_DIR" \
+            --merge "$index" \
+            --url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+
+          after="$(yq e '.entries.graylog[] | .version + " " + .urls[0]' "$PACKAGE_DIR/index.yaml" | sort | sed '/^$/d')"
+
+          # Every pre-existing (version, url) pair must survive verbatim. The
+          # version being published is exempt: its URL is refreshed on purpose.
+          # This is the backstop for the one mistake that cannot be walked back
+          # quietly - regenerating the index instead of merging it, which drops
+          # every version whose tarball is not on disk, and none of them are.
+          lost="$(comm -23 <(printf '%s\n' "$before" | grep -v "^${version} " || true) <(printf '%s\n' "$after") || true)"
+          if [[ -n "$lost" ]]; then
+            echo "::error::index.yaml would lose or rewrite existing entries:"
+            printf '%s\n' "$lost"
+            exit 1
+          fi
+
+          cp "$PACKAGE_DIR/index.yaml" "$index"
+          printf '%s\n' "$after" | sed 's/^/  /'
+
+      - name: Publish the index
+        run: |
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # index.yaml only. artifacthub-repo.yml carries ArtifactHub ownership
+          # and nothing here should touch it.
+          git add index.yaml
+          if git diff --cached --quiet; then
+            echo "Helm repository already publishes ${version}"
+            exit 0
+          fi
+          git commit -m "chore: publish graylog ${version} to the Helm repository"
+          git push
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published \`graylog\` ${version}"
+            echo
+            echo '```'
+            echo "helm repo add graylog https://graylog2.github.io/graylog-helm"
+            echo "helm repo update graylog"
+            echo "helm install graylog graylog/graylog --version ${version}"
+            echo '```'
+            echo
+            echo "Tarball attached to [\`${TAG}\`](${{ github.server_url }}/${{ github.repository }}/releases/tag/${TAG})."
+          } >> "$GITHUB_STEP_SUMMARY"

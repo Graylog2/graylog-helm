@@ -17,6 +17,12 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      # Per-package outputs are keyed by package path.
+      graylog-released: ${{ steps.release.outputs['charts/graylog--release_created'] }}
+      graylog-tag: ${{ steps.release.outputs['charts/graylog--tag_name'] }}
+      graylog-version: ${{ steps.release.outputs['charts/graylog--version'] }}
+      paths-released: ${{ steps.release.outputs.paths_released }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
@@ -25,13 +31,6 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: main
-          # PR-only mode: chart-releaser (release.yaml) still owns the tag, the
-          # release and the index entry. Both use the name graylog-X.Y.Z, so if
-          # release-please created the release first, chart-releaser would find
-          # it present and — running with skip_existing: true — silently decline
-          # to upload the chart package. Removed in the publishing cutover, when
-          # chart-releaser is retired.
-          skip-github-release: true
 
       # No artifacthub.io/changes step here on purpose. The annotation is
       # generated from CHANGELOG.md when the chart is packaged, not committed
@@ -39,3 +38,15 @@ jobs:
       # force-push of the branch, and it would make hand edits to the annotation
       # depend on being the last change before the merge. See
       # .github/scripts/artifacthub_changes.py.
+
+  # Linked to the release rather than to a path filter or a tag push: refs
+  # created with GITHUB_TOKEN raise no events, so only the release-please run
+  # itself knows a release happened.
+  publish-chart:
+    needs: release-please
+    if: needs.release-please.outputs.graylog-released == 'true'
+    uses: ./.github/workflows/release-graylog.yaml
+    permissions:
+      contents: write
+    with:
+      tag: ${{ needs.release-please.outputs.graylog-tag }}
