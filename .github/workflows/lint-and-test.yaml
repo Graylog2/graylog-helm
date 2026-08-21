@@ -147,6 +147,96 @@ jobs:
                 --heading "Values linted — Helm ${{ matrix.helm-version }}" \
             >> "$GITHUB_STEP_SUMMARY"
 
+      # The rendered manifests are the chart's actual output, and reading them is
+      # how you answer "what does this PR change" without installing anything.
+      # Kept as an artifact rather than printed: a full render is thousands of
+      # lines, too much for a log and far too much for a job summary.
+      - name: Render full manifests
+        if: always()
+        continue-on-error: true
+        run: |
+          set -u
+          mkdir -p rendered
+
+          render() {
+            local name="$1"; shift
+            if helm template graylog charts/graylog "$@" > "rendered/${name}.yaml" 2>"rendered/${name}.err"; then
+              rm -f "rendered/${name}.err"
+              printf '%-46s %6s lines, %4s objects\n' "$name" \
+                "$(wc -l < "rendered/${name}.yaml" | tr -d ' ')" \
+                "$(grep -c '^kind:' "rendered/${name}.yaml" || true)"
+            else
+              mv "rendered/${name}.yaml" "rendered/${name}.failed.yaml" 2>/dev/null || true
+              printf '%-46s FAILED (see %s.err)\n' "$name" "$name"
+            fi
+          }
+
+          # Chart defaults are the production shape, and the one people actually
+          # deploy; the CI overlay is what this workflow tests.
+          render "00-chart-defaults"
+          render "01-ci-values" -f charts/graylog/ci/ci-values.yaml
+
+          while IFS= read -r f; do
+            grep -q '^apiVersion:' "$f" && continue   # raw manifest, not an overlay
+            render "example-$(basename "${f%.yaml}")" -f "$f"
+          done < <(find examples -name '*.yaml' | sort)
+
+          # `helm template` generates credentials for every key left empty - the
+          # root password, the password_secret pepper, both MongoDB passwords.
+          # They are throwaway values that never reach a cluster, but artifacts on
+          # a public repository are world-downloadable and these would read as
+          # leaked credentials to anyone (and to a secret scanner). Redact the
+          # values, keep the keys, so a diff still shows a key appearing or
+          # disappearing. The placeholder is valid base64, so the manifests stay
+          # loadable.
+          for f in rendered/*.yaml; do
+            yq -i '(select(.kind == "Secret" and has("data")) | .data) |= with_entries(.value = "UkVEQUNURUQ=")' "$f"
+            yq -i '(select(.kind == "Secret" and has("stringData")) | .stringData) |= with_entries(.value = "REDACTED")' "$f"
+          done
+
+          # A failed redaction must not become a published credential, so prove
+          # it worked and throw the bundle away if it did not.
+          leaked="$(yq ea 'select(.kind == "Secret") | .data // {} | to_entries | .[] | select(.value != "UkVEQUNURUQ=") | .key' rendered/*.yaml | grep -c . || true)"
+          if [[ "$leaked" != "0" ]]; then
+            echo "::error::redaction left ${leaked} secret value(s); discarding renders instead of uploading"
+            rm -rf rendered
+            exit 1
+          fi
+          echo "all Secret values redacted"
+
+          ls -l rendered/
+
+      - name: Upload rendered manifests
+        id: upload-rendered
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-manifests-helm-${{ matrix.helm-version }}
+          path: rendered/
+          # Long enough to review a PR and bisect a regression, short enough not
+          # to accumulate a render of every push forever.
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Note the artifact in the summary
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "### Rendered manifests"
+            echo
+            echo "Full \`helm template\` output for chart defaults, the CI overlay and every"
+            echo "shipped example: [\`rendered-manifests-helm-${{ matrix.helm-version }}\`](${{ steps.upload-rendered.outputs.artifact-url }})"
+            echo "(kept 14 days). Download and diff against the same artifact on \`main\` to"
+            echo "see exactly what a change does to the output."
+            echo
+            echo "\`Secret\` values are redacted — keys are kept, so a diff still shows one"
+            echo "appearing or disappearing. Everything Helm generates for an empty value"
+            echo "(root password, \`password_secret\` pepper, MongoDB passwords) would"
+            echo "otherwise be world-downloadable from a public repository."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # `ct lint` never looks at examples/, so a shipped example could reference a
       # removed key, miss a required one, or trip a template-time guard and no one
       # would find out until a user copied it. `helm template` also enforces
