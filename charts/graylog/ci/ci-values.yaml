@@ -4,6 +4,12 @@
 
 graylog:
   replicas: 1
+  # The chart default is 300s, to give the preStop drain room to flush the
+  # journal before SIGKILL. ct deletes the namespace after every install and
+  # waits for termination, so that budget is paid on every leg of the matrix.
+  # Nothing here holds data worth draining, and the drain hook is off by
+  # default anyway. Do not change the chart default.
+  terminationGracePeriodSeconds: 30
   config:
     serverJavaOpts: "-Xms512m -Xmx768m"
   resources:
