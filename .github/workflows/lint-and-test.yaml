@@ -6,6 +6,16 @@ on:
   push:
     branches: ["main"]
 
+# One run per ref. Pushing three times to a branch used to leave three full runs
+# in flight - up to 27 jobs, of which only the last mattered - and they compete
+# for the same concurrency slots as everyone else's runs.
+#
+# Pushes to `main` are never cancelled: each merge commit's result is a record of
+# whether that commit is good, and nothing else re-establishes it.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Decides which test jobs are worth running for this change.
   #
@@ -21,6 +31,8 @@ jobs:
       examples: ${{ steps.filter.outputs.examples }}
     steps:
       - name: Checkout
+        # The only job that needs history: the diff below is computed against the
+        # merge base, which a shallow clone does not contain.
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -114,9 +126,9 @@ jobs:
           - v4.2.0
     steps:
       - name: Checkout
+        # Shallow on purpose: `ct` is invoked with --all and never diffs against a
+        # target branch, so no job past `changes` needs history.
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Set up Helm
         uses: azure/setup-helm@v5
@@ -306,9 +318,9 @@ jobs:
           - v4.2.0
     steps:
       - name: Checkout
+        # Shallow on purpose: `ct` is invoked with --all and never diffs against a
+        # target branch, so no job past `changes` needs history.
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Set up Helm
         uses: azure/setup-helm@v5
@@ -415,9 +427,9 @@ jobs:
             k8s-version: v1.34.3
     steps:
       - name: Checkout
+        # Shallow on purpose: `ct` is invoked with --all and never diffs against a
+        # target branch, so no job past `changes` needs history.
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Set up Helm
         uses: azure/setup-helm@v5
