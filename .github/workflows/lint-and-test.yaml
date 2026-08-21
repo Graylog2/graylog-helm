@@ -80,6 +80,28 @@ jobs:
           echo "chart=$chart"       | tee -a "$GITHUB_OUTPUT"
           echo "examples=$examples" | tee -a "$GITHUB_OUTPUT"
 
+          mark() { [[ "$1" == "true" ]] && echo "run" || echo "skipped"; }
+          {
+            echo "## What this run tests"
+            echo
+            echo "| job | verdict | why |"
+            echo "|-----|---------|-----|"
+            echo "| \`helm-ct-lint\` | $( [[ "$chart" == "true" || "$examples" == "true" ]] && echo run || echo skipped ) | chart or examples changed |"
+            echo "| \`helm-unittest\` | $(mark "$chart") | chart templates/values/tests changed |"
+            echo "| \`helm-ct-install\` | $(mark "$chart") | chart changed (4 legs, full stack each) |"
+            echo
+            echo "Markdown under \`charts/graylog/\` and everything in \`docs/\` cannot"
+            echo "change a rendered manifest, so they test nothing."
+            echo
+            echo "<details><summary>Changed files ($(printf '%s\n' "$files" | grep -c . || true))</summary>"
+            echo
+            echo '```'
+            printf '%s\n' "$files"
+            echo '```'
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   helm-ct-lint:
     runs-on: ubuntu-latest
     needs: changes
@@ -105,7 +127,10 @@ jobs:
         uses: helm/chart-testing-action@v2.8.0
 
       - name: Run ct lint
-        run: ct lint --config .github/ct.yaml --all
+        id: ct-lint
+        run: |
+          set -o pipefail
+          ct lint --config .github/ct.yaml --all 2>&1 | tee /tmp/ct-lint.log
 
       # `ct lint` never looks at examples/, so a shipped example could reference a
       # removed key, miss a required one, or trip a template-time guard and no one
@@ -115,22 +140,51 @@ jobs:
       # Raw manifests in examples/ (Secrets, Pods) are not values overlays and are
       # skipped by looking for a top-level `apiVersion:`.
       - name: Render shipped examples
+        id: examples
+        # always() so a ct lint failure still yields the examples table and a
+        # summary for this leg, rather than an empty run page.
+        if: always()
         run: |
           set -u
           rc=0
+          rows=""
+          ok=0; skipped=0; failed=0
           while IFS= read -r f; do
             if grep -q '^apiVersion:' "$f"; then
               echo "skip     $f (raw manifest, not a values overlay)"
+              rows="${rows}| \`${f}\` | – | raw manifest, not a values overlay |"$'\n'
+              skipped=$((skipped + 1))
               continue
             fi
             if out=$(helm template ci-examples charts/graylog -f "$f" 2>&1); then
               echo "ok       $f"
+              objects=$(printf '%s\n' "$out" | grep -c '^kind:' || true)
+              rows="${rows}| \`${f}\` | ok | ${objects} objects |"$'\n'
+              ok=$((ok + 1))
             else
               echo "FAILED   $f"
               printf '%s\n' "$out" | sed 's/^/           /'
+              # The first `Error:` line is generic ("values don't meet the
+              # specifications of the schema"); the offending key is on the
+              # lines after it, so keep a few and flatten them into the cell.
+              reason=$(printf '%s\n' "$out" | grep -i -m1 -A3 'error' | tr '\n' ' ' | tr -s ' ' | cut -c1-220)
+              rows="${rows}| \`${f}\` | **FAILED** | ${reason//|/\\|} |"$'\n'
+              failed=$((failed + 1))
               rc=1
             fi
           done < <(find examples -name '*.yaml' | sort)
+
+          {
+            echo "## Lint — Helm ${{ matrix.helm-version }}"
+            echo
+            echo "\`ct lint\`: **$( [[ "${{ steps.ct-lint.outcome }}" == "success" ]] && echo passed || echo failed )**"
+            echo
+            echo "Shipped examples: **${ok} rendered**, ${skipped} skipped, ${failed} failed"
+            echo
+            echo "| example | result | detail |"
+            echo "|---------|--------|--------|"
+            printf '%s' "$rows"
+          } >> "$GITHUB_STEP_SUMMARY"
           exit $rc
 
   helm-unittest:
@@ -170,19 +224,61 @@ jobs:
           helm plugin install /tmp/helm-unittest
 
       - name: Run helm unittest
-        run: helm unittest charts/graylog
+        id: unittest
+        run: |
+          set -o pipefail
+          helm unittest charts/graylog 2>&1 | tee /tmp/unittest.log
 
       # helm-unittest can only assert on rendered text. These two run the shipped
       # shell scripts for real: the preStop drain against a stubbed metrics
       # endpoint, and the init script against fixture volumes (including the
       # upgrade path, where an existing volume must not be clobbered).
       - name: preStop drain behaviour tests
+        id: drain
+        if: always()
         run: sh charts/graylog/tests/scripts/prestop-drain-behavior-test.sh
 
       - name: init-script behaviour tests
+        id: init-script
         # always() so a drain failure above does not hide an init failure here.
         if: always()
         run: sh charts/graylog/tests/scripts/init-graylog-behavior-test.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          set -u
+          verdict() { [[ "$1" == "success" ]] && echo "passed" || echo "**FAILED**"; }
+
+          {
+            echo "## Unit tests — Helm ${{ matrix.helm-version }}"
+            echo
+            if [[ -f /tmp/unittest.log ]]; then
+              # helm-unittest prints "Test Suites: 28 passed, 28 total" and the
+              # same shape for Tests; lift those two lines verbatim.
+              suites=$(grep -m1 '^Test Suites:' /tmp/unittest.log | sed 's/Test Suites:[[:space:]]*//')
+              tests=$(grep -m1 '^Tests:' /tmp/unittest.log | sed 's/Tests:[[:space:]]*//')
+              echo "| suite group | result |"
+              echo "|-------------|--------|"
+              echo "| \`helm unittest\` suites | ${suites:-unknown} |"
+              echo "| \`helm unittest\` tests | ${tests:-unknown} |"
+              echo "| preStop drain behaviour | $(verdict "${{ steps.drain.outcome }}") |"
+              echo "| init-script behaviour | $(verdict "${{ steps.init-script.outcome }}") |"
+            else
+              echo "\`helm unittest\` did not run."
+            fi
+
+            if [[ "${{ steps.unittest.outcome }}" != "success" && -f /tmp/unittest.log ]]; then
+              echo
+              echo "<details><summary>Failing suites</summary>"
+              echo
+              echo '```'
+              grep -A3 '^ FAIL' /tmp/unittest.log | head -60 || true
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   helm-ct-install:
     runs-on: ubuntu-latest
@@ -258,6 +354,15 @@ jobs:
           'NAME:.metadata.name,CPU:.status.allocatable.cpu,MEM:.status.allocatable.memory'
           kubectl describe node | sed -n '/Allocated resources/,/Events/p'
 
+          # Carried into the job summary: whether the stack fits is the single
+          # most common reason this job fails, and CPU is the binding constraint.
+          cpu=$(kubectl get nodes -o jsonpath='{.items[0].status.allocatable.cpu}')
+          mem=$(kubectl get nodes -o jsonpath='{.items[0].status.allocatable.memory}')
+          {
+            echo "NODE_CPU=$cpu"
+            echo "NODE_MEM=$mem"
+          } >> "$GITHUB_ENV"
+
       - name: Generate ephemeral CI rootPassword and mask in workflow logs
         id: ci-root-password
         run: |
@@ -277,7 +382,11 @@ jobs:
       # Running plus recent warning events, so a pod that cannot be scheduled is
       # visible within seconds instead of in a post-mortem dump.
       - name: Run ct install
+        id: ct-install
         run: |
+          started=$(date +%s)
+          echo "INSTALL_STARTED=$started" >> "$GITHUB_ENV"
+
           watch_cluster() {
             while true; do
               echo "::group::cluster state $(date -u +%H:%M:%S)"
@@ -287,6 +396,14 @@ jobs:
               kubectl get events -A --field-selector type=Warning \
                 --sort-by=.lastTimestamp 2>/dev/null | tail -8 || true
               echo "::endgroup::"
+
+              # Latest full pod state, kept for the job summary: ct deletes its
+              # namespace when it finishes, so by summary time the workloads
+              # under test are gone and cannot be queried any more.
+              kubectl get pods -A -o custom-columns=\
+          'NS:.metadata.namespace,POD:.metadata.name,CPU:.spec.containers[*].resources.requests.cpu,MEM:.spec.containers[*].resources.requests.memory,STATUS:.status.phase' \
+                > /tmp/pods-latest.txt 2>/dev/null || true
+
               sleep 20
             done
           }
@@ -294,6 +411,59 @@ jobs:
           watcher=$!
           trap 'kill "$watcher" 2>/dev/null || true' EXIT
 
+          set -o pipefail
           ct install --config .github/ct.yaml --all \
             --helm-extra-set-args "\
-            --set graylog.config.rootPassword=${{ steps.ci-root-password.outputs.value }}"
+            --set graylog.config.rootPassword=${{ steps.ci-root-password.outputs.value }}" \
+            2>&1 | tee /tmp/ct-install.log
+
+      - name: Summary
+        if: always()
+        run: |
+          set -u
+          elapsed="unknown"
+          if [[ -n "${INSTALL_STARTED:-}" ]]; then
+            elapsed="$(( ( $(date +%s) - INSTALL_STARTED ) / 60 ))m $(( ( $(date +%s) - INSTALL_STARTED ) % 60 ))s"
+          fi
+          passed="${{ steps.ct-install.outcome }}"
+
+          {
+            echo "## Install — Helm ${{ matrix.helm-version }} on Kubernetes ${{ matrix.k8s-version }}"
+            echo
+            echo "| | |"
+            echo "|--|--|"
+            echo "| result | $( [[ "$passed" == "success" ]] && echo "passed" || echo "**FAILED**" ) |"
+            echo "| install duration | ${elapsed} |"
+            echo "| node allocatable | ${NODE_CPU:-?} CPU / ${NODE_MEM:-?} |"
+            echo "| sizing | \`charts/graylog/ci/ci-values.yaml\` |"
+            echo
+
+            # What was actually admitted to the node, which is what "does it
+            # fit" means in practice, snapshotted by the watcher before ct tore
+            # the namespace down.
+            echo "<details><summary>Pod requests, as last observed during the install</summary>"
+            echo
+            echo '```'
+            cat /tmp/pods-latest.txt 2>/dev/null || echo "no snapshot captured"
+            echo '```'
+            echo
+            echo "</details>"
+
+            if [[ "$passed" != "success" ]]; then
+              echo
+              echo "### Why it failed"
+              echo
+              echo '```'
+              grep -iE 'error|failed|timed out|unhealthy' /tmp/ct-install.log 2>/dev/null | tail -20 || echo "no log"
+              echo '```'
+              echo
+              echo "<details><summary>Pods not Running, and recent warnings</summary>"
+              echo
+              echo '```'
+              kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o wide 2>/dev/null || true
+              kubectl get events -A --field-selector type=Warning --sort-by=.lastTimestamp 2>/dev/null | tail -25 || true
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
