@@ -31,3 +31,30 @@ mongodb:
   replicas: 1
   arbiters: 0
   version: "8.0.23"
+  # The chart defaults are sized for a production replica set (2Gi of headroom
+  # for mongod). A single-member CI replica set holds almost no data, so all
+  # three blocks are shrunk here. All three are needed: a pod reserves
+  # max(max(initContainer), sum(containers)), so leaving initResources alone
+  # would keep the pod's floor at the operator's 500m no matter how small the
+  # containers ask to be.
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  agentResources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+  initResources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"

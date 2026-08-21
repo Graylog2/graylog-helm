@@ -1511,6 +1511,27 @@ configuration.
 MongoDB Community Resource configuration.
 Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
 
+The operator creates the MongoDB containers itself and injects its own resource
+defaults, which the three resource blocks below patch by container name — the
+only way to size MongoDB from the chart.
+
+The defaults are sized for a production replica set. `mongod` gets 2Gi of
+headroom because WiredTiger sizes its cache from the container limit and Graylog
+keeps its whole configuration in MongoDB; an idle 3-member replica set already
+sits at ~340Mi. CPU goes the other way: the same replica set idles under 50m per
+member, so the requests are modest and the limits leave room to burst.
+
+`initResources` covers the two init containers the operator injects. Because a
+pod reserves `max(max(initContainer), sum(containers))`, an init container
+request larger than the containers' combined request becomes the pod's floor, so
+these are kept deliberately small — each only copies a binary into a shared
+volume.
+
+Overrides deep-merge, so setting only `requests` keeps the default `limits`; set
+a block to `null` to drop the override and defer to the operator. For a
+small-footprint install, see [`ci/ci-values.yaml`](ci/ci-values.yaml), which
+shrinks all three blocks together.
+
 | Key Path                              | Description                                                 | Default                                                                                                                                                                                                                |
 |---------------------------------------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `mongodb.communityResource.enabled`   | Enables creation of the `MongoDBCommunity` custom resource. | `true`                                                                                                                                                                                                                 |
@@ -1519,6 +1540,18 @@ Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/ma
 | `mongodb.arbiters`                    | Number of arbiter nodes to deploy.                          | `0`                                                                                                                                                                                                                    |
 | `mongodb.annotations`                 | Annotations for the `MongoDBCommunity` object.              | `{}`                                                                                                                                                                                                                   |
 | `mongodb.labels`                      | Labels for the `MongoDBCommunity` object.                   | `{}`                                                                                                                                                                                                                   |
+| `mongodb.resources.limits.cpu`        | CPU limit for the `mongod` container.                       | `"2"`                                                                                                                                                                                                                  |
+| `mongodb.resources.limits.memory`     | Memory limit for the `mongod` container.                    | `"2Gi"`                                                                                                                                                                                                               |
+| `mongodb.resources.requests.cpu`      | CPU request for the `mongod` container.                     | `"250m"`                                                                                                                                                                                                               |
+| `mongodb.resources.requests.memory`   | Memory request for the `mongod` container.                  | `"1Gi"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.limits.cpu`   | CPU limit for the `mongodb-agent` container.                | `"500m"`                                                                                                                                                                                                                  |
+| `mongodb.agentResources.limits.memory` | Memory limit for the `mongodb-agent` container.            | `"512Mi"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.requests.cpu` | CPU request for the `mongodb-agent` container.              | `"50m"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.requests.memory` | Memory request for the `mongodb-agent` container.        | `"128Mi"`                                                                                                                                                                                                               |
+| `mongodb.initResources.limits.cpu`    | CPU limit for both operator-injected init containers.       | `"500m"`                                                                                                                                                                                                                  |
+| `mongodb.initResources.limits.memory` | Memory limit for both operator-injected init containers.    | `"512Mi"`                                                                                                                                                                                                               |
+| `mongodb.initResources.requests.cpu`  | CPU request for both operator-injected init containers.     | `"50m"`                                                                                                                                                                                                               |
+| `mongodb.initResources.requests.memory` | Memory request for both operator-injected init containers. | `"128Mi"`                                                                                                                                                                                                              |
 | `mongodb.persistence.storageClass`    | StorageClass to use for persistent volumes.                 | `""`                                                                                                                                                                                                                   |
 | `mongodb.persistence.size.data`       | Persistent volume size for data storage.                    | `"10G"`                                                                                                                                                                                                                |
 | `mongodb.persistence.size.logs`       | Persistent volume size for MongoDB logs.                    | `"2G"`                                                                                                                                                                                                                 |
