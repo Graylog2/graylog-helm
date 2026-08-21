@@ -132,6 +132,21 @@ jobs:
           set -o pipefail
           ct lint --config .github/ct.yaml --all 2>&1 | tee /tmp/ct-lint.log
 
+      # `ct` discovers ci/*-values.yaml on its own and the workflow passes no
+      # sizing flags, so without this nothing in the run says what the chart was
+      # linted against.
+      - name: Report values used
+        if: always()
+        # Advisory only: this step describes the run, it must never fail it.
+        continue-on-error: true
+        run: |
+          helm template ci charts/graylog -f charts/graylog/ci/ci-values.yaml \
+            | yq ea -o=json '[.]' - \
+            | python3 .github/scripts/ci_values_summary.py \
+                --overlay charts/graylog/ci/ci-values.yaml \
+                --heading "Values linted — Helm ${{ matrix.helm-version }}" \
+            >> "$GITHUB_STEP_SUMMARY"
+
       # `ct lint` never looks at examples/, so a shipped example could reference a
       # removed key, miss a required one, or trip a template-time guard and no one
       # would find out until a user copied it. `helm template` also enforces
@@ -369,6 +384,20 @@ jobs:
           password=$(openssl rand -hex 16)
           echo "::add-mask::${password}"
           echo "value=${password}" >> "$GITHUB_OUTPUT"
+
+      # Written before the install rather than after, so the summary says what
+      # was attempted even when the install times out or the job is cancelled.
+      - name: Report values used
+        # Advisory only: this step describes the run, it must never fail it.
+        continue-on-error: true
+        run: |
+          helm template ci charts/graylog -f charts/graylog/ci/ci-values.yaml \
+            | yq ea -o=json '[.]' - \
+            | python3 .github/scripts/ci_values_summary.py \
+                --overlay charts/graylog/ci/ci-values.yaml \
+                --extra-set "--set graylog.config.rootPassword=<generated, masked>" \
+                --heading "Values installed — Helm ${{ matrix.helm-version }} / Kubernetes ${{ matrix.k8s-version }}" \
+            >> "$GITHUB_STEP_SUMMARY"
 
       # All sizing lives in charts/graylog/ci/ci-values.yaml, which ct discovers
       # automatically. It used to be duplicated here as --set flags, which take
