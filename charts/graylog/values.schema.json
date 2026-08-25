@@ -954,6 +954,66 @@
         "arbiters": { "type": "integer" },
         "annotations": { "type": "object", "description": "Annotations for the MongoDBCommunity object" },
         "labels": { "type": "object", "description": "Labels for the MongoDBCommunity object" },
+        "resources": {
+          "type": "object",
+          "description": "Compute resources for the mongod container",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "agentResources": {
+          "type": "object",
+          "description": "Compute resources for the mongodb-agent container",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "initResources": {
+          "type": "object",
+          "description": "Compute resources for the mongod-posthook and mongodb-agent-readinessprobe init containers",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
         "persistence": {
           "type": "object",
           "properties": {
