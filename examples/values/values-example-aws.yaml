@@ -14,7 +14,16 @@ graylog:
   persistence:
     enabled: true
     storageClass: "gp3"
-    size: 5Gi
+    # The journal cap and this volume are sized together. The chart refuses to
+    # render a cap above 90% of the volume, because the journal shares it with
+    # the node-id, truststore, content packs and GeoIP databases. Raise both or
+    # neither. See docs/graylog-message-handling.md#sizing.
+    size: 20Gi
+  config:
+    messageJournal:
+      # Graylog's suffixes are binary, so 10gb is 10x1024^3 - comfortably inside
+      # 90% of the 20Gi volume above.
+      maxSize: "10gb"
   inputs:
     - name: gelf-tcp
       port: 12201
@@ -27,7 +36,9 @@ datanode:
     data:
       enabled: true
       storageClass: "gp3"
-      size: 5Gi
+      # Must comfortably exceed datanode.config.nodeSearchCacheSize (default
+      # 10gb), which is allocated on this same volume alongside shard data.
+      size: 50Gi
   # Prevent Karpenter from disrupting DataNodes (stateful search data).
   podAnnotations:
     karpenter.sh/do-not-disrupt: "true"
@@ -42,7 +53,9 @@ ingress:
       alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000
       alb.ingress.kubernetes.io/group.name: some-graylog
       alb.ingress.kubernetes.io/healthcheck-interval-seconds: "5"
-      alb.ingress.kubernetes.io/healthcheck-path: /
+      # Graylog's unauthenticated load-balancer status endpoint: 200 ALIVE /
+      # 503 DEAD. "/" answers 200 whether or not the node can actually serve.
+      alb.ingress.kubernetes.io/healthcheck-path: /api/system/lbstatus
       alb.ingress.kubernetes.io/healthcheck-port: "9000"
       alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
       alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "2"
@@ -62,8 +75,7 @@ ingress:
         paths:
           - path: /
             pathType: Prefix
-            backend:
-              service:
-                name: graylog-app
-                port:
-                  name: app
+            # No `backend:` here on purpose. Left unset, the chart points the
+            # rule at the Service it actually creates (<release>-graylog-svc) on
+            # the configured app port. Hardcoding a name here silently produces
+            # an Ingress aimed at a Service that does not exist.
