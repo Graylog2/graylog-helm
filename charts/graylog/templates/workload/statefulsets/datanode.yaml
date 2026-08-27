@@ -8,9 +8,9 @@ metadata:
 spec:
   replicas: {{ include "graylog.datanode.replicas" . | int }}
   serviceName: {{ include "graylog.datanode.service.name" . }}
-  {{/* Immutable once the StatefulSet exists - see the values comment. Rendered
-       unconditionally so the field is explicit in the manifest rather than
-       inherited from an API-server default that could change. */}}
+  {{/* Immutable once the StatefulSet exists. See the values comment. Always
+       rendered so the field is explicit in the manifest rather than inherited
+       from an API-server default that could change. */}}
   podManagementPolicy: {{ .Values.datanode.podManagementPolicy | default "OrderedReady" }}
   selector:
     matchLabels:

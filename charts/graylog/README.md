@@ -489,57 +489,67 @@ clusters and need no configuration for the common case.
 
 ## Health Probes
 
-A StatefulSet has exactly one rollout throttle: the readiness probe. Nothing else
-paces a rolling update, so a probe that answers faster than the application
-recovers lets the rollout outrun it. The defaults are chosen accordingly.
+The readiness probe is a StatefulSet's only rollout throttle. Nothing else paces
+a rolling update, so a probe that goes green before the application can serve
+lets the rollout move on anyway. So each default below checks that the pod can
+serve, not that a port is open.
 
 | Tier | Startup / Readiness | Liveness |
 |---|---|---|
 | Graylog | `GET /api/system/lbstatus` | TCP connect on the app port |
 | Data Node | TCP connect on the OpenSearch port (`9200`) | TCP connect on the Data Node API port (`8999`) |
 
-**Graylog** readiness uses `/api/system/lbstatus`, Graylog's own unauthenticated
-load-balancer status endpoint (`200 ALIVE` / `503 DEAD`). A TCP connect goes green
-the moment Jetty binds the port — before the node has rejoined the cluster,
-restarted its inputs, or worked through journal recovery.
+### Graylog
 
-Liveness deliberately stays a TCP connect. `DEAD` means "stop sending me traffic",
-which is exactly what graceful shutdown and a manual drain both set; liveness on
+Readiness uses `/api/system/lbstatus`, Graylog's own unauthenticated
+load-balancer status endpoint, which returns `200 ALIVE` or `503 DEAD`. A TCP
+connect goes green the moment Jetty binds the port, before the node has rejoined
+the cluster, restarted its inputs or worked through journal recovery.
+
+Liveness stays a TCP connect on purpose. `DEAD` means "stop sending me traffic",
+which is what graceful shutdown and a manual drain both set. Liveness on
 `lbstatus` would have kubelet kill a healthy pod that is draining or parked for
 maintenance.
 
-That split is what makes draining work. Setting `lb_status` to `dead` now takes a
-pod out of the Service endpoints on its own, without deleting it:
+That split is what makes draining work. Setting `lb_status` to `dead` takes a pod
+out of the Service endpoints on its own, without deleting it:
 
 ```sh
-# take a pod out of rotation (readiness drops it from endpoints within ~1 minute)
-kubectl exec -n graylog deploy/curl -- curl -sS -u "admin:$PASSWORD" \
-  -H 'X-Requested-By: cli' -X PUT \
-  "http://graylog-0.graylog-svc.graylog:9000/api/system/lbstatus/override/dead"
+# take a pod out of rotation; readiness drops it from endpoints within ~1 minute
+kubectl exec -n graylog graylog-0 -- curl -su "admin:$PASS" -H 'X-Requested-By: cli' \
+  -X PUT http://localhost:9000/api/system/lbstatus/override/dead
 ```
 
 > [!IMPORTANT]
-> Address the pod directly, not the Service. Once readiness drops the pod, the
-> Service no longer routes to it, so a request sent to the Service cannot reach it
-> to put it back. Use the pod's DNS name or IP (or `kubectl port-forward`) to flip
-> it back to `alive`.
+> Address the pod, not the Service. Once readiness drops the pod, the Service no
+> longer routes to it, so a request sent to the Service cannot reach it to put it
+> back. `kubectl exec` into the pod as above, or use its DNS name, IP or
+> `kubectl port-forward`, to set it back to `alive`.
 
-**Data Node** readiness watches the OpenSearch HTTP port rather than the Data Node
-API port. The Data Node binds its own REST API well before it starts OpenSearch —
-roughly 30 seconds apart on an idle single-node cluster, and longer with shards to
-recover — so probing `8999` reports `Ready` while OpenSearch is still down, and a
-rolling update would take down the next Data Node on the strength of that.
+### Data Node
+
+Readiness watches the OpenSearch HTTP port rather than the Data Node API port.
+The Data Node binds its own REST API roughly 30 seconds before it starts
+OpenSearch on an idle single-node cluster, and the gap grows when there are
+shards to recover. A probe on `8999` reports `Ready` while OpenSearch is still
+down, and a rolling update would take down the next Data Node on the strength of
+that.
 
 > [!NOTE]
-> Data Node readiness proves OpenSearch is listening; it cannot gate on shard
-> recovery or cluster-green. Both Data Node ports serve HTTPS with authentication
-> and the image ships no HTTP client, so there is no unauthenticated health
-> endpoint to probe. Verify cluster health yourself between Data Node restarts.
+> Data Node readiness proves OpenSearch is listening. It cannot gate on shard
+> recovery or cluster-green. Both Data Node ports serve HTTPS with
+> authentication and the image ships no HTTP client, so there is no
+> unauthenticated health endpoint to probe. Check cluster health yourself
+> between Data Node restarts.
 
-**Startup probes** on both tiers hold liveness and readiness off until the process
-has finished booting, so a first-node MongoDB migration or a large journal replay
-cannot trip the liveness budget. `failureThreshold x periodSeconds` is the whole
-boot budget — 5 minutes by default. Raise that rather than loosening liveness.
+### Startup probes
+
+Startup probes on both tiers hold liveness and readiness off until the process
+has booted, so a first-node MongoDB migration or a large journal replay cannot
+trip the liveness budget. `failureThreshold x periodSeconds` is the whole boot
+budget, 5 minutes by default. Raise that rather than loosening liveness.
+
+### Custom probe handlers
 
 Every probe accepts its own handler (`httpGet`, `tcpSocket`, `exec`, `grpc`) in
 standard Kubernetes syntax, which replaces the chart default for that probe:
@@ -557,15 +567,15 @@ datanode:
 
 `datanode.podManagementPolicy` defaults to `OrderedReady`. `Parallel` is the
 established pattern for OpenSearch-style quorum clusters, where waiting for pod
-N-1 to be `Ready` before starting pod N can deadlock a cluster that needs a quorum
-to become healthy in the first place.
+N-1 to be `Ready` before starting pod N can deadlock a cluster that needs a
+quorum to become healthy in the first place.
 
 > [!WARNING]
-> `podManagementPolicy` is **immutable**. Kubernetes forbids updates to any
+> `podManagementPolicy` is immutable. Kubernetes forbids updates to any
 > StatefulSet spec field other than `replicas`, `ordinals`, `template`,
 > `updateStrategy`, `revisionHistoryLimit`,
-> `persistentVolumeClaimRetentionPolicy` and `minReadySeconds`, so changing it on
-> a live release makes `helm upgrade` fail outright. Set it on a fresh install, or
+> `persistentVolumeClaimRetentionPolicy` and `minReadySeconds`, so changing it
+> on a live release makes `helm upgrade` fail. Set it on a fresh install, or
 > recreate the StatefulSet to change it:
 >
 > ```sh
@@ -1460,7 +1470,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.readinessProbe.failureThreshold`             | Failure threshold for the readiness probe.      | `6`               |
 | `datanode.readinessProbe.successThreshold`             | Success threshold for the readiness probe.      | `1`               |
 | `datanode.{startup,liveness,readiness}Probe.{httpGet,tcpSocket,exec,grpc}` | Custom probe handler, standard Kubernetes syntax. Replaces the chart default. | _(unset)_ |
-| `datanode.podManagementPolicy`                         | `OrderedReady` or `Parallel`. **Immutable** once the StatefulSet exists. | `OrderedReady` |
+| `datanode.podManagementPolicy`                         | `OrderedReady` or `Parallel`. Immutable once the StatefulSet exists. | `OrderedReady` |
 | `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
 | `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
 | `datanode.podDisruptionBudget.annotations`             | Annotations for the PodDisruptionBudget.        | `{}`              |
