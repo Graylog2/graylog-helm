@@ -22,6 +22,7 @@ Official Helm chart for Graylog.
   * [Scale DataNode](#scale-datanode)
   * [Data Node Replicas and Data Redundancy](#data-node-replicas-and-data-redundancy)
   * [High Availability Defaults](#high-availability-defaults)
+  * [Health Probes](#health-probes)
   * [Scale MongoDB](#scale-mongodb)
   * [MongoDB Topology](#mongodb-topology)
   * [Modify Graylog `server.conf` parameters](#modify-graylog-serverconf-parameters)
@@ -485,6 +486,103 @@ clusters and need no configuration for the common case.
 > A PDB makes node drains block rather than proceed destructively. On a cluster
 > with too few nodes to satisfy `minAvailable`, a drain will wait instead of
 > completing — this is the intended protection, not a failure.
+
+## Health Probes
+
+The readiness probe is a StatefulSet's only rollout throttle. Nothing else paces
+a rolling update, so a probe that goes green before the application can serve
+lets the rollout move on anyway. So each default below checks that the pod can
+serve, not that a port is open.
+
+| Tier | Startup / Readiness | Liveness |
+|---|---|---|
+| Graylog | `GET /api/system/lbstatus` | TCP connect on the app port |
+| Data Node | TCP connect on the OpenSearch port (`9200`) | TCP connect on the Data Node API port (`8999`) |
+
+### Graylog
+
+Readiness uses `/api/system/lbstatus`, Graylog's own unauthenticated
+load-balancer status endpoint, which returns `200 ALIVE` or `503 DEAD`. A TCP
+connect goes green the moment Jetty binds the port, before the node has rejoined
+the cluster, restarted its inputs or worked through journal recovery.
+
+Liveness stays a TCP connect on purpose. `DEAD` means "stop sending me traffic",
+which is what graceful shutdown and a manual drain both set. Liveness on
+`lbstatus` would have kubelet kill a healthy pod that is draining or parked for
+maintenance.
+
+That split is what makes draining work. Setting `lb_status` to `dead` takes a pod
+out of the Service endpoints on its own, without deleting it:
+
+```sh
+# take a pod out of rotation; readiness drops it from endpoints within ~1 minute
+kubectl exec -n graylog graylog-0 -- curl -su "admin:$PASS" -H 'X-Requested-By: cli' \
+  -X PUT http://localhost:9000/api/system/lbstatus/override/dead
+```
+
+> [!IMPORTANT]
+> Address the pod, not the Service. Once readiness drops the pod, the Service no
+> longer routes to it, so a request sent to the Service cannot reach it to put it
+> back. `kubectl exec` into the pod as above, or use its DNS name, IP or
+> `kubectl port-forward`, to set it back to `alive`.
+
+### Data Node
+
+Readiness watches the OpenSearch HTTP port rather than the Data Node API port.
+The Data Node binds its own REST API roughly 30 seconds before it starts
+OpenSearch on an idle single-node cluster, and the gap grows when there are
+shards to recover. A probe on `8999` reports `Ready` while OpenSearch is still
+down, and a rolling update would take down the next Data Node on the strength of
+that.
+
+> [!NOTE]
+> Data Node readiness proves OpenSearch is listening. It cannot gate on shard
+> recovery or cluster-green. Both Data Node ports serve HTTPS with
+> authentication and the image ships no HTTP client, so there is no
+> unauthenticated health endpoint to probe. Check cluster health yourself
+> between Data Node restarts.
+
+### Startup probes
+
+Startup probes on both tiers hold liveness and readiness off until the process
+has booted, so a first-node MongoDB migration or a large journal replay cannot
+trip the liveness budget. `failureThreshold x periodSeconds` is the whole boot
+budget, 5 minutes by default. Raise that rather than loosening liveness.
+
+### Custom probe handlers
+
+Every probe accepts its own handler (`httpGet`, `tcpSocket`, `exec`, `grpc`) in
+standard Kubernetes syntax, which replaces the chart default for that probe:
+
+```yaml
+datanode:
+  readinessProbe:
+    httpGet:
+      path: /_cluster/health
+      port: 9200
+      scheme: HTTPS
+```
+
+### Data Node pod management
+
+`datanode.podManagementPolicy` defaults to `OrderedReady`. `Parallel` is the
+established pattern for OpenSearch-style quorum clusters, where waiting for pod
+N-1 to be `Ready` before starting pod N can deadlock a cluster that needs a
+quorum to become healthy in the first place.
+
+> [!WARNING]
+> `podManagementPolicy` is immutable. Kubernetes forbids updates to any
+> StatefulSet spec field other than `replicas`, `ordinals`, `template`,
+> `updateStrategy`, `revisionHistoryLimit`,
+> `persistentVolumeClaimRetentionPolicy` and `minReadySeconds`, so changing it
+> on a live release makes `helm upgrade` fail. Set it on a fresh install, or
+> recreate the StatefulSet to change it:
+>
+> ```sh
+> # --cascade=orphan leaves the running pods and their PVCs in place
+> kubectl delete statefulset graylog-datanode -n graylog --cascade=orphan
+> helm upgrade graylog graylog/graylog -n graylog --set datanode.podManagementPolicy=Parallel
+> ```
 
 ## Scale MongoDB
 ```sh
@@ -1220,18 +1318,23 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.persistence.size`                                            | Size of the persistent volume.                              | `""`                            |
 | `graylog.persistence.annotations`                                     | Annotations for the persistent volume claim.                | `{}`                            |
 | `graylog.persistence.labels`                                          | Labels for the persistent volume claim.                     | `{}`                            |
+| `graylog.startupProbe.enabled`                                        | Enable startup probe. Holds liveness/readiness off until Graylog has booted. | `true`          |
+| `graylog.startupProbe.initialDelaySeconds`                            | Initial delay for startup probe.                            | `30`                            |
+| `graylog.startupProbe.periodSeconds`                                  | Period between startup probe checks.                        | `10`                            |
+| `graylog.startupProbe.timeoutSeconds`                                 | Timeout for the startup probe.                              | `5`                             |
+| `graylog.startupProbe.failureThreshold`                               | Failure threshold. x `periodSeconds` is the whole boot budget (default 5 min). | `30`         |
 | `graylog.livenessProbe.enabled`                                       | Enable liveness probe.                                      | `true`                          |
 | `graylog.livenessProbe.initialDelaySeconds`                           | Initial delay for liveness probe.                           | `60`                            |
 | `graylog.livenessProbe.periodSeconds`                                 | Period between liveness probe checks.                       | `10`                            |
 | `graylog.livenessProbe.timeoutSeconds`                                | Timeout for the liveness probe.                             | `5`                             |
 | `graylog.livenessProbe.failureThreshold`                              | Failure threshold for the liveness probe.                   | `6`                             |
-| `graylog.livenessProbe.successThreshold`                              | Success threshold for the liveness probe.                   | `1`                             |
 | `graylog.readinessProbe.enabled`                                      | Enable readiness probe.                                     | `true`                          |
 | `graylog.readinessProbe.initialDelaySeconds`                          | Initial delay for readiness probe.                          | `30`                            |
 | `graylog.readinessProbe.periodSeconds`                                | Period between readiness probe checks.                      | `10`                            |
 | `graylog.readinessProbe.timeoutSeconds`                               | Timeout for the readiness probe.                            | `5`                             |
 | `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                  | `6`                             |
 | `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                  | `1`                             |
+| `graylog.{startup,liveness,readiness}Probe.{httpGet,tcpSocket,exec,grpc}` | Custom probe handler, standard Kubernetes syntax. Replaces the chart default for that probe. | _(unset)_ |
 | `graylog.terminationGracePeriodSeconds`                               | Shutdown budget before SIGKILL. Covers the preStop hook and Graylog's own graceful shutdown. | `300`  |
 | `graylog.lifecycle.postStart`                                         | Your own postStart hook on the graylog-app container.       | `{}`                            |
 | `graylog.lifecycle.preStop`                                           | Your own preStop hook. Mutually exclusive with `preStopDrain.enabled`. | `{}`                  |
@@ -1350,18 +1453,24 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.persistence.nativeLibs.size`                 | Size of the native libs volume.                 | `"2Gi"`           |
 | `datanode.persistence.nativeLibs.annotations`          | Annotations for native libs PVC.                | `{}`              |
 | `datanode.persistence.nativeLibs.labels`               | Labels for native libs PVC.                     | `{}`              |
+| `datanode.startupProbe.enabled`                        | Enable startup probe.                           | `true`            |
+| `datanode.startupProbe.initialDelaySeconds`            | Initial delay for startup probe.                | `30`              |
+| `datanode.startupProbe.periodSeconds`                  | Period between startup probe checks.            | `10`              |
+| `datanode.startupProbe.timeoutSeconds`                 | Timeout for the startup probe.                  | `5`               |
+| `datanode.startupProbe.failureThreshold`               | Failure threshold. x `periodSeconds` is the boot budget. | `30`     |
 | `datanode.livenessProbe.enabled`                       | Enable liveness probe.                          | `true`            |
 | `datanode.livenessProbe.initialDelaySeconds`           | Initial delay for liveness probe.               | `30`              |
 | `datanode.livenessProbe.periodSeconds`                 | Period between liveness probe checks.           | `10`              |
 | `datanode.livenessProbe.timeoutSeconds`                | Timeout for the liveness probe.                 | `5`               |
 | `datanode.livenessProbe.failureThreshold`              | Failure threshold for the liveness probe.       | `6`               |
-| `datanode.livenessProbe.successThreshold`              | Success threshold for the liveness probe.       | `1`               |
 | `datanode.readinessProbe.enabled`                      | Enable readiness probe.                         | `true`            |
 | `datanode.readinessProbe.initialDelaySeconds`          | Initial delay for readiness probe.              | `10`              |
 | `datanode.readinessProbe.periodSeconds`                | Period between readiness probe checks.          | `10`              |
 | `datanode.readinessProbe.timeoutSeconds`               | Timeout for the readiness probe.                | `5`               |
 | `datanode.readinessProbe.failureThreshold`             | Failure threshold for the readiness probe.      | `6`               |
 | `datanode.readinessProbe.successThreshold`             | Success threshold for the readiness probe.      | `1`               |
+| `datanode.{startup,liveness,readiness}Probe.{httpGet,tcpSocket,exec,grpc}` | Custom probe handler, standard Kubernetes syntax. Replaces the chart default. | _(unset)_ |
+| `datanode.podManagementPolicy`                         | `OrderedReady` or `Parallel`. Immutable once the StatefulSet exists. | `OrderedReady` |
 | `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
 | `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
 | `datanode.podDisruptionBudget.annotations`             | Annotations for the PodDisruptionBudget.        | `{}`              |
@@ -1511,6 +1620,27 @@ configuration.
 MongoDB Community Resource configuration.
 Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
 
+The operator creates the MongoDB containers itself and injects its own resource
+defaults, which the three resource blocks below patch by container name — the
+only way to size MongoDB from the chart.
+
+The defaults are sized for a production replica set. `mongod` gets 2Gi of
+headroom because WiredTiger sizes its cache from the container limit and Graylog
+keeps its whole configuration in MongoDB; an idle 3-member replica set already
+sits at ~340Mi. CPU goes the other way: the same replica set idles under 50m per
+member, so the requests are modest and the limits leave room to burst.
+
+`initResources` covers the two init containers the operator injects. Because a
+pod reserves `max(max(initContainer), sum(containers))`, an init container
+request larger than the containers' combined request becomes the pod's floor, so
+these are kept deliberately small — each only copies a binary into a shared
+volume.
+
+Overrides deep-merge, so setting only `requests` keeps the default `limits`; set
+a block to `null` to drop the override and defer to the operator. For a
+small-footprint install, see [`ci/ci-values.yaml`](ci/ci-values.yaml), which
+shrinks all three blocks together.
+
 | Key Path                              | Description                                                 | Default                                                                                                                                                                                                                |
 |---------------------------------------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `mongodb.communityResource.enabled`   | Enables creation of the `MongoDBCommunity` custom resource. | `true`                                                                                                                                                                                                                 |
@@ -1519,6 +1649,18 @@ Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/ma
 | `mongodb.arbiters`                    | Number of arbiter nodes to deploy.                          | `0`                                                                                                                                                                                                                    |
 | `mongodb.annotations`                 | Annotations for the `MongoDBCommunity` object.              | `{}`                                                                                                                                                                                                                   |
 | `mongodb.labels`                      | Labels for the `MongoDBCommunity` object.                   | `{}`                                                                                                                                                                                                                   |
+| `mongodb.resources.limits.cpu`        | CPU limit for the `mongod` container.                       | `"2"`                                                                                                                                                                                                                  |
+| `mongodb.resources.limits.memory`     | Memory limit for the `mongod` container.                    | `"2Gi"`                                                                                                                                                                                                               |
+| `mongodb.resources.requests.cpu`      | CPU request for the `mongod` container.                     | `"250m"`                                                                                                                                                                                                               |
+| `mongodb.resources.requests.memory`   | Memory request for the `mongod` container.                  | `"1Gi"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.limits.cpu`   | CPU limit for the `mongodb-agent` container.                | `"500m"`                                                                                                                                                                                                                  |
+| `mongodb.agentResources.limits.memory` | Memory limit for the `mongodb-agent` container.            | `"512Mi"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.requests.cpu` | CPU request for the `mongodb-agent` container.              | `"50m"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.requests.memory` | Memory request for the `mongodb-agent` container.        | `"128Mi"`                                                                                                                                                                                                               |
+| `mongodb.initResources.limits.cpu`    | CPU limit for both operator-injected init containers.       | `"500m"`                                                                                                                                                                                                                  |
+| `mongodb.initResources.limits.memory` | Memory limit for both operator-injected init containers.    | `"512Mi"`                                                                                                                                                                                                               |
+| `mongodb.initResources.requests.cpu`  | CPU request for both operator-injected init containers.     | `"50m"`                                                                                                                                                                                                               |
+| `mongodb.initResources.requests.memory` | Memory request for both operator-injected init containers. | `"128Mi"`                                                                                                                                                                                                              |
 | `mongodb.persistence.storageClass`    | StorageClass to use for persistent volumes.                 | `""`                                                                                                                                                                                                                   |
 | `mongodb.persistence.size.data`       | Persistent volume size for data storage.                    | `"10G"`                                                                                                                                                                                                                |
 | `mongodb.persistence.size.logs`       | Persistent volume size for MongoDB logs.                    | `"2G"`                                                                                                                                                                                                                 |

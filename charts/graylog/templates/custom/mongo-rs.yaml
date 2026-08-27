@@ -87,6 +87,40 @@ spec:
                         # The chart's own labels are not present here.
                         app: {{ include "graylog.mongodb.crName" . | printf "%s-svc" }}
                     topologyKey: kubernetes.io/hostname
+          {{- with .Values.mongodb.initResources }}
+          {{/*
+          Both init containers only copy a binary into a shared volume, but the
+          operator requests as much CPU for them as for mongod. A pod reserves
+          max(max(initContainer), sum(containers)), so these set the pod's
+          effective request whenever the containers below ask for less.
+          */}}
+          initContainers:
+            - name: mongod-posthook
+              resources: {{ . | toYaml | nindent 16 }}
+            - name: mongodb-agent-readinessprobe
+              resources: {{ . | toYaml | nindent 16 }}
+          {{- end }}
+          {{- if or .Values.mongodb.resources .Values.mongodb.agentResources }}
+          {{/*
+          Container resources are patched in by name. The operator creates both
+          containers itself and applies its own defaults (500m CPU each), which
+          nothing in the chart could override before this: the pod always asked
+          for ~1 CPU regardless of how MongoDB was sized.
+
+          Names must match what the operator generates - `mongod` and
+          `mongodb-agent` - or the entry is appended as an extra container
+          rather than merged into the existing one.
+          */}}
+          containers:
+            {{- with .Values.mongodb.resources }}
+            - name: mongod
+              resources: {{ . | toYaml | nindent 16 }}
+            {{- end }}
+            {{- with .Values.mongodb.agentResources }}
+            - name: mongodb-agent
+              resources: {{ . | toYaml | nindent 16 }}
+            {{- end }}
+          {{- end }}
       volumeClaimTemplates:
         - metadata:
             name: data-volume

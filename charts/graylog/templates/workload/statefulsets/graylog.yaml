@@ -196,26 +196,25 @@ spec:
             - name: {{ include "graylog.service.port.forwarder.config" . }}
               containerPort: 13302
               protocol: TCP
-          {{- if .Values.graylog.livenessProbe.enabled }}
-          livenessProbe:
-            tcpSocket:
-              port: {{ .Values.graylog.service.ports.app | int }}
-            initialDelaySeconds: {{ .Values.graylog.livenessProbe.initialDelaySeconds | int }}
-            periodSeconds: {{ .Values.graylog.livenessProbe.periodSeconds | int }}
-            timeoutSeconds: {{ .Values.graylog.livenessProbe.timeoutSeconds | int }}
-            failureThreshold: {{ .Values.graylog.livenessProbe.failureThreshold | int }}
-            successThreshold: {{ .Values.graylog.livenessProbe.successThreshold |int }}
-          {{- end }}
-          {{- if .Values.graylog.readinessProbe.enabled }}
-          readinessProbe:
-            tcpSocket:
-              port: {{ .Values.graylog.service.ports.app | int }}
-            initialDelaySeconds: {{ .Values.graylog.readinessProbe.initialDelaySeconds | int }}
-            periodSeconds: {{ .Values.graylog.readinessProbe.periodSeconds | int }}
-            timeoutSeconds: {{ .Values.graylog.readinessProbe.timeoutSeconds | int }}
-            failureThreshold: {{ .Values.graylog.readinessProbe.failureThreshold | int }}
-            successThreshold: {{ .Values.graylog.readinessProbe.successThreshold | int }}
-          {{- end }}
+          {{- /* Probe handlers and the reasoning behind them: _probes.tpl.
+                 startupProbe holds liveness and readiness off until Graylog has
+                 finished booting, so a long MongoDB migration or journal replay
+                 cannot trip the liveness budget. */}}
+          {{- include "graylog.probe" (dict
+                "name" "startupProbe"
+                "probe" .Values.graylog.startupProbe
+                "default" (include "graylog.probe.handler.lbstatus" .)
+                "indent" 10) -}}
+          {{- include "graylog.probe" (dict
+                "name" "livenessProbe"
+                "probe" .Values.graylog.livenessProbe
+                "default" (include "graylog.probe.handler.graylogTcp" .)
+                "indent" 10) -}}
+          {{- include "graylog.probe" (dict
+                "name" "readinessProbe"
+                "probe" .Values.graylog.readinessProbe
+                "default" (include "graylog.probe.handler.lbstatus" .)
+                "indent" 10) -}}
           {{- include "graylog.lifecycle" . | nindent 10 }}
           {{- with .Values.graylog.resources }}
           resources:

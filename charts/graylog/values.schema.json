@@ -420,6 +420,21 @@
             }
           }
         },
+        "startupProbe": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialDelaySeconds": { "type": "integer" },
+            "periodSeconds": { "type": "integer" },
+            "timeoutSeconds": { "type": "integer" },
+            "failureThreshold": { "type": "integer" },
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
+          }
+        },
         "livenessProbe": {
           "type": "object",
           "properties": {
@@ -428,7 +443,11 @@
             "periodSeconds": { "type": "integer" },
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "readinessProbe": {
@@ -439,7 +458,11 @@
             "periodSeconds": { "type": "integer" },
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "terminationGracePeriodSeconds": {
@@ -612,6 +635,11 @@
             }
           }
         },
+        "podManagementPolicy": {
+          "type": [ "string", "null" ],
+          "description": "StatefulSet pod management policy. IMMUTABLE once created; changing it on a live release makes helm upgrade fail.",
+          "enum": [ "OrderedReady", "Parallel", null ]
+        },
         "sysctlInit": {
           "type": "object",
           "description": "Optional privileged init container to set vm.max_map_count during pod startup",
@@ -709,6 +737,21 @@
             }
           }
         },
+        "startupProbe": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialDelaySeconds": { "type": "integer" },
+            "periodSeconds": { "type": "integer" },
+            "timeoutSeconds": { "type": "integer" },
+            "failureThreshold": { "type": "integer" },
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
+          }
+        },
         "livenessProbe": {
           "type": "object",
           "properties": {
@@ -717,7 +760,11 @@
             "periodSeconds": { "type": "integer" },
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "readinessProbe": {
@@ -728,7 +775,11 @@
             "periodSeconds": { "type": "integer" },
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "podDisruptionBudget": {
@@ -954,6 +1005,66 @@
         "arbiters": { "type": "integer" },
         "annotations": { "type": "object", "description": "Annotations for the MongoDBCommunity object" },
         "labels": { "type": "object", "description": "Labels for the MongoDBCommunity object" },
+        "resources": {
+          "type": "object",
+          "description": "Compute resources for the mongod container",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "agentResources": {
+          "type": "object",
+          "description": "Compute resources for the mongodb-agent container",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "initResources": {
+          "type": "object",
+          "description": "Compute resources for the mongod-posthook and mongodb-agent-readinessprobe init containers",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
         "persistence": {
           "type": "object",
           "properties": {
