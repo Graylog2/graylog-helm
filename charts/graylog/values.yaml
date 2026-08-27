@@ -369,15 +369,57 @@ graylog:
     # live release it needs the StatefulSet recreated (--cascade=orphan).
     annotations: {}
     labels: {}
-  # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
-  # for the Graylog container (TCP checks against the app port).
+  # startupProbe/livenessProbe/readinessProbe expose the standard Kubernetes
+  # probe fields for the Graylog container.
+  #
+  # Each block may also carry its own handler (httpGet, tcpSocket, exec or grpc,
+  # in standard Kubernetes syntax) which replaces the chart's default for that
+  # probe. The timing fields below apply either way. To probe a path served
+  # behind a proxy in front of Graylog, for example:
+  #
+  #   readinessProbe:
+  #     httpGet:
+  #       path: /graylog/api/system/lbstatus
+  #       port: 9000
+  #
+  # startupProbe holds liveness and readiness off until Graylog has booted.
+  # Without it, a first-node MongoDB schema migration or a large journal replay
+  # has to finish inside the liveness budget, or kubelet kills the pod
+  # mid-migration. failureThreshold x periodSeconds is the whole boot budget, so
+  # 30 x 10s gives 5 minutes on top of initialDelaySeconds. Raise it for big
+  # installs rather than loosening liveness.
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+  # Liveness is a TCP connect on the app port, not the lbstatus endpoint that
+  # readiness uses. A DEAD lbstatus means "stop sending me traffic", which is
+  # what graceful shutdown and a manual drain both set. It does not mean the
+  # process is broken. Liveness on lbstatus would have kubelet kill a healthy
+  # pod that is draining or parked for maintenance.
+  #
+  # successThreshold is not settable on liveness or startup probes. Kubernetes
+  # requires 1 and rejects any other value.
   livenessProbe:
     enabled: true
     initialDelaySeconds: 60
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 6
-    successThreshold: 1
+  # Readiness is an HTTP GET of /api/system/lbstatus, Graylog's unauthenticated
+  # load-balancer status endpoint, which returns 200 ALIVE or 503 DEAD. A
+  # StatefulSet's only rollout throttle is the readiness probe, and a TCP
+  # connect goes green the moment Jetty binds the port. At that point the node
+  # has not rejoined the cluster, restarted its inputs or worked through journal
+  # recovery, so a rolling update would advance at port-bind speed while real
+  # capacity lags behind.
+  #
+  # This is also what makes draining work. Graylog sets lbstatus DEAD on
+  # graceful shutdown, and an operator can set it by hand. Either one now takes
+  # the pod out of the Service endpoints on its own. The scale-in runbook in
+  # docs/graylog-message-handling.md depends on that.
   readinessProbe:
     enabled: true
     initialDelaySeconds: 30
@@ -653,15 +695,38 @@ datanode:
       # immutable once the StatefulSet exists.
       annotations: {}
       labels: {}
-  # livenessProbe/readinessProbe expose the standard Kubernetes probe fields
-  # for the Datanode container.
+  # startupProbe/livenessProbe/readinessProbe expose the standard Kubernetes
+  # probe fields for the Datanode container. As on the Graylog tier, each block
+  # may carry its own httpGet, tcpSocket, exec or grpc handler to replace the
+  # chart default.
+  #
+  # Readiness and startup watch the OpenSearch HTTP port (service.ports.data,
+  # 9200). Liveness watches the Data Node's own REST API (service.ports.api,
+  # 8999). The Data Node binds its REST API about 34 seconds before it starts
+  # OpenSearch on an idle single-node cluster, and the gap grows when there are
+  # shards to recover. A readiness probe on 8999 would report Ready while
+  # OpenSearch is still down, and on a rolling update Kubernetes would then take
+  # down the next Data Node. 9200 binds later, so it tracks when the node can
+  # serve.
+  #
+  # Neither port can carry an HTTP probe by default. Both serve HTTPS with
+  # authentication (401 on "/", 404 elsewhere) and the image ships no HTTP
+  # client for an exec probe to call. Readiness therefore proves only that
+  # OpenSearch is listening; it cannot gate on shard recovery or cluster-green.
+  # Check cluster health yourself between Data Node restarts. See the
+  # rolling-upgrade notes in docs/graylog-message-handling.md.
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
   livenessProbe:
     enabled: true
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 6
-    successThreshold: 1
   readinessProbe:
     enabled: true
     initialDelaySeconds: 10
@@ -669,6 +734,25 @@ datanode:
     timeoutSeconds: 5
     failureThreshold: 6
     successThreshold: 1
+  # podManagementPolicy controls whether the StatefulSet starts pods one at a
+  # time (OrderedReady) or all at once (Parallel). Parallel is the established
+  # pattern for OpenSearch-style quorum clusters, where waiting for pod N-1 to
+  # be Ready before starting pod N can deadlock a cluster that needs a quorum to
+  # become healthy in the first place.
+  #
+  # It stays at OrderedReady because the field is immutable. Kubernetes forbids
+  # updates to any StatefulSet spec field other than replicas, ordinals,
+  # template, updateStrategy, revisionHistoryLimit,
+  # persistentVolumeClaimRetentionPolicy and minReadySeconds, so changing it on
+  # a live release makes `helm upgrade` fail. To switch an existing release,
+  # delete the StatefulSet with --cascade=orphan, which leaves the pods and PVCs
+  # running, then upgrade to recreate it:
+  #
+  #   kubectl delete statefulset <release>-graylog-datanode --cascade=orphan
+  #   helm upgrade ... --set datanode.podManagementPolicy=Parallel
+  #
+  # On a fresh install, set it straight away.
+  podManagementPolicy: OrderedReady
   # PodDisruptionBudgets are enabled by default for production deployments
   # They prevent cluster upgrades and maintenance from disrupting all instances
   # Set enabled: false only for non-production clusters or single-replica deployments

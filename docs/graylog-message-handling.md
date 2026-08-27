@@ -132,11 +132,21 @@ kubectl exec -n graylog graylog-2 -- curl -su "admin:$PASS" -H 'X-Requested-By: 
 Returns `204`. The value is case-insensitive, and `ALIVE`/`DEAD`/`THROTTLED` are the
 only ones accepted. Undo it with `override/alive`; a lifecycle change also resets it.
 
+The chart's readiness probe is an HTTP check against this same endpoint, so setting
+`lb_status: DEAD` removes the pod from the Service endpoints on its own. No deletion
+required. With the default `failureThreshold: 6` and `periodSeconds: 10` that takes up
+to a minute. Liveness stays a TCP check on purpose, so a pod parked as `DEAD` is not
+killed and restarted while you work.
+
+> [!IMPORTANT]
+> Once the pod leaves the endpoints, the Service can no longer reach it. Run the
+> `override/alive` call against the pod directly, as above, via `kubectl exec` or the
+> pod's own DNS name. Never against the Service.
+
 > [!NOTE]
-> The chart's readiness probe is a TCP check, so `lb_status: DEAD` does not currently
-> remove the pod from Service endpoints on its own. Until the probe is HTTP-based,
-> treat this step as signalling to external load balancers, and rely on step 1 to
-> actually stop ingest.
+> Endpoint removal only sheds new connections. Long-lived TCP senders, UDP senders and
+> internally generated inputs keep writing, which is why step 1 is the step that gets
+> the journal to zero.
 
 **3. Watch the journal drain to zero.**
 
