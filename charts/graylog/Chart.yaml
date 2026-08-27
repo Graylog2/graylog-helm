@@ -1,7 +1,8 @@
 apiVersion: v2
 name: graylog
 description: Official Graylog Helm chart for Kubernetes
-icon: "https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.1.8/graylog2-web-interface/public/images/favicon.png"
+icon: "https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.1\
+  .8/graylog2-web-interface/public/images/favicon.png"
 type: application
 home: https://graylog.org
 sources:
@@ -40,10 +41,11 @@ annotations:
   # release notes. Edit CHANGELOG.md on the release PR to change what ArtifactHub
   # shows; entries written here are replaced at packaging and never published.
   # The key itself must stay - packaging fails without it.
-  artifacthub.io/changes: |
+  artifacthub.io/changes: ""
   artifacthub.io/containsSecurityUpdates: "true"
 # This is the chart version.
-version: 1.0.0
+version: 2.0.0
 # This is the version number of the Graylog application bundled with this chart.
 appVersion: "7.1.8"
+
 # End of file. Thanks for scrolling.
