@@ -32,14 +32,14 @@ jobs:
           manifest-file: .release-please-manifest.json
           target-branch: main
 
-      # No artifacthub.io/changes step here on purpose. The annotation is
-      # generated from CHANGELOG.md when the chart is packaged, not committed
-      # onto the release PR: a commit here would race release-please's own
-      # force-push of the branch, and it would make hand edits to the annotation
-      # depend on being the last change before the merge. See
-      # .github/scripts/artifacthub_changes.py.
+      # No artifacthub.io/changes step here on purpose. release-graylog.yaml
+      # generates the annotation from CHANGELOG.md when it packages the chart,
+      # rather than committing it onto the release PR. A commit here would race
+      # release-please's own force-push of the branch, and it would make any hand
+      # edit to the annotation depend on being the last change before the merge.
+      # See .github/scripts/artifacthub_changes.py.
 
-  # Linked to the release rather than to a path filter or a tag push: refs
+  # Linked to the release rather than to a path filter or a tag push. Refs
   # created with GITHUB_TOKEN raise no events, so only the release-please run
   # itself knows a release happened.
   publish-chart:
