@@ -1,205 +1,188 @@
-# Graylog Helm Chart Release Guide
+# Graylog Helm chart release guide
 
-This document describes how to cut a new release of the Graylog Helm chart, from
-pre-release testing through publication on [Artifact Hub](https://artifacthub.io/packages/search?repo=graylog2).
-It is intended for chart maintainers.
+How a release of the Graylog Helm chart happens, and what a maintainer has to do
+to cut one. Releases are commit-driven: what you write in a commit subject
+decides the next version.
 
 ## Summary
 
-Releases are **version-driven** and automated by
-[`helm/chart-releaser-action`](https://github.com/helm/chart-releaser-action),
-configured in [`.github/workflows/release.yaml`](../.github/workflows/release.yaml).
+[release-please](https://github.com/googleapis/release-please) reads the
+Conventional Commit subjects that land on `main`, works out the next version, and
+keeps a release pull request open with the version bump and the changelog. Merging
+that pull request is the release.
 
-The flow is:
+1. A Conventional Commit pull request touching `charts/graylog/` is squash-merged to `main`.
+2. release-please opens or updates `chore(main): release graylog <version>`, bumping `version:` in `Chart.yaml`, writing `charts/graylog/CHANGELOG.md`, and updating `.release-please-manifest.json`.
+3. A maintainer reviews and merges that pull request. **This is the release trigger.**
+4. release-please creates the tag and the GitHub release, both named `graylog-<version>`.
+5. `release-graylog.yaml` generates the `artifacthub.io/changes` annotation from `CHANGELOG.md`, packages the chart, attaches the tarball to the release, and merges one entry into `index.yaml` on `gh-pages`.
+6. Artifact Hub picks the version up on its next poll.
 
-1. (manual) Chart owners sync and approve a new release. They
-    - Make sure `appVersion` has been bumped to the latest available version of Graylog in an earlier PR.
-    - Make sure other dependencies/image tags have been upgraded to the latest working version.
-    - Approve existing README.md language, content, and structure.
-2. (manual) A `Make release <version>` commit lands on `main` via PR.
-    - The commit updates `version` to `<version>` in `charts/graylog/Chart.yaml`
-3. (automated) The release workflow triggers automatically (it can also be triggered manually via `workflow_dispatch`).
-4. (automated) `chart-releaser` packages the chart, creates a GitHub release and a git tag
-   named `graylog-<version>`, and updates `index.yaml` on the `gh-pages` branch.
-5. (automated) Artifact Hub polls `gh-pages` and picks up the new version.
+Steps 1 and 3 are the only manual ones.
 
-> [!IMPORTANT]
-> `chart-releaser` only creates a release for a chart version that does **not**
-> already have a matching tag. The release commit is the commit that bumps `version:` in `Chart.yaml`.
-> **It should be the last change to land before the release**. If the version is unchanged, the workflow skips it as
-> a no-op (it does not re-release).
+Nobody edits `version:` in `Chart.yaml`, `charts/graylog/CHANGELOG.md`, or
+`.release-please-manifest.json` by hand. release-please owns all three.
 
-Publication metadata lives on the `gh-pages` branch, not `main`:
+## What earns a release
 
-- `index.yaml` — the Helm repository index (what `helm repo add` reads).
-- `artifacthub-repo.yml` — Artifact Hub ownership/repository metadata.
+A commit contributes to a release only when it meets both conditions.
 
-## Who can make a new release?
+**The subject is a releasable Conventional Commit type.** `feat:` gives a minor
+bump, `fix:` and `perf:` give a patch. `ci:`, `chore:`, `docs:`, `test:`,
+`refactor:` and `style:` are hidden sections: they land, they appear in no
+changelog, and they trigger no release on their own.
 
-Releases can be made only by contributors that fulfill the following conditions:
+**It touches a file under `charts/graylog/`.** Repository tooling changes never
+release the chart, which is why they must use `ci:` or `chore:`.
 
-- Have write access to the `Graylog2/graylog-helm` repository.
-- Are able to approve merges to the `main` branch.
+The subject that counts is the one that lands on `main`. Squash merging is the
+only merge method enabled, and the squash subject comes from the pull request
+title when a branch has more than one commit. A pull request titled
+`fix: correct the datanode selector` releases a patch no matter what its
+individual commits said.
+
+## Major versions and breaking changes
+
+Add `!` after the type, or a `BREAKING CHANGE:` footer, and release-please bumps
+the major and writes a `⚠ BREAKING CHANGES` section from the footer text.
+
+```
+feat(values)!: imagePullSecrets take LocalObjectReference objects
+
+BREAKING CHANGE: global.imagePullSecrets and the per-image lists now take
+{name: <secret>} objects instead of bare strings.
+```
+
+Document the change in `charts/graylog/UPGRADING.md` in the same pull request.
+The changelog says what changed. `UPGRADING.md` says what the reader has to do
+about it.
+
+To set a version release-please would not have computed, put `Release-As: 2.0.0`
+in the footer of a commit that touches `charts/graylog/`. Use it to correct
+history, not as a substitute for marking commits breaking.
+
+## One parser gotcha worth knowing
+
+release-please parses commit messages with a strict PEG grammar, and it discards
+whatever the grammar rejects without failing the run. The change never reaches
+the changelog, and if it was the only `fix:` or `feat:` in the window, no release
+pull request opens at all.
+
+The grammar reads every body line as a possible header, so a body line that
+begins with `word(` is read as `type(scope`. It survives if the parenthesis
+closes on that line with nothing nested inside, and dies otherwise.
+
+```
+# breaks the parse: the line begins with a call containing a nested paren
+max(max(initContainer), sum(containers)) sets the floor
+
+# fine: the same text, not at the start of a line
+a pod reserves max(max(initContainer), sum(containers))
+```
+
+This cost the 2.0.0 changelog a real chart fix, in #176. Reflowing the line is
+enough to avoid it.
+
+## Who can cut a release
+
+- Write access to `Graylog2/graylog-helm`.
+- Able to approve merges to `main`.
 - Listed as an owner in `artifacthub-repo.yml` on `gh-pages`.
 
 ## Versioning
 
-The chart carries two independent versions in `charts/graylog/Chart.yaml`:
+`charts/graylog/Chart.yaml` carries two independent versions.
 
-| Field        | Meaning                                          | Versioning scheme |
-|--------------|--------------------------------------------------|-------------------|
-| `version`    | The **chart** version. Drives the release.       | [SemVer](https://semver.org/) |
-| `appVersion` | The bundled **Graylog application** version.     | Tracks Graylog    |
+| Field | Meaning | Owner |
+|---|---|---|
+| `version` | The chart version, SemVer | release-please |
+| `appVersion` | The bundled Graylog version | a maintainer, in an ordinary pull request |
 
-Bump `version` according to SemVer:
+`graylog.image.tag` and `datanode.image.tag` default to `appVersion`, so changing
+it moves the running images. When you change it, update two more fields in the
+same `Chart.yaml`: the image tags in the `artifacthub.io/images` annotation, and
+the version tag in the `icon:` URL.
 
-- **Major**: breaking changes to values, defaults, or required Kubernetes/Helm versions.
-- **Minor**: new features or values, backward compatible.
-- **Patch**: bug fixes and documentation-only changes.
+## Cutting the release
 
-> [!NOTE]
-> When the bundled Graylog version changes, `appVersion` is **not** the only field to update.
-> Also review, in the same `Chart.yaml`:
-> - the image tags in the `artifacthub.io/images` annotation (`graylog/graylog`, `graylog/graylog-datanode`)
-> - the version tag in the `icon:` URL.
+**Test first.** Run the full pre-release procedure in [TESTING.md](TESTING.md)
+against the commit the release pull request sits on. Nothing in CI gates
+publication, so this is the real gate.
 
-## Release Steps
+**Read the release pull request.** Confirm the computed version matches the
+significance of what shipped, and that the changelog covers everything. A commit
+the parser dropped is invisible here, so compare against the merged pull requests
+in the window if the release matters.
 
-### Step 1: E2E Testing
+**Edit `CHANGELOG.md` on the release pull request if you need to.** It is the
+source of truth for the `artifacthub.io/changes` annotation, which the publish job
+generates at packaging time. Anything you add here reaches Artifact Hub. Make it
+the last change before merging: any push to `main` makes release-please
+force-push the branch and discard your edit.
 
-Run the **Full Test** tier from [TESTING.md](TESTING.md#full-test-major-changes-releases)
-on all the following environments:
+**Merge it.** Publication follows automatically.
 
-- a local MicroK8s cluster
-- an AWS EKS cluster (`--set provider=aws`)
-
-**Expected:** all phases pass on both clusters.
-
-### Step 2: Drift Check
-
-Confirm the three value surfaces agree. These are maintained manually and drift easily:
-
-| Source                                   | Check                                             |
-|------------------------------------------|---------------------------------------------------|
-| `charts/graylog/values.yaml`             | Source of truth for defaults                      |
-| `charts/graylog/values.schema.json`      | Every value is represented; types/defaults match  |
-| `charts/graylog/README.md` values table  | The [Values Reference](../charts/graylog/README.md#graylog-helm-chart-values-reference) section reflects current keys, defaults, and descriptions |
-
-**Expected:** a new/changed/removed value in `values.yaml` is reflected in both the
-schema and the README values reference, with matching defaults.
-
-### Step 3: Security Scan (optional)
-
-Public security scanning is disabled for this repository on Artifact Hub, so scan the
-bundled images locally before release:
+## Verifying publication
 
 ```sh
-trivy image graylog/graylog:<appVersion>
-trivy image graylog/graylog-datanode:<appVersion>
-trivy config ./charts/graylog
-```
+# the release and its attached tarball
+gh release view "graylog-<version>" -R Graylog2/graylog-helm --json tagName,assets
 
-**Expected:** no unexpected new HIGH/CRITICAL findings versus the previous release.
+# the published index
+curl -sS https://graylog2.github.io/graylog-helm/index.yaml \
+  | yq e '.entries.graylog[] | .version + " -> " + .urls[0]' -
 
-### Step 4: Update `Chart.yaml`
-
-In `charts/graylog/Chart.yaml`:
-
-1. Bump `version` (see [Versioning](#versioning)).
-2. Confirm `appVersion`, the image tags in the `artifacthub.io/images` annotation, and
-   the `icon:` URL are already correct (bumped in an earlier PR).
-3. Replace the `artifacthub.io/changes` annotation with the changelog for the new release.
-   Use the existing `kind`/`description`/`links` structure, for example:
-
-   ```yaml
-   artifacthub.io/changes: |
-     - kind: added
-       description: "Short summary of the change"
-       links:
-         - name: "PR title"
-           url: "https://github.com/Graylog2/graylog-helm/pull/<n>"
-   ```
-
-   Valid `kind` values are `added`, `changed`, `deprecated`, `removed`, `fixed`, `security`.
-4. Set `artifacthub.io/containsSecurityUpdates` and `artifacthub.io/prerelease` appropriately for this release.
-
-### Step 5: Cut the Release
-
-Land the `Chart.yaml` change on `main` via a merged PR. This is the release trigger.
-
-The workflow will:
-
-- package the chart into `graylog-<version>.tgz`,
-- create GitHub release + tag `graylog-<version>`,
-- commit the updated `index.yaml` to `gh-pages`.
-
-You can also start it manually from the **Actions** tab
-(**Release Graylog Chart** → **Run workflow**), but the version must still be new.
-
-### Step 6: Verify Publication
-
-```sh
-# 1. GitHub release + tag exist for the new version
-gh release view "graylog-<version>" --repo Graylog2/graylog-helm
-
-# 2. gh-pages index.yaml lists the new version
-gh api "repos/Graylog2/graylog-helm/contents/index.yaml?ref=gh-pages" \
-  --jq '.content' | base64 -d | grep -A2 "version: <version>"
-
-# 3. The chart is pullable from the published repo
+# the chart as a consumer sees it
 helm repo add graylog https://graylog2.github.io/graylog-helm
-helm repo update
+helm repo update graylog
 helm search repo graylog/graylog --versions | head
+helm template graylog graylog/graylog --version <version> >/dev/null
 ```
 
-Finally, check the
-[Artifact Hub package page](https://artifacthub.io/packages/helm/graylog2/graylog):
+Check all of the following.
 
-- the new version appears. Artifact Hub polls `gh-pages` periodically (check the next polling cycle on the settings page)
-- the changelog from `artifacthub.io/changes` renders correctly
+- The `.tgz` is attached to the release.
+- The new entry's URL is a release download URL.
+- Every historical entry is still present and unchanged. Diff `index.yaml`
+  against the previous revision on `gh-pages` and confirm the only change is an
+  addition.
+- `helm show chart graylog/graylog --version <version>` carries the
+  `artifacthub.io/changes` annotation.
 
----
+If `index.yaml` lost an entry or an existing URL changed, revert the `gh-pages`
+commit. It is an ordinary branch with ordinary history. The publish job has a
+guard that should fail before pushing in that case, so treat it as a bug.
 
-## Release Checklist
+## Troubleshooting
 
-```markdown
-## Release Checklist
+| Symptom | Cause |
+|---|---|
+| No release pull request after merging a chart change | The subject was a hidden type, or the change touched nothing under `charts/graylog/`, or the parser rejected the message |
+| A merged change is missing from the changelog | Same three causes. Check the release-please run log for `could not be parsed` |
+| The computed version is lower than expected | A breaking change landed without `!` or a `BREAKING CHANGE:` footer |
+| The release pull request has no CI checks | Expected. Pull requests opened by `GITHUB_TOKEN` raise no `pull_request` events |
+| `Chart.yaml` came back reformatted | release-please round-trips the file through a YAML parser and may rewrap long quoted strings. The parsed value is unchanged |
+| The release exists but no tarball is attached | The `publish-chart` job failed or never ran. Re-run `release-graylog.yaml` by hand with the tag as input |
+| Artifact Hub shows the version but no changelog | The annotation was empty at packaging time. Check `CHANGELOG.md` on the tag |
 
-### Pre-release testing (TESTING.md Full Test)
-- [ ] Full Test passes on local MicroK8s
-- [ ] Full Test passes on AWS EKS
-- [ ] Upgrade from the currently released version succeeds
+## Known gaps
 
-### Drift check
-- [ ] `values.yaml` and `values.schema.json` in sync
-- [ ] README "Values Reference" table in sync with `values.yaml`
+- **Publication is not gated on tests.** `release-please` and `lint-and-test`
+  both fire on push to `main` with no dependency between them, so a chart that
+  fails `helm lint` can be tagged and published.
+- **Release pull requests get no CI.** Quality gating happens on the pull
+  requests feeding into `main`. A green or absent check on a release pull request
+  says nothing about the chart.
+- **`exclude-paths` does not work.** The config sets it for `.github` and `docs`,
+  and commits touching only those paths were still attributed to the chart in
+  testing. Commit type is the dependable guard.
+- **Some ArtifactHub change kinds have no Conventional Commit equivalent.**
+  `deprecated`, `removed` and `security` need a hand edit to `CHANGELOG.md` on
+  the release pull request.
 
-### Security (optional)
-- [ ] trivy scan of graylog / graylog-datanode images reviewed
-- [ ] trivy scan of local chart reviewed
+## Additional resources
 
-### Chart.yaml
-- [ ] `version` bumped (SemVer)
-- [ ] image tags and icon URL bumped (if Graylog version changed)
-- [ ] `appVersion` already has the correct version (if Graylog version changed)
-- [ ] `artifacthub.io/changes` changelog replaced for this release
-- [ ] `containsSecurityUpdates` / `prerelease` flags set correctly
-
-### Release
-- [ ] `Chart.yaml` change merged to main
-- [ ] Release workflow succeeded
-
-### Verify publication
-- [ ] GitHub release + tag graylog-<version> created
-- [ ] `index.yaml` lists the new version in `gh-pages`
-- [ ] Chart pullable via helm repo (`helm search repo`)
-- [ ] Artifact Hub shows the new version and renders the changelog
-```
-
----
-
-## Additional Resources
-
-- [TESTING.md](TESTING.md) — pre-release testing procedure
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — development setup and workflow
-- [chart-releaser-action](https://github.com/helm/chart-releaser-action) — the release automation
+- [TESTING.md](TESTING.md), the pre-release testing procedure
+- [UPGRADING.md](../charts/graylog/UPGRADING.md), what users have to do between versions
+- [CONTRIBUTING.md](../CONTRIBUTING.md), development setup and commit rules
+- [release-please](https://github.com/googleapis/release-please), the release automation
