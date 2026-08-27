@@ -13,8 +13,6 @@ Reads the rendered manifests as JSON on stdin:
       | ci_values_summary.py --overlay <overlay> [--extra-set "flag, flag"]
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys
