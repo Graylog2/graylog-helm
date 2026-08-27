@@ -4,6 +4,251 @@ entries:
   - annotations:
       artifacthub.io/category: security
       artifacthub.io/changes: |
+        - kind: changed
+          description: "graylog: `appVersion` moves from 7.0 to 7.1.8. `graylog.image.tag` and `datanode.image.tag` default to `appVersion`, so upgrading moves the running Graylog and Data Node images unless you pin both tags"
+          links:
+            - name: "PR #181"
+              url: "https://github.com/Graylog2/graylog-helm/pull/181"
+        - kind: changed
+          description: "values: `global.imagePullSecrets`, `graylog.image.imagePullSecrets` and `datanode.image.imagePullSecrets` now take `{name: <secret>}` objects instead of bare strings. Schema validation rejects the old string form"
+          links:
+            - name: "PR #93"
+              url: "https://github.com/Graylog2/graylog-helm/pull/93"
+        - kind: changed
+          description: "mongodb: the default replica set is now 3 data-bearing members with no arbiter, replacing 2 members plus 1 arbiter. Upgrading on the defaults adds a member and drops the arbiter, so budget for a third data volume"
+          links:
+            - name: "PR #127"
+              url: "https://github.com/Graylog2/graylog-helm/pull/127"
+        - kind: changed
+          description: "mongodb: the chart now sets MongoDB container resources, which nothing could override before. A pod reserves 300m/1152Mi instead of the operator's 1000m/800M, and upgrading rolls the replica set"
+          links:
+            - name: "PR #176"
+              url: "https://github.com/Graylog2/graylog-helm/pull/176"
+        - kind: changed
+          description: "pods and containers now run under a restricted security context: `runAsNonRoot: true`, `seccompProfile: RuntimeDefault`, `allowPrivilegeEscalation: false`, and all capabilities dropped except `NET_BIND_SERVICE` on graylog and the file-ownership set on datanode. A custom image that runs as root or needs other capabilities will not start"
+          links:
+            - name: "PR #100"
+              url: "https://github.com/Graylog2/graylog-helm/pull/100"
+        - kind: changed
+          description: "values: removed `datanode.persistence.enabled`, `datanode.persistence.data.existingClaim`, `datanode.persistence.data.selector`, `datanode.persistence.data.dataSource`, `datanode.persistence.nativeLibs.existingClaim`, `datanode.persistence.nativeLibs.selector`, `graylog.persistence.mountPath` and `graylog.persistence.selector`. None of them were wired to anything"
+          links:
+            - name: "PR #148"
+              url: "https://github.com/Graylog2/graylog-helm/pull/148"
+        - kind: changed
+          description: "geo-ip: the MaxMind database update runs as a sidecar on the Graylog pod instead of a CronJob. `graylog.config.geolocation.maxmindGeoIp.cronSchedule` moves to `graylog.config.geolocation.sidecar.schedule`, and `postInstallRun` is gone"
+          links:
+            - name: "PR #129"
+              url: "https://github.com/Graylog2/graylog-helm/pull/129"
+        - kind: changed
+          description: "ingress: `ingress.forwarder` splits into two channels, `ingress.forwarder.messageChannel` and `ingress.forwarder.configChannel`, each with its own `className`, `annotations`, `labels`, `hosts` and `tls`. Existing forwarder ingress values need rewriting, not renaming"
+          links:
+            - name: "PR #160"
+              url: "https://github.com/Graylog2/graylog-helm/pull/160"
+        - kind: changed
+          description: "datanode: the native-libs volume claim template changes name from `nativeLibs` to `native-libs`. `volumeClaimTemplates` is immutable, so Kubernetes rejects the upgrade for anyone running with `datanode.persistence.nativeLibs.enabled=true`. Delete the StatefulSet with `--cascade=orphan` first"
+          links:
+            - name: "PR #75"
+              url: "https://github.com/Graylog2/graylog-helm/pull/75"
+        - kind: changed
+          description: "graylog: `terminationGracePeriodSeconds` is now 300, and a preStop hook drains the journal before shutdown. Pod deletion, node drains and rolling upgrades take up to five minutes per pod"
+          links:
+            - name: "PR #147"
+              url: "https://github.com/Graylog2/graylog-helm/pull/147"
+        - kind: changed
+          description: "helpers: an explicit `graylog.config.network.externalUri` now wins over the LoadBalancer Service lookup, and a bare hostname gets the scheme and app port appended. Setting both a LoadBalancer service and `externalUri` changes the advertised `http_external_uri`"
+          links:
+            - name: "PR #158"
+              url: "https://github.com/Graylog2/graylog-helm/pull/158"
+        - kind: changed
+          description: "the chart renames the init script ConfigMap from the fixed `init-script-cm` to `<release>-graylog-init-cm`, so two releases can share a namespace. External references to the old name break"
+          links:
+            - name: "PR #79"
+              url: "https://github.com/Graylog2/graylog-helm/pull/79"
+        - kind: changed
+          description: "the chart writes the generated root password to the backup Secret instead of printing it in `NOTES.txt`. Anything scraping the install output for the password must read the Secret"
+          links:
+            - name: "PR #140"
+              url: "https://github.com/Graylog2/graylog-helm/pull/140"
+        - kind: changed
+          description: "probes: both StatefulSets now get a startupProbe, on by default. It allows 330s before the kubelet restarts the container, so an install that takes longer restarts in a loop until you raise `startupProbe.failureThreshold`"
+          links:
+            - name: "PR #169"
+              url: "https://github.com/Graylog2/graylog-helm/pull/169"
+        - kind: changed
+          description: "probes: removed `graylog.livenessProbe.successThreshold` and `datanode.livenessProbe.successThreshold`. The schema does not reject unknown keys, so either one still validates and does nothing"
+          links:
+            - name: "PR #169"
+              url: "https://github.com/Graylog2/graylog-helm/pull/169"
+        - kind: added
+          description: "Bring Your Own Opensearch"
+          links:
+            - name: "PR #135"
+              url: "https://github.com/Graylog2/graylog-helm/pull/135"
+        - kind: added
+          description: "Allowing for custom labels and annotations to rendered kubernetes manifests."
+          links:
+            - name: "PR #160"
+              url: "https://github.com/Graylog2/graylog-helm/pull/160"
+        - kind: added
+          description: "data-node: Adding sysctlInit datanode init container to set vm.max_map_count"
+          links:
+            - name: "PR #108"
+              url: "https://github.com/Graylog2/graylog-helm/pull/108"
+        - kind: added
+          description: "geo-ip: Setting up side car geoip update, working downloads"
+          links:
+            - name: "PR #129"
+              url: "https://github.com/Graylog2/graylog-helm/pull/129"
+        - kind: added
+          description: "Safe Graylog Journal Draining"
+          links:
+            - name: "PR #147"
+              url: "https://github.com/Graylog2/graylog-helm/pull/147"
+        - kind: added
+          description: "Updating datanode and graylog health check and startup probes"
+          links:
+            - name: "PR #169"
+              url: "https://github.com/Graylog2/graylog-helm/pull/169"
+        - kind: added
+          description: "Updating to Graylog, and Datanode to 7.1.8"
+          links:
+            - name: "PR #181"
+              url: "https://github.com/Graylog2/graylog-helm/pull/181"
+        - kind: fixed
+          description: "correct imagePullSecrets schema to use LocalObjectReference format"
+          links:
+            - name: "PR #93"
+              url: "https://github.com/Graylog2/graylog-helm/pull/93"
+        - kind: fixed
+          description: "datanode: use with for each secret field"
+          links:
+            - name: "PR #77"
+              url: "https://github.com/Graylog2/graylog-helm/pull/77"
+        - kind: fixed
+          description: "encode GRAYLOG_HTTP_TLS_KEY_PASSWORD"
+          links:
+            - name: "PR #76"
+              url: "https://github.com/Graylog2/graylog-helm/pull/76"
+        - kind: fixed
+          description: "geo-ip: Updating GeoIP default image and secret handling"
+          links:
+            - name: "PR #168"
+              url: "https://github.com/Graylog2/graylog-helm/pull/168"
+        - kind: fixed
+          description: "helpers: Prefer an explicit externalUri over the Service lookup"
+          links:
+            - name: "PR #158"
+              url: "https://github.com/Graylog2/graylog-helm/pull/158"
+        - kind: fixed
+          description: "ingress: point defaultBackend at the fallback Service port"
+          links:
+            - name: "PR #163"
+              url: "https://github.com/Graylog2/graylog-helm/pull/163"
+        - kind: fixed
+          description: "mongodb: let MongoDB container resources be configured"
+          links:
+            - name: "PR #176"
+              url: "https://github.com/Graylog2/graylog-helm/pull/176"
+        - kind: fixed
+          description: "rename native-libs pvc template"
+          links:
+            - name: "PR #75"
+              url: "https://github.com/Graylog2/graylog-helm/pull/75"
+        - kind: fixed
+          description: "secrets: Accept secret peppers of exactly 64 characters"
+          links:
+            - name: "PR #149"
+              url: "https://github.com/Graylog2/graylog-helm/pull/149"
+        - kind: fixed
+          description: "secrets: Adding graylog-root-sha2 to automatic password generation"
+          links:
+            - name: "PR #104"
+              url: "https://github.com/Graylog2/graylog-helm/pull/104"
+        - kind: fixed
+          description: "secrets: Adding graylog-root-sha2 to automatic password generation"
+          links:
+            - name: "PR #104"
+              url: "https://github.com/Graylog2/graylog-helm/pull/104"
+        - kind: fixed
+          description: "service-accounts: Fixing bug in service account automount"
+          links:
+            - name: "PR #130"
+              url: "https://github.com/Graylog2/graylog-helm/pull/130"
+        - kind: fixed
+          description: "StatefulSet checksums"
+          links:
+            - name: "PR #83"
+              url: "https://github.com/Graylog2/graylog-helm/pull/83"
+        - kind: fixed
+          description: "use release-specific templated names"
+          links:
+            - name: "PR #79"
+              url: "https://github.com/Graylog2/graylog-helm/pull/79"
+        - kind: fixed
+          description: "use selectorLabels"
+          links:
+            - name: "PR #80"
+              url: "https://github.com/Graylog2/graylog-helm/pull/80"
+        - kind: fixed
+          description: "use toYaml with each nodeSelector"
+          links:
+            - name: "PR #78"
+              url: "https://github.com/Graylog2/graylog-helm/pull/78"
+        - kind: fixed
+          description: "values: Remove unused persistence configuration values"
+          links:
+            - name: "PR #148"
+              url: "https://github.com/Graylog2/graylog-helm/pull/148"
+        - kind: changed
+          description: "chart: add an upgrade guide and document the commit-driven release"
+          links:
+            - name: "PR #182"
+              url: "https://github.com/Graylog2/graylog-helm/pull/182"
+      artifacthub.io/containsSecurityUpdates: "true"
+      artifacthub.io/images: |
+        - name: "graylog"
+          image: "graylog/graylog:7.1.8"
+          whitelisted: true
+          platforms:
+            - linux/amd64
+            - linux/arm64
+        - name: "graylog-datanode"
+          image: "graylog/graylog-datanode:7.1.8"
+          whitelisted: true
+          platforms:
+            - linux/amd64
+            - linux/arm64
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 7.1.8
+    created: "2026-08-27T21:51:41.392272529Z"
+    description: Official Graylog Helm chart for Kubernetes
+    digest: e67a3d1e489ea0e71000ee7200b81ef281fd42e9259c4554758d7658c190242b
+    home: https://graylog.org
+    icon: https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.1.8/graylog2-web-interface/public/images/favicon.png
+    keywords:
+    - SIEM
+    - API
+    - Triage
+    - Security
+    - Observability
+    - Search
+    - Logs
+    - Monitoring
+    - Troubleshooting
+    - Events
+    - Alerts
+    name: graylog
+    sources:
+    - https://github.com/graylog2
+    type: application
+    urls:
+    - https://github.com/Graylog2/graylog-helm/releases/download/graylog-2.0.0/graylog-2.0.0.tgz
+    version: 2.0.0
+  - annotations:
+      artifacthub.io/category: security
+      artifacthub.io/changes: |
         - kind: added
           description: "add LICENSE"
           links:
@@ -85,4 +330,4 @@ entries:
     urls:
     - https://github.com/Graylog2/graylog-helm/releases/download/graylog-0.1.0/graylog-0.1.0.tgz
     version: 0.1.0
-generated: "2025-12-22T11:04:13.070194374Z"
+generated: "2026-08-27T21:51:41.386104255Z"
