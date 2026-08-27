@@ -147,16 +147,25 @@ def splice(chart_text: str, body: str) -> str:
     Line-based on purpose: a YAML round-trip would reflow unrelated keys.
     """
     lines = chart_text.splitlines()
-    key = re.compile(r"^(?P<indent>\s*)artifacthub\.io/changes:\s*\|")
+    # release-please round-trips Chart.yaml through a YAML parser when it bumps
+    # `version:`, and that turns an empty block scalar into `""`. Both forms mean
+    # the same empty annotation, so accept either and always write the block
+    # scalar back. Matching only `|` made every release fail here.
+    key = re.compile(
+        r"^(?P<indent>\s*)artifacthub\.io/changes:\s*(?:\||\"\"|''|)\s*$"
+    )
 
     start = next((i for i, l in enumerate(lines) if key.match(l)), None)
     if start is None:
         raise SystemExit(
             "artifacthub.io/changes annotation not found; add the key with an "
-            "empty block scalar (`artifacthub.io/changes: |`) first"
+            "empty value (`artifacthub.io/changes: |`) first"
         )
 
     indent = key.match(lines[start]).group("indent")
+    # Normalise the key line: the body below it is a block scalar regardless of
+    # which empty form we found.
+    lines[start] = f"{indent}artifacthub.io/changes: |"
     end = start + 1
     while end < len(lines) and (
         not lines[end].strip() or lines[end].startswith(indent + " ")
