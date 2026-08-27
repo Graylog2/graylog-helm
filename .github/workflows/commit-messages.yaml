@@ -1,0 +1,94 @@
+name: commit messages
+
+# release-please parses commit messages with a strict PEG grammar. A message it
+# rejects is discarded silently: the release-please run stays green, the change
+# never reaches CHANGELOG.md, and if it was the only fix:/feat: in the window,
+# no release PR opens at all. #176 lost a real chart fix this way.
+#
+# Two jobs. `parseable` blocks the PR before the bad message is immutable on
+# main. `landed` is the backstop over the whole release window, for direct
+# pushes and for anything that slipped through.
+#
+# Deliberately a separate workflow: it touches no file that the release
+# workflows own, so it can land in any order relative to them.
+
+on:
+  pull_request:
+    # `edited` matters: the PR title becomes the squash subject.
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  parseable:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Same parser, same major version, as release-please's own dependency.
+      - name: Install the Conventional Commits parser
+        run: npm install --no-save --no-fund --no-audit '@conventional-commits/parser@^0.4.1'
+
+      # squash_merge_commit_title is COMMIT_OR_PR_TITLE and
+      # squash_merge_commit_message is COMMIT_MESSAGES, so the message that
+      # lands is the PR title followed by every commit message on the branch.
+      # Bulleting the subjects does not protect the bodies, and the bodies are
+      # where the grammar actually trips.
+      - name: Build the squash preview
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          {
+            printf '%s\n' "$PR_TITLE"
+            git log --no-merges --reverse --format='%n* %B' "origin/${BASE}..${HEAD_SHA}"
+          } > squash-preview.txt
+          echo "--- squash preview ---"
+          cat squash-preview.txt
+
+      - name: Check the squash preview parses
+        run: node .github/scripts/check_commit_parse.mjs --file squash-preview.txt
+
+      # Individual commits too, so a failure names the commit to reword instead
+      # of a line number in the assembled preview.
+      - name: Check each commit on the branch
+        if: always()
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node .github/scripts/check_commit_parse.mjs --range "origin/${BASE}..${HEAD_SHA}"
+
+  landed:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install the Conventional Commits parser
+        run: npm install --no-save --no-fund --no-audit '@conventional-commits/parser@^0.4.1'
+
+      # The release window is everything since the last released tag, which the
+      # manifest names. That is exactly the set release-please reads, so this
+      # reports the same drops its log would.
+      - name: Check every commit in the release window
+        run: |
+          version="$(yq e '."charts/graylog"' .release-please-manifest.json)"
+          range="graylog-${version}..HEAD"
+          if ! git rev-parse -q --verify "graylog-${version}" >/dev/null; then
+            echo "::warning::tag graylog-${version} not found; checking this push only"
+            range="${{ github.event.before }}..HEAD"
+          fi
+          echo "range: ${range}"
+          node .github/scripts/check_commit_parse.mjs --range "$range"

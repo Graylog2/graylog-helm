@@ -4,6 +4,10 @@ graylog/values-glc.yaml
 dev/keys
 graylog/assets
 
+# .github/workflows/commit-messages.yaml installs the Conventional Commits
+# parser with `npm install --no-save`, which leaves this behind.
+node_modules/
+
 # Various IDEs
 .project
 .idea/
