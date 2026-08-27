@@ -314,7 +314,7 @@ helm test graylog -n graylog
 
 ```sh
 # Upgrade Graylog version
-helm upgrade graylog ./graylog -n graylog --reuse-values --set version="7.0"
+helm upgrade graylog ./graylog -n graylog --reuse-values --set version="7.1.8"
 
 # Monitor rollout
 kubectl rollout status statefulset/graylog -n graylog

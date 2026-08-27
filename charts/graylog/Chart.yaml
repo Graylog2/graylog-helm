@@ -1,7 +1,7 @@
 apiVersion: v2
 name: graylog
 description: Official Graylog Helm chart for Kubernetes
-icon: "https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.0.0/graylog2-web-interface/public/images/favicon.png"
+icon: "https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.1.8/graylog2-web-interface/public/images/favicon.png"
 type: application
 home: https://graylog.org
 sources:
@@ -24,13 +24,13 @@ annotations:
   artifacthub.io/prerelease: "false"
   artifacthub.io/images: |
     - name: "graylog"
-      image: "graylog/graylog:7.0"
+      image: "graylog/graylog:7.1.8"
       whitelisted: true
       platforms:
         - linux/amd64
         - linux/arm64
     - name: "graylog-datanode"
-      image: "graylog/graylog-datanode:7.0"
+      image: "graylog/graylog-datanode:7.1.8"
       whitelisted: true
       platforms:
         - linux/amd64
@@ -45,5 +45,5 @@ annotations:
 # This is the chart version.
 version: 1.0.0
 # This is the version number of the Graylog application bundled with this chart.
-appVersion: "7.0"
+appVersion: "7.1.8"
 # End of file. Thanks for scrolling.
