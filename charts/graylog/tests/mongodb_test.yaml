@@ -94,3 +94,162 @@ tests:
       - equal:
           path: spec.statefulSet.spec.volumeClaimTemplates[1].spec.resources.requests.storage
           value: "5G"
+
+  # The operator injects its own defaults (500m CPU and 500M memory per
+  # container) and nothing in the chart could override them before these values
+  # existed. The chart's defaults deliberately differ: mongod gets real memory
+  # headroom, because an idle 3-member replica set already sits at ~340Mi
+  # against the operator's 500M limit, and the CPU request drops because the
+  # same replica set idles under 50m per member.
+  - it: patches the chart's production defaults onto the mongod and mongodb-agent containers
+    set:
+      mongodb.communityResource.enabled: true
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].name
+          value: mongod
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].resources
+          value:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 1Gi
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[1].name
+          value: mongodb-agent
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[1].resources
+          value:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+
+  - it: honors mongodb.resources and mongodb.agentResources independently
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.resources:
+        requests:
+          cpu: 100m
+          memory: 300M
+      mongodb.agentResources:
+        requests:
+          cpu: 50m
+          memory: 100M
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].resources.requests.cpu
+          value: 100m
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[1].resources.requests.cpu
+          value: 50m
+      # Values deep-merge, so overriding only `requests` keeps the default
+      # `limits`. Worth pinning: it means a small `requests` override does not
+      # silently leave the container unlimited.
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].resources.limits.cpu
+          value: "2"
+
+  # Only `null` drops a map; `{}` would merge and leave the defaults in place.
+  - it: omits the container override when both resource blocks are null
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.resources: null
+      mongodb.agentResources: null
+    asserts:
+      - notExists:
+          path: spec.statefulSet.spec.template.spec.containers
+
+  - it: patches only mongod when agentResources is null
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.agentResources: null
+    asserts:
+      - lengthEqual:
+          path: spec.statefulSet.spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].name
+          value: mongod
+
+  # The mirror of the case above, and not redundant with it: without the inner
+  # `with` guard on mongodb.resources, this is the only input that renders
+  # `resources: null` onto the mongod container -- patching the field to empty
+  # instead of leaving it to the operator. Mutation-tested: dropping that guard
+  # keeps every other test in this file green.
+  - it: patches only mongodb-agent when resources is null
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.resources: null
+    asserts:
+      - lengthEqual:
+          path: spec.statefulSet.spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].name
+          value: mongodb-agent
+      # Nothing may carry a null resources block: that would clear the
+      # operator's defaults rather than defer to them.
+      - notExists:
+          path: spec.statefulSet.spec.template.spec.containers[1]
+
+  # A pod reserves max(max(initContainer), sum(containers)), so these two set the
+  # pod's effective CPU request whenever the containers ask for less. Left at the
+  # operator's 500m they were the pod's floor no matter how small the containers
+  # asked to be; both init containers only copy a binary into a shared volume.
+  - it: keeps both init containers small by default
+    set:
+      mongodb.communityResource.enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.statefulSet.spec.template.spec.initContainers
+          count: 2
+      - equal:
+          path: spec.statefulSet.spec.template.spec.initContainers[0].name
+          value: mongod-posthook
+      - equal:
+          path: spec.statefulSet.spec.template.spec.initContainers[1].name
+          value: mongodb-agent-readinessprobe
+      - equal:
+          path: spec.statefulSet.spec.template.spec.initContainers[0].resources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.statefulSet.spec.template.spec.initContainers[1].resources.requests.cpu
+          value: 50m
+      # The init containers must not set the pod's floor: their request stays
+      # below what the two containers ask for together.
+      - equal:
+          path: spec.statefulSet.spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+
+  - it: honors mongodb.initResources on both init containers
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.initResources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.initContainers[0].resources.requests.cpu
+          value: 25m
+      - equal:
+          path: spec.statefulSet.spec.template.spec.initContainers[1].resources.requests.cpu
+          value: 25m
+
+  - it: omits the init container override when initResources is null
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.initResources: null
+    asserts:
+      - notExists:
+          path: spec.statefulSet.spec.template.spec.initContainers
+      # The container override is independent and must survive.
+      - lengthEqual:
+          path: spec.statefulSet.spec.template.spec.containers
+          count: 2

@@ -976,6 +976,51 @@ mongodb:
   # pod template of the StatefulSet it manages and discards anything the chart
   # puts there, so the keys would silently do nothing. annotations/labels above
   # apply to the MongoDBCommunity object itself and do work.
+  #
+  # resources are the compute requests/limits of the mongod container, and
+  # agentResources those of the mongodb-agent sidecar the operator injects.
+  # The operator creates both containers itself and applies its own defaults;
+  # these blocks patch them by container name, which is the only way to size
+  # MongoDB from the chart.
+  #
+  # The defaults below are sized for production, not for the operator's
+  # convenience. mongod gets 2Gi of headroom because WiredTiger sizes its cache
+  # from the container limit and Graylog holds its whole configuration here: an
+  # idle 3-member replica set already sits at ~340Mi, so the operator's own 500M
+  # limit leaves almost no room before an OOMKill. CPU goes the other way -- the
+  # same replica set idles under 50m per member, so reserving a full core per
+  # pod, as the operator does, only makes MongoDB hard to schedule.
+  #
+  # Overrides merge with the defaults below, so setting only `requests` keeps
+  # these `limits`. Set a block to `null` to drop the container override
+  # entirely and let the operator apply whatever it wants.
+  resources:
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+    requests:
+      cpu: "250m"
+      memory: "1Gi"
+  agentResources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+  # initResources applies to both init containers the operator injects,
+  # mongod-posthook and mongodb-agent-readinessprobe. Each only copies a binary
+  # into a shared volume, yet the operator gives them the same 500m request as
+  # mongod. Because a pod reserves max(max(initContainer), sum(containers)),
+  # that 500m was the pod's effective CPU floor no matter how small the
+  # containers asked to be -- so these are kept deliberately small.
+  initResources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
   persistence:
     # storageClass overrides global.storageClass for the MongoDB volumes.
     storageClass: ""
