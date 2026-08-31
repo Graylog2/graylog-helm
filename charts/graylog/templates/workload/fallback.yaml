@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: busybox
-          image: busybox:latest
+          image: busybox:1.38.0
           command: ["httpd", "-f", "-v", "-h", "/home", "-p", "3000", "-h", "/var/www/html", "-c", "/etc/httpd.conf"]
           volumeMounts:
             - name: content
