@@ -3,7 +3,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "graylog.fullname" . }}
+  name: {{ include "graylog.statefulset.name" . }}
   {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.labels "fixed" (dict "app" "graylog-app" "app.kubernetes.io/component" "server") "indent" 2) }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.annotations "indent" 2) }}
 spec:
@@ -275,7 +275,7 @@ spec:
       {{- if and .Values.graylog.config.geolocation.enabled .Values.graylog.config.geolocation.sidecar.enabled }}
       - name: geoip-entrypoint
         configMap:
-          name: {{ include "graylog.fullname" . }}-geoip-entrypoint
+          name: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "geoip-entrypoint") }}
           defaultMode: 0755
       - name: geoip-tmp
         emptyDir: {}

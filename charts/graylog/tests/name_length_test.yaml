@@ -1,0 +1,136 @@
+suite: derived resource names stay within the DNS limit
+# Helm caps a release name at 53 characters, but the chart appends suffixes to
+# it ("-datanode-svc", "-secrets-datanode", ...). Left unchecked those derived
+# names run well past the 63-character DNS label limit that Services and pod
+# hostnames are held to.
+#
+# The fix is "graylog.name.suffixed": it truncates the BASE to leave room for
+# the suffix, then joins. The order matters. Truncating the joined string
+# instead eats into the suffix, and once the base reaches 62 characters every
+# suffix is consumed entirely — "<base>-secrets" and "<base>-secrets-datanode"
+# both collapse to "<base>", quietly giving two Secrets the same name.
+#
+# The contract these tests pin:
+#   1. No derived name exceeds 63 characters.
+#   2. The suffix always survives in full, so names stay distinct.
+#   3. StatefulSet names hold back room for the pod ordinal, because a pod
+#      name "<statefulset>-<ordinal>" is itself a DNS label.
+#   4. Release names short enough not to need truncation are untouched, so
+#      this never renames resources on an existing install.
+#
+# If you add a resource whose name is built from another name, route it through
+# "graylog.name.suffixed" and add it here.
+templates:
+  - service/graylog.yaml
+  - service/datanode.yaml
+  - workload/statefulsets/graylog.yaml
+  - workload/statefulsets/datanode.yaml
+  - config/secret/secrets.yaml
+  - config/secret/datanode.yaml
+  - policy/pdb/graylog.yaml
+  - policy/pdb/datanode.yaml
+  # The StatefulSets' checksum helpers `include` these by path, so the template
+  # filter has to list them for the includes to resolve.
+  - config/graylog.yaml
+  - config/datanode.yaml
+
+tests:
+  # ---------------------------------------------------------------- long name
+  # 52 characters, so the fullname is "<release>-graylog" = 60 characters and
+  # every suffix below would overflow without truncation.
+  - it: keeps Service names inside the 63-character limit, suffix intact
+    release:
+      name: prod-eu-central-1-observability-platform-cluster-tie
+    asserts:
+      - equal:
+          path: metadata.name
+          value: prod-eu-central-1-observability-platform-cluster-tie-graylo-svc
+        template: service/graylog.yaml
+      - equal:
+          path: metadata.name
+          value: prod-eu-central-1-observability-platform-cluster-t-datanode-svc
+        template: service/datanode.yaml
+
+  - it: does not let two Secrets collapse onto one name
+    release:
+      name: prod-eu-central-1-observability-platform-cluster-tie
+    asserts:
+      # Would both be "<base>" if the joined string were truncated instead.
+      - equal:
+          path: metadata.name
+          value: prod-eu-central-1-observability-platform-cluster-tie-gr-secrets
+        template: config/secret/secrets.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: prod-eu-central-1-observability-platform-cluster-tie-g-datanode
+        template: config/secret/datanode.yaml
+
+  - it: does not let the two PodDisruptionBudgets collapse onto one name
+    set:
+      graylog.replicas: 3
+      graylog.podDisruptionBudget.enabled: true
+      datanode.podDisruptionBudget.enabled: true
+    release:
+      name: prod-eu-central-1-observability-platform-cluster-tie
+    asserts:
+      - equal:
+          path: metadata.name
+          value: prod-eu-central-1-observability-platform-cluster-tie-graylo-pdb
+        template: policy/pdb/graylog.yaml
+      - equal:
+          path: metadata.name
+          value: prod-eu-central-1-observability-platform-cluster-t-pdb-datanode
+        template: policy/pdb/datanode.yaml
+
+  - it: leaves room on StatefulSet names for the pod ordinal
+    release:
+      name: prod-eu-central-1-observability-platform-cluster-tie
+    asserts:
+      # 59 characters, so "<name>-999" is still a valid 63-character label.
+      - equal:
+          path: metadata.name
+          value: prod-eu-central-1-observability-platform-cluster-tie-graylo
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: metadata.name
+          value: prod-eu-central-1-observability-platform-cluster-t-datanode
+        template: workload/statefulsets/datanode.yaml
+      # A StatefulSet must point at its own headless Service.
+      - equal:
+          path: spec.serviceName
+          value: prod-eu-central-1-observability-platform-cluster-t-datanode-svc
+        template: workload/statefulsets/datanode.yaml
+
+  # --------------------------------------------------------------- short name
+  # Truncation must be a no-op here. If any of these change, the chart is
+  # renaming resources on upgrade for releases that were never too long.
+  - it: leaves names untouched when the release name is short
+    release:
+      name: graylog
+    asserts:
+      - equal:
+          path: metadata.name
+          value: graylog-svc
+        template: service/graylog.yaml
+      - equal:
+          path: metadata.name
+          value: graylog-datanode-svc
+        template: service/datanode.yaml
+      - equal:
+          path: metadata.name
+          value: graylog
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: metadata.name
+          value: graylog-datanode
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: metadata.name
+          value: graylog-secrets
+        template: config/secret/secrets.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: graylog-secrets-datanode
+        template: config/secret/datanode.yaml

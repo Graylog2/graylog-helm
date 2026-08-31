@@ -3,7 +3,7 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "graylog.fullname" . | printf "%s-pdb" }}
+  name: {{ include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" .) "suffix" "pdb") }}
   namespace: {{ .Release.Namespace }}
   {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.podDisruptionBudget.labels "fixed" (dict "app.kubernetes.io/component" "server" "app" "graylog-app") "indent" 2) }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.podDisruptionBudget.annotations "indent" 2) }}

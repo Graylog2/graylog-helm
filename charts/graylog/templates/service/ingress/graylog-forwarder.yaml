@@ -37,7 +37,7 @@ spec:
         {{- range .hosts }}
         - {{ . | quote }}
         {{- end }}
-      secretName: {{ .secretName | default (include "graylog.fullname" $root | printf "%s-tls") }}
+      secretName: {{ .secretName | default (include "graylog.name.suffixed" (dict "base" (include "graylog.fullname" $root) "suffix" "tls")) }}
     {{- end }}
   {{- end }}
   rules:
