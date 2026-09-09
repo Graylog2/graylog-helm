@@ -1,0 +1,44 @@
+suite: message journal server.conf overrides
+templates:
+  - config/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # The cap (J-06) has to actually reach the server, not just pass validation.
+  # Graylog's suffixes are binary: 5gb is 5 x 1024^3, which is what the exporter
+  # reports as gl_journal_size_limit.
+  - it: renders the journal cap
+    asserts:
+      - equal:
+          path: data.GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE
+          value: "5gb"
+
+  - it: passes an overridden cap through
+    set:
+      graylog.config.messageJournal.maxSize: "12gb"
+      graylog.persistence.size: "20Gi"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE
+          value: "12gb"
+
+  - it: falls back to Graylog's own default when the cap is unset
+    set:
+      graylog.config.messageJournal.maxSize: ""
+    asserts:
+      - equal:
+          path: data.GRAYLOG_MESSAGE_JOURNAL_MAX_SIZE
+          value: "5gb"
+
+  - it: renders the rest of the journal settings alongside it
+    asserts:
+      - equal:
+          path: data.GRAYLOG_MESSAGE_JOURNAL_ENABLED
+          value: "true"
+      - equal:
+          path: data.GRAYLOG_MESSAGE_JOURNAL_MAX_AGE
+          value: "12h"
+      - equal:
+          path: data.GRAYLOG_MESSAGE_JOURNAL_SEGMENT_SIZE
+          value: "100mb"

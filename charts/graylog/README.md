@@ -14,11 +14,17 @@ Official Helm chart for Graylog.
   * [Installing on AWS EKS](#installing-on-aws-eks)
 * [Post-installation](#post-installation)
   * [Set root Graylog password](#set-root-graylog-password)
+  * [Reset a lost root password](#reset-a-lost-root-password)
   * [Set external access](#set-external-access)
 * [Usage](#usage)
   * [Scale Graylog](#scale-graylog)
+  * [Message Journal Lifecycle](#message-journal-lifecycle)
   * [Scale DataNode](#scale-datanode)
+  * [Data Node Replicas and Data Redundancy](#data-node-replicas-and-data-redundancy)
+  * [High Availability Defaults](#high-availability-defaults)
+  * [Health Probes](#health-probes)
   * [Scale MongoDB](#scale-mongodb)
+  * [MongoDB Topology](#mongodb-topology)
   * [Modify Graylog `server.conf` parameters](#modify-graylog-serverconf-parameters)
   * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
   * [Add inputs](#add-inputs)
@@ -27,6 +33,7 @@ Official Helm chart for Graylog.
 * [Using External Resources](#using-external-resources)
   * [Managing Secrets Externally](#managing-secrets-externally)
   * [Bring Your Own MongoDB](#bring-your-own-mongodb)
+  * [Bring Your Own OpenSearch](#bring-your-own-opensearch)
 * [Hardened Environments](#hardened-environments)
 * [Maintenance](#maintenance)
   * [Back Up and Restore MongoDB](#back-up-and-restore-mongodb)
@@ -40,6 +47,54 @@ Official Helm chart for Graylog.
 - Kubernetes **v1.32+**
 - Helm **v3.0+**
 - MongoDB Controllers for Kubernetes Operator **v1.6.1** (required unless a [user-provided MongoDB](#bring-your-own-mongodb) is supplied)
+
+## Prerequisites
+
+### Data Node
+
+#### Kernel Parameter: vm.max_map_count
+
+The Data Node component embeds OpenSearch, which requires the kernel parameter `vm.max_map_count` to be set to at least **262144**. 
+Most cloud-managed Kubernetes clusters (EKS, GKE, AKS) default to **65530**, which will cause the Data Node to fail at startup.
+
+**Check the current value on your cluster nodes:**
+```sh
+sysctl vm.max_map_count
+```
+
+**If the value is less than 262144, you have two options:**
+
+**Option 1: Manual cluster-wide fix (recommended for existing clusters)**
+```sh
+# Run on each node (or via a DaemonSet)
+sudo sysctl -w vm.max_map_count=262144
+
+# Make it permanent
+echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+**Option 2: Automatic fix via Helm (opt-in)**
+Enable the `sysctlInit` container when installing. This runs a privileged init container once during pod startup to set the kernel parameter.
+
+**Values file approach (recommended):**
+```yaml
+# values.yaml
+datanode:
+  sysctlInit:
+    enabled: true
+    vmMaxMapCount: 262144  # optional, defaults to 262144
+```
+
+Then install: `helm install graylog graylog/graylog -n graylog --create-namespace -f values.yaml`
+
+This runs a one-time privileged init container on each Data Node pod to adjust the kernel parameter. The container runs only during startup and does not affect the main application container.
+
+
+The default value is **262144** (the minimum required by OpenSearch). The value must be at least 262144.
+> [!NOTE]
+> This does not retroactively fix nodes that already exist in your cluster; existing nodes must be updated manually.
+
 
 ## External Dependencies
 
@@ -61,6 +116,14 @@ overall production readiness.
 You may also choose to [bring your own MongoDB](#bring-your-own-mongodb), but for ease of deployment as well as
 improved reliability the MCK Operator remains the preferred way to deploy MongoDB and is therefore enabled by default.
 
+### OpenSearch
+
+The chart deploys the Graylog **Data Node** by default, which manages its own embedded OpenSearch, so no external
+search backend is required. If you would rather run OpenSearch yourself — for example with the
+[OpenSearch Kubernetes Operator](https://github.com/opensearch-project/opensearch-k8s-operator) — you can
+[bring your own OpenSearch](#bring-your-own-opensearch) instead. The cluster must run a Graylog-supported OpenSearch
+version (**2.x, up to 2.19.x** for Graylog 7.x; **3.0+ is not supported**).
+
 ### Ingress Controller
 
 By default, the chart exposes a Kubernetes service.
@@ -71,7 +134,7 @@ You can use any ingress controller (e.g., NGINX, HAProxy), but make sure it's in
 
 ### cert-manager
 
-You can always [bring your own certificates](#bring-your-own-certificate-ingress-controller-recommended),
+You can always [bring your own certificates](#option-1-bring-your-own-certificate-with-ingress-controller-recommended),
 but using `cert-manager` can simplify TLS setup and certificate renewal considerably.
 
 Make sure you have [Ingress Controller](#ingress-controller) installed, and that `ingress.enabled` is set to `true`.
@@ -79,6 +142,21 @@ Then, configure `ingress.web.tls` and `ingress.config.issuer` with the name of a
 and let `cert-manager` do the rest!
 
 # Installation
+## Pre Installation
+
+1. If Argo CD or Flux manages this release, create the Graylog `Secret` before you install the
+   chart. Then set `global.existingSecretName` to the name of that Secret. Make sure that the
+   Secret contains every required key in the [Graylog Secrets](../../docs/graylog-secrets.md)
+   guide. The optional keys in that guide are only necessary for the features that use them.
+2. An external Secret requires an external MongoDB. Set `mongodb.communityResource.enabled=false`
+   and put the connection string in `GRAYLOG_MONGODB_URI`. The chart refuses to render an external
+   Secret together with the bundled MongoDB. See
+   [examples/values-existing-secret-external-mongodb.yaml](../../examples/values-existing-secret-external-mongodb.yaml)
+   for a complete example.
+
+> [!CAUTION]
+> Chart-generated credentials can change after the first deployment when a GitOps controller
+> renders the chart. An externally managed Secret prevents this change.
 
 ## Installing on Kubernetes
 
@@ -154,13 +232,47 @@ helm install graylog graylog/graylog --namespace graylog --create-namespace --se
 # Post-Installation
 
 ## Set root Graylog password
-Graylog is installed with a random password by default. We recommend setting a persistent password once all pods achieve the `RUNNING` state using 
-the following command:
+Graylog is installed with a random password by default. It is stored in the release's
+backup Secret, which survives upgrades and uninstalls, and can be printed at any time:
+
+```sh
+kubectl get secret graylog-backup-secret --namespace graylog -o jsonpath="{.data.graylog-root-password}" | base64 -d
+```
+
+If you set `graylog.config.rootPassword` (or use `global.existingSecretName`), the
+chart stores only the SHA-256 hash of the password and you are responsible for keeping
+the plaintext. We recommend setting a persistent password once all pods achieve the
+`RUNNING` state using the following command:
 
 ```sh
 echo "Enter your new password and press return:" && read -s pass
 helm upgrade graylog graylog/graylog --namespace graylog --reuse-values --set "graylog.config.rootPassword=$pass"; unset pass
 ```
+
+## Reset a lost root password
+
+If the password is lost and you cannot set a new one through Helm (for example when
+your values are managed by GitOps), patch the new password's SHA-256 into both
+Secrets and restart Graylog:
+
+These patch the Secrets' `data` field, so the value *is* base64 here — unlike
+[an externally managed Secret](../../docs/graylog-secrets.md), which uses `stringData`
+and takes plain text. Both `printf '%s'` calls matter: `echo` would append a newline
+and the hash would not match.
+
+```sh
+PASS="your-new-password"
+# macOS: shasum -a 256 instead of sha256sum, and plain `base64` (no -w flag).
+SHA=$(printf '%s' "$PASS" | sha256sum | awk '{print $1}')
+SHA64=$(printf '%s' "$SHA" | base64 -w0)
+kubectl patch secret graylog-secrets --namespace graylog -p "{\"data\":{\"GRAYLOG_ROOT_PASSWORD_SHA2\":\"$SHA64\"}}"
+kubectl patch secret graylog-backup-secret --namespace graylog -p "{\"data\":{\"graylog-root-password-sha2\":\"$SHA64\"}}"
+kubectl rollout restart statefulset graylog --namespace graylog
+```
+
+Do not delete the Secrets to force a reset. The backup Secret also holds the
+password pepper (`graylog-secret`), and losing that invalidates every stored
+user credential.
 
 ## Set external access
 
@@ -172,7 +284,7 @@ Once an Ingress Controller has been installed and configured, run the following 
 [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) resource:
 
 ```sh
-helm upgrade graylog graylog/graylog -n graylog --set ingress.web.enabled="true" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set ingress.enabled="true" --set ingress.web.enabled="true" --reuse-values
 ```
 
 ### Alternative: LoadBalancer Service
@@ -182,6 +294,31 @@ pre-existing dependencies.
 ```sh
 helm upgrade graylog graylog/graylog -n graylog --set graylog.service.type="LoadBalancer" --reuse-values
 ```
+
+### Override the public URI
+The chart gives Graylog a public URI in `GRAYLOG_HTTP_EXTERNAL_URI`. Browsers and API clients use this URI.
+The chart reads it from the Ingress hostname or from the LoadBalancer Service address.
+
+These two sources are not always correct. The public URI differs from them in these cases:
+
+- Graylog is behind a path prefix, such as `https://example.com/graylog/`.
+- An external proxy or CDN answers on a different name.
+- TLS ends outside the cluster, so the public scheme is `https` but the Ingress has no TLS.
+- The Ingress has more than one hostname, and the first one is not the public one.
+
+In these cases, set the URI directly:
+
+```sh
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.network.externalUri="https://logs.example.com/graylog" --reuse-values
+```
+
+This value comes before the Ingress hostnames and the LoadBalancer Service address.
+Only `graylog.config.tls.cn` comes before this value, and only when `graylog.config.tls.enabled` is `true`.
+
+Use the full URI form in all four cases. A bare hostname becomes `<scheme>://<hostname>:<port>/`.
+The chart takes this scheme from `graylog.config.tls.enabled` and this port from `graylog.service.ports.app`.
+Both values describe the connection to the pod, not the public endpoint.
+A bare hostname is therefore not correct behind an Ingress, a proxy, a CDN, or external TLS.
 
 ### Temporary access: Port Forwarding
 Finally, if you wish to enable external access _temporarily_, you can always use port forwarding:
@@ -196,10 +333,103 @@ kubectl port-forward service/graylog-svc 9000:9000 -n graylog
 ```sh
 # scaling out: add more Graylog nodes to your cluster
 helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=3 --reuse-values
+```
 
+Scaling **out** is safe and needs no procedure. Scaling **in** can lose buffered
+messages — read [Message Journal Lifecycle](#message-journal-lifecycle) before you
+do it.
+
+```sh
 # scaling in: remove Graylog nodes from your cluster
+# WARNING: drain first. See "Message Journal Lifecycle" below.
 helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=1 --reuse-values
 ```
+
+## Message Journal Lifecycle
+
+Each Graylog node buffers incoming messages in an on-disk journal on its own PVC,
+then works them off into the indexer.
+
+Rolling upgrades are safe with no procedure: the replacement pod keeps the ordinal,
+re-binds the same PVC, and replays the journal. **Scale-in is not.** The ordinal
+stops existing, so its PVC is retained but never mounted again, and anything left
+unprocessed in that journal is unreachable. Graceful shutdown flushes memory buffers
+*into* the journal; it never drains the journal *out*.
+
+Before scaling in, drain the node. See
+[Graylog Message Handling](../../docs/graylog-message-handling.md) for the runbook,
+how to read a drain's logs, and what to do with the leftover PVC.
+
+### Shutdown budget
+
+`graylog.terminationGracePeriodSeconds` (default `300`) covers the preStop hook
+**and** the SIGTERM after it. The Kubernetes default of 30s is not enough to flush
+buffers under load.
+
+### Automatic drain
+
+Off by default. Holds pod termination while the journal is worked off, so a
+scale-in has a chance to finish processing:
+
+```sh
+helm upgrade graylog graylog/graylog -n graylog \
+  --set graylog.lifecycle.preStopDrain.enabled=true --reuse-values
+```
+
+It reads journal depth from the Prometheus exporter on localhost, so it needs no
+credentials, but it does require `graylog.service.metrics.enabled` (the default).
+
+It is best-effort. It cannot stop inputs, so on a node still receiving traffic the
+journal never reaches zero and the hook gives up. It also cannot tell an upgrade
+from a scale-in, so it slows both. Enable it if you routinely scale in.
+
+> [!CAUTION]
+> Do not enable the drain and reduce the replica count in one change. The preStop hook is
+> part of the pod spec, so an existing pod does not get the hook until Kubernetes replaces
+> it. Kubernetes deletes the highest-ordinal pod with its old spec, and that pod drains
+> nothing.
+
+Enable the drain before you scale in:
+
+1. Set `graylog.lifecycle.preStopDrain.enabled=true` and keep the replica count unchanged.
+2. Wait for every pod to carry the new spec. With the default
+   `graylog.updateStrategy.type: RollingUpdate`, run
+   `kubectl rollout status sts/graylog -n graylog`. With `OnDelete`, Kubernetes does not replace
+   the pods for you: delete each one, highest ordinal first, and wait for its replacement to
+   become ready before you delete the next.
+3. Make sure that the highest-ordinal pod carries the hook. Run
+   `kubectl get pod graylog-<n> -n graylog -o jsonpath='{.spec.containers[0].lifecycle.preStop}'`.
+   An empty result means that the pod still runs the old spec. Do not scale in yet.
+4. Reduce the replica count by one.
+
+| Key | Description | Default |
+|---|---|---|
+| `enabled` | Hold termination while the journal drains. | `false` |
+| `endpointPropagationDelaySeconds` | Sleep before the first sample, waiting for endpoint removal to propagate. If a load balancer targets pod IPs directly, increase this value and `graylog.terminationGracePeriodSeconds` by the same number of seconds. | `15` |
+| `shutdownReserveSeconds` | Held back out of the grace period for Graylog's own shutdown. | `45` |
+| `pollIntervalSeconds` | Seconds between journal-depth samples. | `2` |
+| `stallPolls` | Give up after this many polls with no new low. | `10` |
+| `confirmPolls` | Consecutive zero readings required before declaring success. | `3` |
+| `metricsRetries` | Metrics probe retries before giving up. | `5` |
+| `statusIntervalSeconds` | How often to log a progress line. | `10` |
+| `feasibilityWarmupPolls` | Polls to observe before projecting whether the drain can finish at all; aborts early if it cannot. `0` disables. | `5` |
+
+All under `graylog.lifecycle.preStopDrain`. The drain budget is
+`terminationGracePeriodSeconds - endpointPropagationDelaySeconds - shutdownReserveSeconds`
+(240s at defaults); the chart refuses to render if that is not positive.
+
+### PVC retention
+
+Both StatefulSets pin `persistentVolumeClaimRetentionPolicy` to `Retain`, so no
+claim is deleted automatically. `graylog.persistence.retentionPolicy.whenScaled: Delete`
+is **refused** — it would destroy a scaled-in node's journal. The Data Node permits
+it, since shard data rebuilds from replicas.
+
+> [!WARNING]
+> Retention protects the claim from the StatefulSet controller, not from you.
+> Deleting a retained PVC destroys the disk under most StorageClasses, including this
+> chart's gp3 class. See
+> [Deleting a leftover PVC](../../docs/graylog-message-handling.md#deleting-a-leftover-pvc).
 
 ## Scale DataNode
 ```sh
@@ -207,11 +437,184 @@ helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=1 --reuse
 helm upgrade graylog graylog/graylog -n graylog --set datanode.replicas=5 --reuse-values
 ```
 
+### Data Node Replicas and Data Redundancy
+
+> [!IMPORTANT]
+> Adding Data Nodes does not by itself make your log data redundant. Index set
+> replicas control that, and they are configured in Graylog, not in this chart.
+
+An index set with 0 replicas stores exactly one copy of each shard. If the Data
+Node holding that shard is lost, the data is **permanently gone** — this is data
+loss, not a temporary outage that resolves when the pod reschedules.
+
+To survive the loss of a single Data Node, run at least 2 Data Nodes and set at
+least 1 replica on every index set:
+
+- **Per index set** — *System / Indices*, select the index set, then set
+  *Index replicas* to `1` or higher. This applies to new indices; existing
+  indices keep the replica count they were created with.
+- **Default for new index sets** — set `elasticsearch_replicas` in
+  `graylog.config`:
+
+  ```yaml
+  graylog:
+    replicas: 2
+    config:
+      elasticsearch_replicas: 1
+  ```
+
+Each replica multiplies storage consumption, so size
+`datanode.persistence.data.size` accordingly: N replicas means N+1 copies of
+your data.
+
+## High Availability Defaults
+
+The chart applies these by default. Both are safe on single-node development
+clusters and need no configuration for the common case.
+
+- **Soft pod anti-affinity** on Graylog, Data Node and MongoDB pods, spreading
+  each tier across nodes by `kubernetes.io/hostname`. It is
+  `preferredDuringSchedulingIgnoredDuringExecution`, so pods still schedule when
+  there aren't enough nodes to spread across. Setting `graylog.affinity` or
+  `datanode.affinity` replaces the chart default entirely for that tier.
+- **PodDisruptionBudgets** for Graylog (`minAvailable: 1`) and Data Node
+  (`minAvailable: 2`), which keep node drains and cluster upgrades from evicting
+  a whole tier at once. The Graylog PDB only renders at `replicas >= 2`. Disable
+  with `graylog.podDisruptionBudget.enabled=false` /
+  `datanode.podDisruptionBudget.enabled=false`.
+
+> [!NOTE]
+> A PDB makes node drains block rather than proceed destructively. On a cluster
+> with too few nodes to satisfy `minAvailable`, a drain will wait instead of
+> completing — this is the intended protection, not a failure.
+
+## Health Probes
+
+The readiness probe is a StatefulSet's only rollout throttle. Nothing else paces
+a rolling update, so a probe that goes green before the application can serve
+lets the rollout move on anyway. So each default below checks that the pod can
+serve, not that a port is open.
+
+| Tier | Startup / Readiness | Liveness |
+|---|---|---|
+| Graylog | `GET /api/system/lbstatus` | TCP connect on the app port |
+| Data Node | TCP connect on the OpenSearch port (`9200`) | TCP connect on the Data Node API port (`8999`) |
+
+### Graylog
+
+Readiness uses `/api/system/lbstatus`, Graylog's own unauthenticated
+load-balancer status endpoint, which returns `200 ALIVE` or `503 DEAD`. A TCP
+connect goes green the moment Jetty binds the port, before the node has rejoined
+the cluster, restarted its inputs or worked through journal recovery.
+
+Liveness stays a TCP connect on purpose. `DEAD` means "stop sending me traffic",
+which is what graceful shutdown and a manual drain both set. Liveness on
+`lbstatus` would have kubelet kill a healthy pod that is draining or parked for
+maintenance.
+
+That split is what makes draining work. Setting `lb_status` to `dead` takes a pod
+out of the Service endpoints on its own, without deleting it:
+
+```sh
+# take a pod out of rotation; readiness drops it from endpoints within ~1 minute
+kubectl exec -n graylog graylog-0 -- curl -su "admin:$PASS" -H 'X-Requested-By: cli' \
+  -X PUT http://localhost:9000/api/system/lbstatus/override/dead
+```
+
+> [!IMPORTANT]
+> Address the pod, not the Service. Once readiness drops the pod, the Service no
+> longer routes to it, so a request sent to the Service cannot reach it to put it
+> back. `kubectl exec` into the pod as above, or use its DNS name, IP or
+> `kubectl port-forward`, to set it back to `alive`.
+
+### Data Node
+
+Readiness watches the OpenSearch HTTP port rather than the Data Node API port.
+The Data Node binds its own REST API roughly 30 seconds before it starts
+OpenSearch on an idle single-node cluster, and the gap grows when there are
+shards to recover. A probe on `8999` reports `Ready` while OpenSearch is still
+down, and a rolling update would take down the next Data Node on the strength of
+that.
+
+> [!NOTE]
+> Data Node readiness proves OpenSearch is listening. It cannot gate on shard
+> recovery or cluster-green. Both Data Node ports serve HTTPS with
+> authentication and the image ships no HTTP client, so there is no
+> unauthenticated health endpoint to probe. Check cluster health yourself
+> between Data Node restarts.
+
+### Startup probes
+
+Startup probes on both tiers hold liveness and readiness off until the process
+has booted, so a first-node MongoDB migration or a large journal replay cannot
+trip the liveness budget. `failureThreshold x periodSeconds` is the whole boot
+budget, 5 minutes by default. Raise that rather than loosening liveness.
+
+### Custom probe handlers
+
+Every probe accepts its own handler (`httpGet`, `tcpSocket`, `exec`, `grpc`) in
+standard Kubernetes syntax, which replaces the chart default for that probe:
+
+```yaml
+datanode:
+  readinessProbe:
+    httpGet:
+      path: /_cluster/health
+      port: 9200
+      scheme: HTTPS
+```
+
+### Data Node pod management
+
+`datanode.podManagementPolicy` defaults to `OrderedReady`. `Parallel` is the
+established pattern for OpenSearch-style quorum clusters, where waiting for pod
+N-1 to be `Ready` before starting pod N can deadlock a cluster that needs a
+quorum to become healthy in the first place.
+
+> [!WARNING]
+> `podManagementPolicy` is immutable. Kubernetes forbids updates to any
+> StatefulSet spec field other than `replicas`, `ordinals`, `template`,
+> `updateStrategy`, `revisionHistoryLimit`,
+> `persistentVolumeClaimRetentionPolicy` and `minReadySeconds`, so changing it
+> on a live release makes `helm upgrade` fail. Set it on a fresh install, or
+> recreate the StatefulSet to change it:
+>
+> ```sh
+> # --cascade=orphan leaves the running pods and their PVCs in place
+> kubectl delete statefulset graylog-datanode -n graylog --cascade=orphan
+> helm upgrade graylog graylog/graylog -n graylog --set datanode.podManagementPolicy=Parallel
+> ```
+
 ## Scale MongoDB
 ```sh
 # scaling out: add more MongoDB nodes to your replica set
 helm upgrade graylog graylog/graylog -n graylog --set mongodb.replicas=4 --reuse-values
 ```
+
+### MongoDB Topology
+
+By default, the chart deploys MongoDB with a **production-recommended topology**: 3 data-bearing replicas with no arbiters. This configuration:
+- Supports `w:majority` writes even with one replica down
+- Handles rolling upgrades and maintenance gracefully
+- Provides true high availability without cost overhead
+
+**Example: Default production topology**
+```yaml
+mongodb:
+  replicas: 3
+  arbiters: 0
+```
+
+For **cost-optimized test/staging environments**, you may use the Primary-Secondary-Arbiter (PSA) topology instead. However, be aware that this topology is not recommended by MongoDB for production use:
+
+```yaml
+mongodb:
+  replicas: 2
+  arbiters: 1
+```
+
+> [!WARNING]
+> With PSA topology, if one data-bearing replica fails, `w:majority` writes will stall until the member recovers.
 
 ## Modify Graylog `server.conf` parameters
 
@@ -222,16 +625,16 @@ helm upgrade graylog graylog/graylog -n graylog --set mongodb.replicas=4 --reuse
 helm upgrade graylog graylog/graylog -n graylog --set graylog.config.timezone="America/Denver" --reuse-values
 
 # set JVM options
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.serverJavaOpts="-Xms2g -Xmx1g" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set graylog.config.serverJavaOpts="-Xms1g -Xmx2g" --reuse-values
 
 # redefine message journal maxAge
 helm upgrade graylog graylog/graylog -n graylog --set graylog.config.messageJournal.maxAge="24h" --reuse-values
 
 # enable CORS headers for HTTP interface
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.network.enableCors=true --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set-string graylog.config.network.enableCors=true --reuse-values
 
 # enable email transport and set sender address
-helm upgrade graylog graylog/graylog -n graylog --set graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
+helm upgrade graylog graylog/graylog -n graylog --set-string graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
 ```
 
 ## Customize deployed Kubernetes resources
@@ -247,6 +650,196 @@ helm upgrade graylog graylog/graylog -n graylog --set graylog.readinessProbe.ini
 # use a custom Storage Class for all resources (e.g. for AWS EKS)
 helm upgrade graylog graylog/graylog -n graylog --set global.storageClass="gp2" --reuse-values
 ```
+
+### Labels and annotations
+
+Every object the chart deploys accepts custom labels and annotations. Set them
+once with `global.commonLabels` / `global.commonAnnotations`, and use the
+per-object values when only one resource needs them:
+
+```yaml
+# custom-metadata.yaml
+global:
+  commonLabels:
+    cost-center: "1234"
+    environment: production
+  commonAnnotations:
+    owner: observability-team
+
+graylog:
+  # StatefulSet, ConfigMaps and Secrets
+  labels:
+    tier: backend
+  annotations:
+    reloader.stakater.com/auto: "true"
+  # Graylog pods only
+  podLabels:
+    tier: backend
+  podAnnotations:
+    prometheus.io/scrape: "true"
+  service:
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+
+datanode:
+  labels:
+    tier: storage
+
+ingress:
+  web:
+    labels:
+      tier: edge
+```
+
+> [!NOTE]
+> MongoDB pods are the one exception. `mongodb.labels` / `mongodb.annotations`
+> apply to the `MongoDBCommunity` object, but there is no `mongodb.podLabels` —
+> the MongoDB Community operator owns the pod template of the StatefulSet it
+> manages, labels it `app: <release>-mongo-rs-svc` and discards anything the
+> chart puts there. Pod-level metadata for MongoDB has to come from the
+> operator's own API.
+
+Precedence, lowest to highest: `global.common*`, the per-object value, then the
+chart's own identity labels (`app.kubernetes.io/*`, `helm.sh/chart`, `app`) and
+its Helm hook and resource-policy annotations. Chart-owned values always win, so
+custom metadata can never break release lifecycle handling.
+
+> [!NOTE]
+> Custom labels never reach a workload's `spec.selector`, which is immutable
+> once created. They land on the object and on the pod template only, so labels
+> can safely be added to a release that is already running — `helm upgrade` will
+> not fail on a changed selector.
+
+#### Immutable fields are deliberately left alone
+
+Kubernetes accepts updates to only six StatefulSet `spec` fields: `replicas`,
+`ordinals`, `template`, `updateStrategy`, `persistentVolumeClaimRetentionPolicy`
+and `minReadySeconds`. Anything else — `selector` and `volumeClaimTemplates` in
+particular — is rejected on update.
+
+So the chart injects nothing into those fields. `global.commonLabels` and
+`global.commonAnnotations` reach every object's own metadata and every pod
+template, but they stop at `volumeClaimTemplates`. Were it otherwise, simply
+upgrading to a chart version that added a label would fail for every existing
+release, and would keep failing on each release after that, because the identity
+labels include `helm.sh/chart` and `app.kubernetes.io/version`.
+
+You can still label a volume claim explicitly with
+`graylog.persistence.labels`, `datanode.persistence.data.labels`,
+`datanode.persistence.nativeLibs.labels` or `mongodb.persistence.labels`. That is
+safe on a fresh install. On a release that already exists it is a one-way door —
+the StatefulSet has to be recreated, which `kubectl delete statefulset <name>
+--cascade=orphan` does without touching the running pods or the PVCs.
+
+This rule is enforced by `tests/selector_immutability_test.yaml`. If you add an
+object or a metadata call site, extend that suite; for anything immutable use
+the `graylog.claim.metadata` helper, never `graylog.metadata.labels`.
+
+### Extra volumes, mounts and containers
+
+Graylog and Data Node pods accept additional volumes, volume mounts, init
+containers and sidecars:
+
+```yaml
+# extra-volumes.yaml
+graylog:
+  extraVolumes:
+    - name: corporate-ca
+      secret:
+        secretName: corporate-ca
+  extraVolumeMounts:
+    - name: corporate-ca
+      mountPath: /etc/ssl/corporate
+      readOnly: true
+  # the chart's copy-data init container can mount them too
+  extraInitVolumeMounts:
+    - name: corporate-ca
+      mountPath: /mnt/ca
+      readOnly: true
+  extraInitContainers:
+    - name: wait-for-mongodb
+      image: busybox:1.37
+      command: ["sh", "-c", "until nc -z graylog-mongo-rs-svc 27017; do sleep 2; done"]
+  extraContainers:
+    - name: log-shipper
+      image: busybox:1.37
+```
+
+### Pod scheduling and runtime
+
+Both workloads expose `nodeSelector`, `tolerations`, `affinity`,
+`topologySpreadConstraints`, `priorityClassName`, `schedulerName`,
+`runtimeClassName`, `terminationGracePeriodSeconds`, `dnsPolicy`, `dnsConfig`,
+`hostAliases` and container `lifecycle` hooks:
+
+```yaml
+# scheduling.yaml
+graylog:
+  priorityClassName: high-priority
+  terminationGracePeriodSeconds: 120
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app: graylog-app
+  lifecycle:
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "sleep 10"]
+```
+
+`topologySpreadConstraints` is the one to reach for in a multi-AZ cluster. The
+chart's default anti-affinity is a *soft* hostname preference: it spreads pods
+across nodes when it can, but it does not guarantee a spread across zones, so a
+single-zone failure can still take every Data Node replica with it.
+
+> [!IMPORTANT]
+> On the Graylog workload, `lifecycle.preStop` and
+> `lifecycle.preStopDrain.enabled` both define a preStop hook, and a container
+> can only have one. Setting both fails the render rather than silently
+> dropping either — see [Message journal lifecycle](#message-journal-lifecycle)
+> for what the chart-managed drain does.
+
+### Extra objects
+
+Anything the chart does not model can be deployed alongside it with
+`extraObjects`. Entries share the release lifecycle — installed, upgraded and
+deleted with the chart — and are templated, so they can reference the release:
+
+```yaml
+# extra-objects.yaml
+extraObjects:
+  - apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    metadata:
+      name: '{{ include "graylog.fullname" . }}-metrics'
+    spec:
+      selector:
+        matchLabels:
+          app.kubernetes.io/instance: '{{ .Release.Name }}'
+          app.kubernetes.io/component: server
+      endpoints:
+        - port: metrics
+```
+
+Entries may also be given as strings, which is the practical form when the
+manifest itself contains Helm syntax that must survive to render time:
+
+```yaml
+extraObjects:
+  - |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: {{ include "graylog.fullname" . }}-extra
+    data:
+      namespace: {{ .Release.Namespace }}
+```
+
+`global.commonLabels` and `global.commonAnnotations` are merged into every extra
+object; anything set on the object itself wins.
 
 ## Add inputs
 
@@ -389,6 +982,35 @@ Use the following paths when enabling the Geo-location processor in the Graylog 
 - Path to the city database: `/usr/share/graylog/data/geolocation/GeoLite2-City.mmdb`
 - Path to the ASN database: `/usr/share/graylog/data/geolocation/GeoLite2-ASN.mmdb`
 
+### MaxMind Credentials From An External Secret
+
+Instead of passing the credentials to Helm, put them in a Secret of your own and point the
+GeoIP update sidecar at it. The sidecar reads that Secret directly, so the credentials never
+pass through the chart-managed Graylog Secret.
+
+```sh
+kubectl create secret generic graylog-geoip -n graylog \
+  --from-literal=GEO_IP_MAXMIND_ACCOUNT_ID="<YOUR-MAXMIND-ACCOUNT-ID-HERE>" \
+  --from-literal=GEO_IP_MAXMIND_LICENSE_KEY="<YOUR-MAXMIND-LICENSE-KEY-HERE>"
+
+helm upgrade graylog graylog/graylog -n graylog --reuse-values \
+  --set graylog.config.geolocation.enabled=true \
+  --set graylog.config.geolocation.maxmindGeoIp.enabled=true \
+  --set graylog.config.geolocation.maxmindGeoIp.existingSecret=graylog-geoip
+```
+
+If your Secret uses different key names — say one generated by an `ExternalSecret` — override
+`graylog.config.geolocation.maxmindGeoIp.accountIdKey` and `licenseKeyKey`. See
+[examples/graylog-geoip-secret.yaml](../../examples/graylog-geoip-secret.yaml) for a complete
+manifest.
+
+> [!IMPORTANT]
+> This is independent of `global.existingSecretName`. That Secret is **not** expected to carry
+> `GEO_IP_MAXMIND_ACCOUNT_ID`/`GEO_IP_MAXMIND_LICENSE_KEY` — if you previously stored the MaxMind
+> credentials there, keep them where they are and set
+> `graylog.config.geolocation.maxmindGeoIp.existingSecret` to that same Secret name.
+> Inline `accountId`/`licenseKey` values need chart-managed secrets and are rejected together with
+> `global.existingSecretName`.
 ## Delegate Data Node Roles
 
 By default, every Data Node carries all OpenSearch roles. In larger clusters you can dedicate
@@ -427,6 +1049,9 @@ helm upgrade -i graylog graylog/graylog -n graylog --reuse-values --set global.e
 > - `graylog.config.customSecretPepper`
 > - `graylog.config.tls.keyPassword`
 
+The required keys, and how to build the secret, are documented in
+[Graylog Secrets](../../docs/graylog-secrets.md).
+
 ## Bring Your Own MongoDB
 
 By default, this chart deploys a MongoDB replica set using a custom resource template, which is rendered when 
@@ -449,6 +1074,54 @@ helm upgrade --install graylog graylog/graylog --namespace graylog --reuse-value
   --set mongodb.communityResource.enabled=false \
   --set global.existingSecretName="<your secret name>"
 ```
+
+## Bring Your Own OpenSearch
+
+By default, this chart deploys the **Graylog Data Node**, which manages an embedded OpenSearch for you. If you already
+run — or prefer to manage separately — an OpenSearch cluster, you can disable the Data Node and point Graylog directly
+at that cluster instead.
+
+Your cluster must run a version Graylog supports (see the
+[compatibility matrix](https://go2docs.graylog.org/current/downloading_and_installing_graylog/compatibility_matrix.htm)):
+for Graylog 7.x that is OpenSearch **2.x, up to 2.19.x**. **OpenSearch 3.0+ is not supported.** Graylog manages its own
+indices, so the cluster should be configured with `action.auto_create_index: false`. MongoDB is still required, either
+bundled or [your own](#bring-your-own-mongodb).
+
+```yaml
+# disable the bundled Data Node...
+datanode:
+  enabled: false
+
+# ...and point Graylog at your own OpenSearch cluster instead
+opensearch:
+  enabled: true
+  hosts:
+    - https://opensearch.my-namespace.svc.cluster.local:9200
+  auth:
+    existingSecret: my-opensearch-credentials
+    usernameKey: username
+    passwordKey: password
+  tls:
+    enabled: true
+    caSecret: my-opensearch-ca
+    caKey: ca.crt
+```
+
+The chart assembles `GRAYLOG_ELASTICSEARCH_HOSTS` (with the credentials injected into each host URI) into a dedicated
+`<release>-graylog-opensearch` secret, and imports the CA from `opensearch.tls.caSecret` into Graylog's Java truststore
+so the HTTPS endpoint is trusted. Because the connection lives in its own secret, this works whether or not you also
+[manage secrets externally](#managing-secrets-externally).
+
+`datanode.enabled` and `opensearch.enabled` are mutually exclusive: enabling both, enabling neither, or enabling
+OpenSearch without any `hosts` is rejected at render time. All `datanode.*` values are ignored in this mode.
+
+> [!IMPORTANT]
+> `opensearch.auth.existingSecret` is resolved with Helm's `lookup`, so the secret must already exist in the release
+> namespace when you install or upgrade. It cannot be read during `helm template` or `--dry-run` — including GitOps
+> rendering — where the resulting host URIs will not contain credentials.
+
+See the [Bring Your Own OpenSearch guide](../../docs/bring-your-own-opensearch.md) for credential and CA handling,
+certificate rotation, and caveats.
 
 # Hardened Environments
 
@@ -475,8 +1148,18 @@ See [the included guide](../../docs/mongodb-backup-restore.md) if you need to ta
 Graylog's MongoDB database and restore it with `mongorestore`.
 
 # Uninstall
+
+> [!WARNING]
+> A scale-in to zero replicas stops every Graylog pod. The StatefulSet does not set
+> `podManagementPolicy`, so Kubernetes deletes the pods one at a time, from the highest ordinal
+> down. The automatic drain is off by default, so unprocessed messages stay in the journal on
+> volumes that Helm does not delete.
+>
+> If the release still receives traffic, stop the inputs first. Then drain each pod. See
+> [Scaling in safely](../../docs/graylog-message-handling.md#scaling-in-safely).
+
 ```sh
-# optional: scale Graylog down to zero
+# optional: scale Graylog down to zero, after the journals are drained
 kubectl scale sts graylog -n graylog --replicas 0  && kubectl wait --for=delete pod graylog-0 -n graylog
 
 # remove chart
@@ -498,7 +1181,7 @@ helm template graylog graylog -f your-custom-values.yaml | yq
 # Logging
 ```sh
 # Graylog app logs
-stern statefulset/graylog-app -n graylog
+stern statefulset/graylog -n graylog
 # DataNode logs
 stern statefulset/graylog-datanode -n graylog
 ```
@@ -513,6 +1196,7 @@ stern statefulset/graylog-datanode -n graylog
 | `version`          | Override Graylog and Graylog Data Node version (optional).       | `""`    |
 | `nameOverride`     | Override the `app.kubernetes.io/name` label value (optional).    | `""`    |
 | `fullnameOverride` | Override the fully qualified name of the application (optional). | `""`    |
+| `extraObjects`     | Arbitrary manifests rendered with the release; each entry is templated. | `[]` |
 
 ## Global
 These values affect Graylog, DataNode, and MongoDB.
@@ -522,6 +1206,16 @@ These values affect Graylog, DataNode, and MongoDB.
 | `global.existingSecretName` | Reference to an existing Kubernetes secret. | `""`    |
 | `global.imagePullSecrets`   | Image pull secrets for private registries.  | `[]`    |
 | `global.storageClass`       | Storage class to use for PVCs.              | `""`    |
+| `global.commonLabels`       | Labels added to every object deployed by this chart.      | `{}` |
+| `global.commonAnnotations`  | Annotations added to every object deployed by this chart. | `{}` |
+
+> [!NOTE]
+> `global.commonLabels` and `global.commonAnnotations` are applied to *every*
+> object the chart renders. The chart's own identity labels
+> (`app.kubernetes.io/*`, `helm.sh/chart`, `app`) and its Helm hook/resource-policy
+> annotations always win, so they cannot be overwritten by accident. Per-object
+> `labels`/`annotations` values (e.g. `graylog.service.annotations`) take
+> precedence over the global ones.
 
 
 ## Graylog application
@@ -529,10 +1223,12 @@ These values affect Graylog, DataNode, and MongoDB.
 | Key Path                                                              | Description                                                 | Default                         |
 |-----------------------------------------------------------------------|-------------------------------------------------------------|---------------------------------|
 | `graylog.enabled`                                                     | Enable the Graylog server.                                  | `true`                          |
-| `graylog.enterprise`                                                  | Enable enterprise features.                                 | `true`                          |
+| `graylog.enterprise`                                                  | Select the Enterprise image as the default repository. Ignored when `graylog.image.repository` is set. | `true`                          |
 | `graylog.replicas`                                                    | Number of Graylog server replicas.                          | `2`                             |
 | `graylog.service.nameOverride`                                        | Override for service name.                                  | `""`                            |
 | `graylog.service.type`                                                | Kubernetes service type.                                    | `ClusterIP`                     |
+| `graylog.service.annotations`                                         | Annotations for the Graylog Service.                        | `{}`                            |
+| `graylog.service.labels`                                              | Labels for the Graylog Service.                             | `{}`                            |
 | `graylog.service.ports.app`                                           | Graylog web UI port.                                        | `9000`                          |
 | `graylog.service.ports.metrics`                                       | Metrics endpoint port.                                      | `9833`                          |
 | `graylog.service.metrics.enabled`                                     | Enable metrics collection.                                  | `true`                          |
@@ -557,7 +1253,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.mongodb.customUri`                                    | Custom MongoDB connection URI.                              | `""`                            |
 | `graylog.config.mongodb.maxConnections`                               | Max MongoDB connections.                                    | `"1000"`                        |
 | `graylog.config.mongodb.versionProbeAttempts`                         | MongoDB version probe attempts.                             | `"0"`                           |
-| `graylog.config.messageJournal.enabled`                               | Enable message journal.                                     | `"true"`                        |
+| `graylog.config.messageJournal.enabled`                               | Enable message journal. Requires durable storage — the chart refuses to render this with `persistence.enabled=false` and no `existingClaim`, since the journal would be an `emptyDir`. A string, so disabling needs `--set-string`. | `"true"` |
+| `graylog.config.messageJournal.maxSize`                                | On-disk journal cap. Must stay under 90% of `graylog.persistence.size`; the chart refuses to render otherwise. Binary suffixes — `5gb` is 5×1024³. | `"5gb"` |
 | `graylog.config.messageJournal.flushAge`                              | Journal flush age.                                          | `"1m"`                          |
 | `graylog.config.messageJournal.flushInterval`                         | Journal flush interval.                                     | `"1000000"`                     |
 | `graylog.config.messageJournal.maxAge`                                | Max journal age.                                            | `"12h"`                         |
@@ -569,7 +1266,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.network.maxHeaderSize`                                | Max header size.                                            | `"8192"`                        |
 | `graylog.config.network.readTimeout`                                  | Network read timeout.                                       | `"10s"`                         |
 | `graylog.config.network.threadPoolSize`                               | Network thread pool size.                                   | `"64"`                          |
-| `graylog.config.network.externalUri`                                  | External URI for Graylog web interface.                     | `""`                            |
+| `graylog.config.network.externalUri`                                  | Public URI of the Graylog web interface. Comes before the Ingress hostnames and the LoadBalancer Service address, so upgrades do not restart the pods when the load balancer address changes. Give a full URI. A bare hostname gets the chart scheme and the app port. | `""`                            |
 | `graylog.config.performance.asyncEventbusProcessors`                  | Async event bus processors.                                 | `"2"`                           |
 | `graylog.config.performance.autoRestartInputs`                        | Automatically restart inputs.                               | `"false"`                       |
 | `graylog.config.performance.inputBufferProcessors`                    | Input buffer processors.                                    | `"2"`                           |
@@ -595,11 +1292,21 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.email.webInterfaceUrl`                                | Web interface URL for email links.                          | `"https://graylog.example.com"` |
 | `graylog.config.plugins.enabled`                                      | Enable Graylog plugin system.                               | `false`                         |
 | `graylog.config.geolocation.enabled`                                  | Enable the Geolocation Processor.                           | `false`                         |
-| `graylog.config.geolocation.maxmindGeoIp.enabled`                     | Enable the MaxMind GeoIP update CronJob.                    | `true`                          |
-| `graylog.config.geolocation.maxmindGeoIp.accountId`                   | MaxMind Account ID.                                         |                                 |
-| `graylog.config.geolocation.maxmindGeoIp.licenseKey`                  | MaxMind License Key.                                        |                                 |
-| `graylog.config.geolocation.maxmindGeoIp.cronSchedule`                | Cron schedule expression.                                   | `"0 0 * * *"`                   |
-| `graylog.config.geolocation.maxmindGeoIp.postInstallRun`              | Enable post-installation helm hook Job.                     | `true`                          |
+| `graylog.config.geolocation.maxmindGeoIp.enabled`                     | Wire MaxMind credentials into the chart-managed Secret.     | `true`                          |
+| `graylog.config.geolocation.maxmindGeoIp.existingSecret`              | Secret with the MaxMind credentials, read by the sidecar.    | `""`                            |
+| `graylog.config.geolocation.maxmindGeoIp.accountIdKey`                | Key in `existingSecret` holding the account ID.             | `GEO_IP_MAXMIND_ACCOUNT_ID`     |
+| `graylog.config.geolocation.maxmindGeoIp.licenseKeyKey`               | Key in `existingSecret` holding the license key.            | `GEO_IP_MAXMIND_LICENSE_KEY`    |
+| `graylog.config.geolocation.maxmindGeoIp.accountId`                   | MaxMind Account ID (inline; wins over `existingSecret`).    |                                 |
+| `graylog.config.geolocation.maxmindGeoIp.licenseKey`                  | MaxMind License Key (inline; wins over `existingSecret`).   |                                 |
+| `graylog.config.geolocation.maxmindGeoIp.editionIds`                  | Space-separated MaxMind database editions to download.      | `"GeoLite2-City GeoLite2-ASN"`  |
+| `graylog.config.geolocation.sidecar.enabled`                          | Enable the GeoIP update sidecar container.                  | `true`                          |
+| `graylog.config.geolocation.sidecar.schedule`                         | Cron schedule for GeoIP database updates.                   | `"0 0 * * *"`                   |
+| `graylog.config.geolocation.sidecar.image.repository`                 | Image repository for the GeoIP updater.                     | `"maxmindinc/geoipupdate"`      |
+| `graylog.config.geolocation.sidecar.image.tag`                        | Image tag for the GeoIP updater.                            | `"v7.1.1"`                       |
+| `graylog.config.geolocation.sidecar.image.imagePullPolicy`            | Pull policy for the GeoIP updater image.                    | `IfNotPresent`                  |
+| `graylog.config.geolocation.sidecar.image.imagePullSecrets`           | Pull secrets for the GeoIP updater image.                   | `[]`                            |
+| `graylog.config.geolocation.sidecar.resources`                        | Resource requests/limits for the sidecar.                   | see `values.yaml`               |
+| `graylog.config.geolocation.sidecar.securityContext`                  | Container securityContext for the sidecar (runs as root).   | see `values.yaml`               |
 | `graylog.config.geolocation.mmdbSources.city.url`                     | GeoLite2-City.mmdb URL (only for initial asset fetch).      |                                 |
 | `graylog.config.geolocation.mmdbSources.city.checksum`                | GeoLite2-City.mmdb checksum (only for initial asset fetch). |                                 |
 | `graylog.config.geolocation.mmdbSources.asn.url`                      | GeoLite2-ASN.mmdb URL (only for initial asset fetch).       |                                 |
@@ -616,7 +1323,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.image.imagePullPolicy`                                       | Pull policy for Graylog image.                              | `IfNotPresent`                  |
 | `graylog.image.imagePullSecrets`                                      | Pull secrets for image.                                     | `[]`                            |
 | `graylog.updateStrategy.type`                                         | Pod update strategy for StatefulSet.                        | `"RollingUpdate"`               |
-| `graylog.updateStrategy.rollingUpdate.maxUnavailable`                 | Max unavailable pods during an update.                      | `1`                             |
+| `graylog.updateStrategy.rollingUpdate.maxUnavailable`                 | Max unavailable pods during an update. Honored only where the `MaxUnavailableStatefulSet` feature gate is enabled, silently dropped otherwise. | `1`                             |
 | `graylog.updateStrategy.rollingUpdate.partition`                      | Pods that will remain unaffected by the update.             | `""`                            |
 | `graylog.resources.limits.cpu`                                        | CPU limit for the Graylog pod.                              | `"2"`                           |
 | `graylog.resources.limits.memory`                                     | Memory limit for the Graylog pod.                           | `"2Gi"`                         |
@@ -626,31 +1333,67 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.persistence.storageClass`                                    | Storage class for the persistent volume.                    | `""`                            |
 | `graylog.persistence.volumeNameOverride`                              | Override name of the persistent volume.                     | `""`                            |
 | `graylog.persistence.existingClaim`                                   | Use an existing PVC.                                        | `""`                            |
-| `graylog.persistence.mountPath`                                       | Path where volume will be mounted.                          | `""`                            |
 | `graylog.persistence.accessModes`                                     | Access modes for the persistent volume.                     | `[]`                            |
 | `graylog.persistence.size`                                            | Size of the persistent volume.                              | `""`                            |
 | `graylog.persistence.annotations`                                     | Annotations for the persistent volume claim.                | `{}`                            |
 | `graylog.persistence.labels`                                          | Labels for the persistent volume claim.                     | `{}`                            |
-| `graylog.persistence.selector`                                        | Selector for the persistent volume.                         | `{}`                            |
+| `graylog.startupProbe.enabled`                                        | Enable startup probe. Holds liveness/readiness off until Graylog has booted. | `true`          |
+| `graylog.startupProbe.initialDelaySeconds`                            | Initial delay for startup probe.                            | `30`                            |
+| `graylog.startupProbe.periodSeconds`                                  | Period between startup probe checks.                        | `10`                            |
+| `graylog.startupProbe.timeoutSeconds`                                 | Timeout for the startup probe.                              | `5`                             |
+| `graylog.startupProbe.failureThreshold`                               | Failure threshold. x `periodSeconds` is the whole boot budget (default 5 min). | `30`         |
 | `graylog.livenessProbe.enabled`                                       | Enable liveness probe.                                      | `true`                          |
 | `graylog.livenessProbe.initialDelaySeconds`                           | Initial delay for liveness probe.                           | `60`                            |
 | `graylog.livenessProbe.periodSeconds`                                 | Period between liveness probe checks.                       | `10`                            |
 | `graylog.livenessProbe.timeoutSeconds`                                | Timeout for the liveness probe.                             | `5`                             |
 | `graylog.livenessProbe.failureThreshold`                              | Failure threshold for the liveness probe.                   | `6`                             |
-| `graylog.livenessProbe.successThreshold`                              | Success threshold for the liveness probe.                   | `1`                             |
 | `graylog.readinessProbe.enabled`                                      | Enable readiness probe.                                     | `true`                          |
 | `graylog.readinessProbe.initialDelaySeconds`                          | Initial delay for readiness probe.                          | `30`                            |
 | `graylog.readinessProbe.periodSeconds`                                | Period between readiness probe checks.                      | `10`                            |
 | `graylog.readinessProbe.timeoutSeconds`                               | Timeout for the readiness probe.                            | `5`                             |
 | `graylog.readinessProbe.failureThreshold`                             | Failure threshold for the readiness probe.                  | `6`                             |
 | `graylog.readinessProbe.successThreshold`                             | Success threshold for the readiness probe.                  | `1`                             |
+| `graylog.{startup,liveness,readiness}Probe.{httpGet,tcpSocket,exec,grpc}` | Custom probe handler, standard Kubernetes syntax. Replaces the chart default for that probe. | _(unset)_ |
+| `graylog.terminationGracePeriodSeconds`                               | Shutdown budget before SIGKILL. Covers the preStop hook and Graylog's own graceful shutdown. | `300`  |
+| `graylog.lifecycle.postStart`                                         | Your own postStart hook on the graylog-app container.       | `{}`                            |
+| `graylog.lifecycle.preStop`                                           | Your own preStop hook. Mutually exclusive with `preStopDrain.enabled`. | `{}`                  |
+| `graylog.lifecycle.preStopDrain.enabled`                              | Hold termination while the journal drains. See [Message Journal Lifecycle](#message-journal-lifecycle). | `false` |
+| `graylog.lifecycle.preStopDrain.endpointPropagationDelaySeconds`      | Wait for EndpointSlice removal to reach kube-proxy before sampling. | `15`                     |
+| `graylog.lifecycle.preStopDrain.pollIntervalSeconds`                  | Seconds between journal-depth samples.                      | `2`                             |
+| `graylog.lifecycle.preStopDrain.shutdownReserveSeconds`               | Seconds reserved out of the grace period for Graylog's own shutdown. | `45`                   |
+| `graylog.lifecycle.preStopDrain.stallPolls`                           | Give up after this many polls with no decrease in journal depth. | `10`                       |
+| `graylog.lifecycle.preStopDrain.statusIntervalSeconds`                | How often to log a progress line during the drain.          | `10`                            |
+| `graylog.lifecycle.preStopDrain.confirmPolls`                          | Consecutive zero readings required before declaring the journal drained. | `3`                |
+| `graylog.lifecycle.preStopDrain.metricsRetries`                        | Retries for the metrics probe before giving up.              | `5`                             |
+| `graylog.lifecycle.preStopDrain.feasibilityWarmupPolls`                | Polls observed before projecting whether the drain can finish; aborts early if it cannot. `0` disables. | `5` |
+| `graylog.persistence.retentionPolicy.whenDeleted`                      | PVC fate when the StatefulSet is deleted.                   | `Retain`                        |
+| `graylog.persistence.retentionPolicy.whenScaled`                       | PVC fate when scaled in. `Delete` is refused — it destroys a scaled-in node's journal. | `Retain` |
 | `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
 | `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                   | `1`                             |
+| `graylog.podDisruptionBudget.annotations`                             | Annotations for the PodDisruptionBudget.                    | `{}`                            |
+| `graylog.podDisruptionBudget.labels`                                  | Labels for the PodDisruptionBudget.                         | `{}`                            |
+| `graylog.annotations`                                                 | Annotations for the Graylog StatefulSet, ConfigMaps and Secrets. | `{}`                       |
+| `graylog.labels`                                                      | Labels for the Graylog StatefulSet, ConfigMaps and Secrets.      | `{}`                       |
 | `graylog.podAnnotations`                                              | Additional pod annotations.                                 | `{}`                            |
+| `graylog.podLabels`                                                   | Additional pod labels.                                      | `{}`                            |
 | `graylog.nodeSelector`                                                | Node selector for scheduling.                               | `{}`                            |
 | `graylog.tolerations`                                                 | Tolerations for scheduling.                                 | `[]`                            |
 | `graylog.affinity`                                                    | Affinity rules for scheduling.                              | `{}`                            |
+| `graylog.topologySpreadConstraints`                                   | Topology spread constraints for the pods.                   | `[]`                            |
+| `graylog.priorityClassName`                                           | PriorityClass for the pods.                                 | `""`                            |
+| `graylog.schedulerName`                                               | Custom scheduler for the pods.                              | `""`                            |
+| `graylog.runtimeClassName`                                            | RuntimeClass for the pods.                                  | `""`                            |
+| `graylog.terminationGracePeriodSeconds`                               | Grace period before pods are force-killed.                  | `nil`                           |
+| `graylog.dnsPolicy`                                                   | Pod DNS policy.                                             | `ClusterFirst`                  |
+| `graylog.dnsConfig`                                                   | Pod DNS configuration.                                      | `{}`                            |
+| `graylog.hostAliases`                                                 | Additional `/etc/hosts` entries for the pods.               | `[]`                            |
+| `graylog.lifecycle`                                                   | Lifecycle hooks for the `graylog-app` container.            | `{}`                            |
 | `graylog.extraEnv`                                                    | Custom EnvVar environment variables.                        | `[]`                            |
+| `graylog.extraVolumes`                                                | Additional volumes for the Graylog pods.                    | `[]`                            |
+| `graylog.extraVolumeMounts`                                           | Additional volume mounts for the `graylog-app` container.   | `[]`                            |
+| `graylog.extraInitVolumeMounts`                                       | Additional volume mounts for the `copy-data` init container. | `[]`                           |
+| `graylog.extraInitContainers`                                         | Additional init containers.                                 | `[]`                            |
+| `graylog.extraContainers`                                             | Additional sidecar containers.                              | `[]`                            |
 
 
 ### Graylog inputs
@@ -687,6 +1430,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
 | `datanode.roles`                                       | OpenSearch roles for the primary node group; empty = Data Node default. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `[]` |
 | `datanode.extraNodeGroups`                             | Map of additional node groups keyed by name, each inheriting and overriding `datanode.*`. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `{}` |
+| `datanode.service.annotations`                         | Annotations for the Data Node Service.          | `{}`              |
+| `datanode.service.labels`                              | Labels for the Data Node Service.               | `{}`              |
 | `datanode.service.ports.api`                           | API communication port.                         | `8999`            |
 | `datanode.service.ports.data`                          | Data communication port.                        | `9200`            |
 | `datanode.service.ports.config`                        | Configuration communication port.               | `9300`            |
@@ -707,51 +1452,89 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.image.imagePullPolicy`                       | Image pull policy.                              | `IfNotPresent`    |
 | `datanode.image.imagePullSecrets`                      | Image pull secrets.                             | `[]`              |
 | `datanode.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
-| `datanode.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update.          | `1`               |
+| `datanode.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update. Honored only where the `MaxUnavailableStatefulSet` feature gate is enabled, silently dropped otherwise. | `1`               |
 | `datanode.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
 | `datanode.resources.limits.cpu`                        | CPU limit for the datanode pod.                 | `"1"`             |
 | `datanode.resources.limits.memory`                     | Memory limit for the datanode pod.              | `"5Gi"`           |
 | `datanode.resources.requests.cpu`                      | CPU request for the datanode pod.               | `"500m"`          |
 | `datanode.resources.requests.memory`                   | Memory request for the datanode pod.            | `"3.5Gi"`         |
-| `datanode.persistence.enabled`                         | Enable persistence.                             | `true`            |
+| `datanode.persistence.retentionPolicy.whenDeleted`     | PVC fate when the StatefulSet is deleted.       | `Retain`          |
+| `datanode.persistence.retentionPolicy.whenScaled`      | PVC fate when scaled in. `Delete` is permitted here (shard data rebuilds from replicas), unlike on the Graylog StatefulSet. | `Retain` |
 | `datanode.persistence.data.enabled`                    | Enable persistent volume for data.              | `true`            |
 | `datanode.persistence.data.storageClass`               | Storage class for data PVC.                     | `""`              |
-| `datanode.persistence.data.existingClaim`              | Use existing PVC for data.                      | `""`              |
 | `datanode.persistence.data.mountPath`                  | Mount path for data volume.                     | `""`              |
 | `datanode.persistence.data.accessModes`                | Access modes for data PVC.                      | `[]`              |
 | `datanode.persistence.data.size`                       | Size of the data volume.                        | `"8Gi"`           |
-| `datanode.persistence.data.annotations`                | Annotations for data PVC.                       | `{}`              |
-| `datanode.persistence.data.labels`                     | Labels for data PVC.                            | `{}`              |
-| `datanode.persistence.data.selector`                   | Selector for data PVC.                          | `{}`              |
-| `datanode.persistence.data.dataSource`                 | Data source for data PVC.                       | `{}`              |
+| `datanode.persistence.data.annotations`                | Annotations for the data PVC (globals do not apply). | `{}`         |
+| `datanode.persistence.data.labels`                     | Labels for the data PVC (globals do not apply). | `{}`              |
 | `datanode.persistence.nativeLibs.enabled`              | Enable persistence for native libraries.        | `false`           |
 | `datanode.persistence.nativeLibs.storageClass`         | Storage class for native libs PVC.              | `""`              |
-| `datanode.persistence.nativeLibs.existingClaim`        | Use existing PVC for native libs.               | `""`              |
 | `datanode.persistence.nativeLibs.mountPath`            | Mount path for native libs volume.              | `""`              |
 | `datanode.persistence.nativeLibs.accessModes`          | Access modes for native libs PVC.               | `[]`              |
 | `datanode.persistence.nativeLibs.size`                 | Size of the native libs volume.                 | `"2Gi"`           |
 | `datanode.persistence.nativeLibs.annotations`          | Annotations for native libs PVC.                | `{}`              |
 | `datanode.persistence.nativeLibs.labels`               | Labels for native libs PVC.                     | `{}`              |
-| `datanode.persistence.nativeLibs.selector`             | Selector for native libs PVC.                   | `{}`              |
+| `datanode.startupProbe.enabled`                        | Enable startup probe.                           | `true`            |
+| `datanode.startupProbe.initialDelaySeconds`            | Initial delay for startup probe.                | `30`              |
+| `datanode.startupProbe.periodSeconds`                  | Period between startup probe checks.            | `10`              |
+| `datanode.startupProbe.timeoutSeconds`                 | Timeout for the startup probe.                  | `5`               |
+| `datanode.startupProbe.failureThreshold`               | Failure threshold. x `periodSeconds` is the boot budget. | `30`     |
 | `datanode.livenessProbe.enabled`                       | Enable liveness probe.                          | `true`            |
 | `datanode.livenessProbe.initialDelaySeconds`           | Initial delay for liveness probe.               | `30`              |
 | `datanode.livenessProbe.periodSeconds`                 | Period between liveness probe checks.           | `10`              |
 | `datanode.livenessProbe.timeoutSeconds`                | Timeout for the liveness probe.                 | `5`               |
 | `datanode.livenessProbe.failureThreshold`              | Failure threshold for the liveness probe.       | `6`               |
-| `datanode.livenessProbe.successThreshold`              | Success threshold for the liveness probe.       | `1`               |
 | `datanode.readinessProbe.enabled`                      | Enable readiness probe.                         | `true`            |
 | `datanode.readinessProbe.initialDelaySeconds`          | Initial delay for readiness probe.              | `10`              |
 | `datanode.readinessProbe.periodSeconds`                | Period between readiness probe checks.          | `10`              |
 | `datanode.readinessProbe.timeoutSeconds`               | Timeout for the readiness probe.                | `5`               |
 | `datanode.readinessProbe.failureThreshold`             | Failure threshold for the readiness probe.      | `6`               |
 | `datanode.readinessProbe.successThreshold`             | Success threshold for the readiness probe.      | `1`               |
+| `datanode.{startup,liveness,readiness}Probe.{httpGet,tcpSocket,exec,grpc}` | Custom probe handler, standard Kubernetes syntax. Replaces the chart default. | _(unset)_ |
+| `datanode.podManagementPolicy`                         | `OrderedReady` or `Parallel`. Immutable once the StatefulSet exists. | `OrderedReady` |
 | `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
 | `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
+| `datanode.podDisruptionBudget.annotations`             | Annotations for the PodDisruptionBudget.        | `{}`              |
+| `datanode.podDisruptionBudget.labels`                  | Labels for the PodDisruptionBudget.             | `{}`              |
+| `datanode.annotations`                                 | Annotations for the Data Node StatefulSet, ConfigMap and Secret. | `{}` |
+| `datanode.labels`                                      | Labels for the Data Node StatefulSet, ConfigMap and Secret.      | `{}` |
 | `datanode.podAnnotations`                              | Additional pod annotations.                     | `{}`              |
+| `datanode.podLabels`                                   | Additional pod labels.                          | `{}`              |
 | `datanode.nodeSelector`                                | Node selector for scheduling datanode pods.     | `{}`              |
 | `datanode.tolerations`                                 | Tolerations for scheduling.                     | `[]`              |
 | `datanode.affinity`                                    | Affinity rules for scheduling.                  | `{}`              |
+| `datanode.topologySpreadConstraints`                   | Topology spread constraints for the pods.       | `[]`              |
+| `datanode.priorityClassName`                           | PriorityClass for the pods.                     | `""`              |
+| `datanode.schedulerName`                               | Custom scheduler for the pods.                  | `""`              |
+| `datanode.runtimeClassName`                            | RuntimeClass for the pods.                      | `""`              |
+| `datanode.terminationGracePeriodSeconds`               | Grace period before pods are force-killed.      | `nil`             |
+| `datanode.dnsPolicy`                                   | Pod DNS policy.                                 | `ClusterFirst`    |
+| `datanode.dnsConfig`                                   | Pod DNS configuration.                          | `{}`              |
+| `datanode.hostAliases`                                 | Additional `/etc/hosts` entries for the pods.   | `[]`              |
+| `datanode.lifecycle`                                   | Lifecycle hooks for the `graylog-datanode` container. | `{}`        |
 | `datanode.extraEnv`                                    | Custom EnvVar environment variables.            | `[]`              |
+| `datanode.extraVolumes`                                | Additional volumes for the Data Node pods.      | `[]`              |
+| `datanode.extraVolumeMounts`                           | Additional volume mounts for the `graylog-datanode` container. | `[]` |
+| `datanode.extraInitContainers`                         | Additional init containers.                     | `[]`              |
+| `datanode.extraContainers`                             | Additional sidecar containers.                  | `[]`              |
+
+
+## OpenSearch
+Connect Graylog to an external, self-managed OpenSearch cluster instead of the bundled Data Node.
+Mutually exclusive with `datanode.enabled`. See [Bring Your Own OpenSearch](#bring-your-own-opensearch).
+
+| Key Path                         | Description                                                                                             | Default      |
+|----------------------------------|---------------------------------------------------------------------------------------------------------|--------------|
+| `opensearch.enabled`             | Enable external OpenSearch mode. Requires `datanode.enabled=false`.                                     | `false`      |
+| `opensearch.hosts`               | OpenSearch node REST URIs (scheme, host and port), without credentials.                                 | `[]`         |
+| `opensearch.auth.existingSecret` | Secret holding the OpenSearch username and password, read at install/upgrade time.                      | `""`         |
+| `opensearch.auth.usernameKey`    | Key within `existingSecret` holding the username.                                                       | `"username"` |
+| `opensearch.auth.passwordKey`    | Key within `existingSecret` holding the password.                                                       | `"password"` |
+| `opensearch.auth.username`       | Inline username. Takes precedence over `existingSecret`; intended for development and testing.          | `""`         |
+| `opensearch.auth.password`       | Inline password. Takes precedence over `existingSecret`; intended for development and testing.          | `""`         |
+| `opensearch.tls.enabled`         | Whether the OpenSearch HTTP layer uses TLS. Set to `false` for plaintext (`http://`) hosts.             | `true`       |
+| `opensearch.tls.caSecret`        | Secret containing the CA certificate for the OpenSearch HTTP layer, imported into Graylog's truststore. | `""`         |
+| `opensearch.tls.caKey`           | Key within `caSecret` holding the CA certificate.                                                       | `"ca.crt"`   |
 
 
 ## Service Account
@@ -761,9 +1544,12 @@ These values affect Graylog, DataNode, and MongoDB.
 | `serviceAccount.create`       | Create a new service account.                           | `true`  |
 | `serviceAccount.automount`    | Automount service account token.                        | `true`  |
 | `serviceAccount.annotations`  | Annotations for service account.                        | `{}`    |
+| `serviceAccount.labels`       | Labels for service account.                             | `{}`    |
 | `serviceAccount.nameOverride` | Override name of service account.                       | `""`    |
 | `serviceAccount.role.create`  | Create a new role to bind to this service account.      | `false` |
 | `serviceAccount.role.rules`   | Rules for the new role to bind to this service account. | `[]`    |
+| `serviceAccount.role.annotations` | Annotations for the Role and RoleBinding.           | `{}`    |
+| `serviceAccount.role.labels`  | Labels for the Role and RoleBinding.                    | `{}`    |
 
 
 ## Ingress
@@ -774,6 +1560,8 @@ These values affect Graylog, DataNode, and MongoDB.
 | `ingress.config.defaultBackend.enabled`         | Enable default backend for ingress.              | `true`  |
 | `ingress.config.tls.clusterIssuer.existingName` | Name of existing ClusterIssuer for TLS.          | `""`    |
 | `ingress.config.tls.issuer.existingName`        | Name of existing Issuer for TLS.                 | `""`    |
+| `ingress.config.tls.issuer.annotations`         | Annotations for the chart-managed Issuer.        | `{}`    |
+| `ingress.config.tls.issuer.labels`              | Labels for the chart-managed Issuer.             | `{}`    |
 | `ingress.config.tls.issuer.managed.enabled`     | Enable auto-issuing of TLS certificates.         | `false` |
 | `ingress.config.tls.issuer.managed.staging`     | Use staging environment for auto-issued certs.   | `true`  |
 
@@ -784,6 +1572,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `ingress.web.enabled`                    | Enable ingress for Graylog Web.    | `false`                  |
 | `ingress.web.className`                  | Ingress class name.                | `""`                     |
 | `ingress.web.annotations`                | Annotations for ingress resource.  | `{}`                     |
+| `ingress.web.labels`                     | Labels for ingress resource.       | `{}`                     |
 | `ingress.web.hosts[0].host`              | Hostname for ingress (optional).   | `""`                     |
 | `ingress.web.hosts[0].paths[0].path`     | Path for routing.                  | `/`                      |
 | `ingress.web.hosts[0].paths[0].pathType` | Path matching type.                | `ImplementationSpecific` |
@@ -791,32 +1580,119 @@ These values affect Graylog, DataNode, and MongoDB.
 
 ### Forwarder Ingress
 
-| Key Path                                       | Description                           | Default                  |
-|------------------------------------------------|---------------------------------------|--------------------------|
-| `ingress.forwarder.enabled`                    | Enable ingress for Graylog Forwarder. | `false`                  |
-| `ingress.forwarder.className`                  | Ingress class name.                   | `""`                     |
-| `ingress.forwarder.annotations`                | Annotations for ingress resource.     | `{}`                     |
-| `ingress.forwarder.hosts[0].host`              | Hostname for ingress.                 | `chart-example.local`    |
-| `ingress.forwarder.hosts[0].paths[0].path`     | Path for routing.                     | `/`                      |
-| `ingress.forwarder.hosts[0].paths[0].pathType` | Path matching type.                   | `ImplementationSpecific` |
-| `ingress.forwarder.tls`                        | TLS configuration.                    | `[]`                     |
+A [Graylog Forwarder](https://go2docs.graylog.org/current/getting_in_log_data/forwarder.html) requires **both**
+gRPC channels to be reachable: the message channel (port `13301`) it ships log data on, and the configuration
+channel (port `13302`) it polls for configuration updates. Because the two channels listen on different ports
+and an Ingress routes on host/path rather than listener port, each channel is rendered as its own Ingress
+resource — `<release>-forwarder-message-channel` and `<release>-forwarder-config-channel`.
+
+Setting `ingress.forwarder.enabled: true` enables both channels; disable one with
+`ingress.forwarder.<channel>.enabled: false`.
+
+The Forwarder is an enterprise feature and requires a valid license.
+
+The Ingress only exposes the ports — it cannot make Graylog listen on them. A **Forwarder input** must
+exist for that: an input of type **Forwarder**
+(`org.graylog.plugins.forwarder.input.ForwarderServiceInput`) created under **System > Inputs**. Graylog
+Cloud provisions it automatically; self-managed deployments must create it. Registering a forwarder
+under **System > Forwarders** is *not* sufficient — and neither is any chart setting. Until the input
+exists, `13301`/`13302` stay closed, forwarders fail with `Code=<UNAVAILABLE>`, and load balancer
+targets remain unhealthy. Once it exists, Graylog binds the ports on every node.
+
+The listener is configured by attributes **on that input**, not through `server.conf` or this chart:
+
+| Input attribute | Default |
+|---|---|
+| `forwarder_bind_address` | `0.0.0.0` |
+| `forwarder_message_transmission_port` | `13301` |
+| `forwarder_configuration_port` | `13302` |
+| `forwarder_grpc_enable_tls` | `true` |
+
+> [!IMPORTANT]
+> `forwarder_grpc_enable_tls` defaults to **true** on the input. When a load balancer terminates TLS and
+> speaks cleartext HTTP/2 to Graylog — as in the ALB example above — it must be set to **false**, or the
+> targets never become healthy. Set TLS on the *forwarder agent* instead, since it connects to the load
+> balancer's certificate.
+
+| Key Path                                                      | Description                                     | Default                  |
+|---------------------------------------------------------------|-------------------------------------------------|--------------------------|
+| `ingress.forwarder.enabled`                                   | Enable ingress for Graylog Forwarder ingest.    | `false`                  |
+| `ingress.forwarder.messageChannel.enabled`                    | Expose the message channel (port `13301`).      | `true`                   |
+| `ingress.forwarder.messageChannel.className`                  | Ingress class name.                             | `""`                     |
+| `ingress.forwarder.messageChannel.annotations`                | Annotations for ingress resource.               | `{}`                     |
+| `ingress.forwarder.messageChannel.labels`                     | Labels for ingress resource.                    | `{}`                     |
+| `ingress.forwarder.messageChannel.hosts[0].host`              | Hostname for ingress (optional).                | `""`                     |
+| `ingress.forwarder.messageChannel.hosts[0].paths[0].path`     | Path for routing.                               | `/`                      |
+| `ingress.forwarder.messageChannel.hosts[0].paths[0].pathType` | Path matching type.                             | `ImplementationSpecific` |
+| `ingress.forwarder.messageChannel.tls`                        | TLS configuration.                              | `[]`                     |
+| `ingress.forwarder.configChannel.enabled`                     | Expose the configuration channel (port `13302`).| `true`                   |
+| `ingress.forwarder.configChannel.className`                   | Ingress class name.                             | `""`                     |
+| `ingress.forwarder.configChannel.annotations`                 | Annotations for ingress resource.               | `{}`                     |
+| `ingress.forwarder.configChannel.labels`                      | Labels for ingress resource.                    | `{}`                     |
+| `ingress.forwarder.configChannel.hosts[0].host`               | Hostname for ingress (optional).                | `""`                     |
+| `ingress.forwarder.configChannel.hosts[0].paths[0].path`      | Path for routing.                               | `/`                      |
+| `ingress.forwarder.configChannel.hosts[0].paths[0].pathType`  | Path matching type.                             | `ImplementationSpecific` |
+| `ingress.forwarder.configChannel.tls`                         | TLS configuration.                              | `[]`                     |
+
+See [`examples/forwarder-ingress.yaml`](../../examples/forwarder-ingress.yaml) for a worked AWS ALB
+configuration.
 
 ## MongoDB
 MongoDB Community Resource configuration.
 Requires the MCK Operator: https://github.com/mongodb/mongodb-kubernetes/tree/master/docs/mongodbcommunity
 
+The operator creates the MongoDB containers itself and injects its own resource
+defaults, which the three resource blocks below patch by container name — the
+only way to size MongoDB from the chart.
+
+The defaults are sized for a production replica set. `mongod` gets 2Gi of
+headroom because WiredTiger sizes its cache from the container limit and Graylog
+keeps its whole configuration in MongoDB; an idle 3-member replica set already
+sits at ~340Mi. CPU goes the other way: the same replica set idles under 50m per
+member, so the requests are modest and the limits leave room to burst.
+
+`initResources` covers the two init containers the operator injects. Because a
+pod reserves `max(max(initContainer), sum(containers))`, an init container
+request larger than the containers' combined request becomes the pod's floor, so
+these are kept deliberately small — each only copies a binary into a shared
+volume.
+
+Overrides deep-merge, so setting only `requests` keeps the default `limits`; set
+a block to `null` to drop the override and defer to the operator. For a
+small-footprint install, see [`ci/ci-values.yaml`](ci/ci-values.yaml), which
+shrinks all three blocks together.
+
 | Key Path                              | Description                                                 | Default                                                                                                                                                                                                                |
 |---------------------------------------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `mongodb.communityResource.enabled`   | Enables creation of the `MongoDBCommunity` custom resource. | `true`                                                                                                                                                                                                                 |
 | `mongodb.version`                     | MongoDB server version for the replica set.                 | `"7.0.25"`                                                                                                                                                                                                             |
-| `mongodb.replicas`                    | Number of data-bearing replica set members.                 | `2`                                                                                                                                                                                                                    |
-| `mongodb.arbiters`                    | Number of arbiter nodes to deploy.                          | `1`                                                                                                                                                                                                                    |
+| `mongodb.replicas`                    | Number of data-bearing replica set members.                 | `3`                                                                                                                                                                                                                    |
+| `mongodb.arbiters`                    | Number of arbiter nodes to deploy.                          | `0`                                                                                                                                                                                                                    |
+| `mongodb.annotations`                 | Annotations for the `MongoDBCommunity` object.              | `{}`                                                                                                                                                                                                                   |
+| `mongodb.labels`                      | Labels for the `MongoDBCommunity` object.                   | `{}`                                                                                                                                                                                                                   |
+| `mongodb.resources.limits.cpu`        | CPU limit for the `mongod` container.                       | `"2"`                                                                                                                                                                                                                  |
+| `mongodb.resources.limits.memory`     | Memory limit for the `mongod` container.                    | `"2Gi"`                                                                                                                                                                                                               |
+| `mongodb.resources.requests.cpu`      | CPU request for the `mongod` container.                     | `"250m"`                                                                                                                                                                                                               |
+| `mongodb.resources.requests.memory`   | Memory request for the `mongod` container.                  | `"1Gi"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.limits.cpu`   | CPU limit for the `mongodb-agent` container.                | `"500m"`                                                                                                                                                                                                                  |
+| `mongodb.agentResources.limits.memory` | Memory limit for the `mongodb-agent` container.            | `"512Mi"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.requests.cpu` | CPU request for the `mongodb-agent` container.              | `"50m"`                                                                                                                                                                                                               |
+| `mongodb.agentResources.requests.memory` | Memory request for the `mongodb-agent` container.        | `"128Mi"`                                                                                                                                                                                                               |
+| `mongodb.initResources.limits.cpu`    | CPU limit for both operator-injected init containers.       | `"500m"`                                                                                                                                                                                                                  |
+| `mongodb.initResources.limits.memory` | Memory limit for both operator-injected init containers.    | `"512Mi"`                                                                                                                                                                                                               |
+| `mongodb.initResources.requests.cpu`  | CPU request for both operator-injected init containers.     | `"50m"`                                                                                                                                                                                                               |
+| `mongodb.initResources.requests.memory` | Memory request for both operator-injected init containers. | `"128Mi"`                                                                                                                                                                                                              |
 | `mongodb.persistence.storageClass`    | StorageClass to use for persistent volumes.                 | `""`                                                                                                                                                                                                                   |
 | `mongodb.persistence.size.data`       | Persistent volume size for data storage.                    | `"10G"`                                                                                                                                                                                                                |
 | `mongodb.persistence.size.logs`       | Persistent volume size for MongoDB logs.                    | `"2G"`                                                                                                                                                                                                                 |
+| `mongodb.persistence.annotations`     | Annotations for the MongoDB volume claim templates.         | `{}`                                                                                                                                                                                                                   |
+| `mongodb.persistence.labels`          | Labels for the MongoDB volume claim templates.              | `{}`                                                                                                                                                                                                                   |
 | `mongodb.serviceAccount.create`       | Create a new service account for MongoDB workloads.         | `true`                                                                                                                                                                                                                 |
 | `mongodb.serviceAccount.automount`    | Automount service account token.                            | `true`                                                                                                                                                                                                                 |
 | `mongodb.serviceAccount.annotations`  | Annotations for service account.                            | `{}`                                                                                                                                                                                                                   |
+| `mongodb.serviceAccount.labels`       | Labels for service account.                                 | `{}`                                                                                                                                                                                                                   |
 | `mongodb.serviceAccount.nameOverride` | Override name of service account.                           | `""`                                                                                                                                                                                                                   |
 | `mongodb.serviceAccount.role.create`  | Create a new role to bind to this service account.          | `true`                                                                                                                                                                                                                 |
+| `mongodb.serviceAccount.role.annotations` | Annotations for the Role and RoleBinding.               | `{}`                                                                                                                                                                                                                   |
+| `mongodb.serviceAccount.role.labels`  | Labels for the Role and RoleBinding.                        | `{}`                                                                                                                                                                                                                   |
 | `mongodb.serviceAccount.role.rules`   | Rules for the new role to bind to this service account.     | <pre><code>rules:&#10;  - apiGroups: [ "" ]&#10;    resources: [ "secrets" ]&#10;    verbs: [ "get" ]&#10;  - apiGroups: [ "" ]&#10;    resources: [ "pods" ]&#10;    verbs: [ "get", "patch", "delete" ]</code></pre> |

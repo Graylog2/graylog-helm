@@ -3,15 +3,42 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "graylog.cm.init.name" . }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.labels "fixed" (dict "app.kubernetes.io/component" "server" "app" "graylog-app") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.annotations "indent" 2) }}
 data:
   init-script.sh: |
     #!/bin/sh
-    # initialize data dir
-    if [ -f /mnt/data/journal/.lock ]; then
-      echo "Data already initialized, skipping copy."
+    # Initialize the data dir.
+    #
+    # The sentinel is a dedicated marker, not the journal lock file. Volume
+    # initialization and journal presence are independent concerns: the lock only
+    # exists while a journal does, so disabling the journal - or anything else that
+    # removes that lock - made every restart re-run the copy below and overwrite
+    # volume contents with the image defaults.
+    if [ -f /mnt/data/.initialized ]; then
+      echo "Data volume already initialized, skipping copy."
+    elif [ -f /mnt/data/journal/.lock ]; then
+      # Migration path for volumes initialized by an earlier chart version: they
+      # carry the journal lock but no marker. The lock is proof enough that the
+      # copy already happened, so adopt the volume and stamp the marker. Running
+      # the copy here would clobber a live volume - the exact failure this change
+      # exists to prevent, triggered by the fix itself.
+      echo "Data volume was initialized by an earlier chart version; adopting it."
+      touch /mnt/data/.initialized
     else
-      # copy data dir
-      cp -r /usr/share/graylog/data/* /mnt/data/
+      # A volume initialized by an earlier chart version with the journal disabled
+      # has neither marker nor lock, so it lands here and is copied over once more.
+      # That matches the old behaviour, which re-copied on every restart, and it
+      # self-heals: the marker below stops it recurring.
+      echo "Initializing data volume."
+      # The marker is written only on success. Stamping it after a partial copy
+      # would mark a broken volume as done and never retry.
+      if cp -r /usr/share/graylog/data/* /mnt/data/; then
+        touch /mnt/data/.initialized
+      else
+        echo "Error: failed to copy the default data directory to /mnt/data."
+        exit 1
+      fi
     fi
     {{ if and .Values.graylog.config.tls.enabled }}
     # check that the FDQN for all Graylog nodes is part of the certificate SANs
@@ -42,24 +69,72 @@ data:
         echo "The certificate passed does not contain a root CA. Only this certificate will be added to the truststore."
         echo "Make sure to add a new certificate when performing certificate rotation."
       fi
-      # update java key store
-      CACERTS_SRC="/usr/share/graylog/data/cacerts"
-      CACERTS_DST="/mnt/data/cacerts"
-      mkdir -p "${CACERTS_SRC}" "${CACERTS_DST}"
-      JAVA_HOME_LOCAL=$(java -XshowSettings:properties -version 2>&1 > /dev/null | grep 'java.home' | grep '/.*' -o)
-      cp "${JAVA_HOME_LOCAL}/lib/security/cacerts" "${CACERTS_SRC}/graylog.jks"
-      chown graylog:graylog "${CACERTS_SRC}/graylog.jks"
-      keytool -importcert -noprompt -alias byoc -file "/mnt/tls/tls.crt" -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
-      [ -n "${ROOT_CA}" ] && echo "Adding root CA..." && keytool -importcert -noprompt -alias byoc-ca -file "${ROOT_CA}" -keystore "${CACERTS_SRC}/graylog.jks" -storepass {{ .Values.graylog.config.tls.keyStorePass | default "changeit" }}
-      if [ ! -e "${CACERTS_DST}/graylog.jks" ] || ! cmp -s "${CACERTS_SRC}/graylog.jks" "${CACERTS_DST}/graylog.jks"; then
-        cp "${CACERTS_SRC}/graylog.jks" "${CACERTS_DST}/graylog.jks"
-        echo "Updated Java Key Store."
-      else
-        echo "Java Key Store has not been modified, nothing to do."
-      fi
     {{- else }}
-      echo "The Java Key Store remains unchanged. Ensure that the CA that signed your certificates is trusted by default."
+      echo "The Graylog certificate will not be added to the Java Key Store. Ensure that the CA that signed your certificates is trusted by default."
     {{- end }}
+    fi
+    {{- end }}
+    {{- if eq (include "graylog.truststore.enabled" .) "true" }}
+    # Build the Graylog Java truststore.
+    # It is always rebuilt from the JDK truststore shipped in the Graylog image so the CAs
+    # trusted by default are preserved and our certificates are only ever ADDED on top.
+    # Rebuilding (instead of mutating the copy on the data volume) also means removed or
+    # rotated certificates disappear and image upgrades pick up JDK CA bundle updates.
+    CACERTS_DST="/mnt/data/cacerts"
+    CACERTS_TMP="${CACERTS_DST}/graylog.jks.tmp"
+    TRUSTSTORE_PASS={{ .Values.graylog.config.tls.keyStorePass | default "changeit" | squote }}
+    mkdir -p "${CACERTS_DST}"
+    # Locate the JDK truststore WITHOUT executing `java`.
+    #
+    # The java binary in the Graylog image carries a file capability
+    # (cap_net_bind_service=ep), and this init container runs with
+    # allowPrivilegeEscalation: false, which sets no_new_privs. The kernel
+    # refuses to execve a file with capabilities under no_new_privs, so asking
+    # the JVM to print its own settings dies with "Operation not permitted"
+    # (exit 126) and any path derived that way comes back empty. keytool
+    # carries no file capability and runs fine, so only the lookup has to
+    # avoid starting a JVM.
+    JAVA_HOME_LOCAL="${JAVA_HOME}"
+    if [ -z "${JAVA_HOME_LOCAL}" ] || [ ! -f "${JAVA_HOME_LOCAL}/lib/security/cacerts" ]; then
+      for candidate in /opt/java/openjdk /usr/share/graylog/jvm /usr/lib/jvm/default-jvm /usr/lib/jvm/java; do
+        if [ -f "${candidate}/lib/security/cacerts" ]; then
+          JAVA_HOME_LOCAL="${candidate}"
+          break
+        fi
+      done
+    fi
+    if [ -z "${JAVA_HOME_LOCAL}" ] || [ ! -f "${JAVA_HOME_LOCAL}/lib/security/cacerts" ]; then
+      echo "Error: unable to locate the JDK truststore in the Graylog image. Refusing to build a truststore that would drop the CAs trusted by default."
+      echo "Looked at JAVA_HOME (${JAVA_HOME:-unset}) and the usual JDK locations. Set JAVA_HOME on the Graylog container via graylog.extraEnv if the image places it elsewhere."
+      exit 1
+    fi
+    rm -f "${CACERTS_TMP}"
+    cp "${JAVA_HOME_LOCAL}/lib/security/cacerts" "${CACERTS_TMP}" || { echo "Error: failed to copy the JDK truststore."; exit 1; }
+    # the JDK truststore ships with the default password, so re-key it before importing
+    if [ "${TRUSTSTORE_PASS}" != "changeit" ]; then
+      keytool -storepasswd -keystore "${CACERTS_TMP}" -storepass changeit -new "${TRUSTSTORE_PASS}" || { echo "Error: failed to set the truststore password."; exit 1; }
+    fi
+    {{- if and .Values.graylog.config.tls.enabled .Values.graylog.config.tls.updateKeyStore }}
+    # Every import is fatal. A store that was built but is missing one of our
+    # certificates is worse than no store at all: the JVM is pointed at it with
+    # -Djavax.net.ssl.trustStore, so the failure surfaces later as unexplained
+    # TLS errors rather than here, where the cause is obvious.
+    keytool -importcert -noprompt -alias byoc -file "/mnt/tls/tls.crt" -keystore "${CACERTS_TMP}" -storepass "${TRUSTSTORE_PASS}" || { echo "Error: failed to import the Graylog certificate from /mnt/tls/tls.crt."; exit 1; }
+    if [ -n "${ROOT_CA}" ]; then
+      echo "Adding root CA..."
+      keytool -importcert -noprompt -alias byoc-ca -file "${ROOT_CA}" -keystore "${CACERTS_TMP}" -storepass "${TRUSTSTORE_PASS}" || { echo "Error: failed to import the root CA from ${ROOT_CA}."; exit 1; }
+    fi
+    {{- end }}
+    {{- if and .Values.opensearch.enabled .Values.opensearch.tls.enabled .Values.opensearch.tls.caSecret }}
+    # trust the BYO OpenSearch CA
+    keytool -importcert -noprompt -alias byo-opensearch-ca -file "/mnt/os-tls/{{ .Values.opensearch.tls.caKey }}" -keystore "${CACERTS_TMP}" -storepass "${TRUSTSTORE_PASS}" || { echo "Error: failed to import the OpenSearch CA."; exit 1; }
+    {{- end }}
+    if [ ! -e "${CACERTS_DST}/graylog.jks" ] || ! cmp -s "${CACERTS_TMP}" "${CACERTS_DST}/graylog.jks"; then
+      mv "${CACERTS_TMP}" "${CACERTS_DST}/graylog.jks"
+      echo "Updated Java Key Store."
+    else
+      rm -f "${CACERTS_TMP}"
+      echo "Java Key Store has not been modified, nothing to do."
     fi
     {{- end }}
     {{- if .Values.graylog.config.plugins.enabled }}

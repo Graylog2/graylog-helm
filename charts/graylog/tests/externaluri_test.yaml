@@ -1,0 +1,128 @@
+suite: graylog external URI
+templates:
+  - config/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: omits GRAYLOG_HTTP_EXTERNAL_URI by default
+    asserts:
+      - notExists:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+
+  - it: wraps a bare hostname with scheme and app port
+    set:
+      graylog.config.network.externalUri: "logs.example.com"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "http://logs.example.com:9000/"
+
+  - it: uses https for a bare hostname when TLS is enabled
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.network.externalUri: "logs.example.com"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "https://logs.example.com:9000/"
+
+  - it: passes a full URI through verbatim and appends the trailing slash
+    set:
+      graylog.config.network.externalUri: "https://logs.example.com"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "https://logs.example.com/"
+
+  - it: does not double an existing trailing slash on a full URI
+    set:
+      graylog.config.network.externalUri: "https://logs.example.com/"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "https://logs.example.com/"
+
+  - it: preserves an explicit port in a full URI
+    set:
+      graylog.config.network.externalUri: "http://logs.example.com:8443"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "http://logs.example.com:8443/"
+
+  - it: prefers tls.cn over the explicit externalUri
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.cn: "graylog.example.com"
+      graylog.config.network.externalUri: "https://other.example.com"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "https://graylog.example.com:9000/"
+
+  - it: prefers the explicit externalUri over the ingress host
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.hosts:
+        - host: gl.example.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      graylog.config.network.externalUri: "https://other.example.com/graylog"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "https://other.example.com/graylog/"
+
+  - it: prefers the explicit externalUri over the ingress TLS host
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.hosts:
+        - host: gl.example.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      ingress.web.tls:
+        - secretName: gl-tls
+          hosts:
+            - gl.example.com
+      graylog.config.network.externalUri: "https://other.example.com"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "https://other.example.com/"
+
+  - it: uses the ingress host when no externalUri is set
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.hosts:
+        - host: gl.example.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "http://gl.example.com/"
+
+  - it: uses the ingress TLS host when no externalUri is set
+    set:
+      ingress.enabled: true
+      ingress.web.enabled: true
+      ingress.web.hosts:
+        - host: gl.example.com
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      ingress.web.tls:
+        - secretName: gl-tls
+          hosts:
+            - gl.example.com
+    asserts:
+      - equal:
+          path: data.GRAYLOG_HTTP_EXTERNAL_URI
+          value: "https://gl.example.com/"

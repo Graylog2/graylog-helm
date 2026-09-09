@@ -1,22 +1,27 @@
 {{- if .Values.datanode.enabled }}
 {{- include "graylog.datanode.validate" . }}
 {{- range include "graylog.datanode.groups" $ | fromYamlArray }}
+{{- $fixed := dict "app" "graylog-datanode" "app.kubernetes.io/component" "datanode" }}
+{{- with .groupLabel }}
+{{- $_ := set $fixed "graylog-datanode-group" . }}
+{{- end }}
+{{/* The probe handler defaults read .Values.datanode.service.ports, so hand them
+     this group's own values as if they were the datanode block. */}}
+{{- $probeCtx := dict "Values" (dict "datanode" .) }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ .fullname }}
-  labels:
-    app: graylog-datanode
-    {{- with .groupLabel }}
-    graylog-datanode-group: {{ . }}
-    {{- end }}
-    {{- include "graylog.labels" $ | nindent 4 }}
-  annotations:
-    {{- include "graylog.annotations" $ | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .labels "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .annotations "indent" 2) }}
 spec:
   replicas: {{ .replicas | int }}
   serviceName: {{ include "graylog.datanode.service.name" $ }}
+  {{/* Immutable once the StatefulSet exists. See the values comment. Always
+       rendered so the field is explicit in the manifest rather than inherited
+       from an API-server default that could change. */}}
+  podManagementPolicy: {{ .podManagementPolicy | default "OrderedReady" }}
   selector:
     matchLabels:
       app: graylog-datanode
@@ -33,40 +38,79 @@ spec:
       partition: {{ int . }}
       {{- end }}
     {{- end }}
+  {{/* Explicity add the Datanode retentionPolicy */}}
+  {{- $dnRet := .persistence.retentionPolicy | default dict }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: {{ $dnRet.whenDeleted | default "Retain" }}
+    whenScaled: {{ $dnRet.whenScaled | default "Retain" }}
   template:
     metadata:
-      labels:
-        app: graylog-datanode
-        {{- with .groupLabel }}
-        graylog-datanode-group: {{ . }}
-        {{- end }}
-        {{- include "graylog.selectorLabels" $ | nindent 8 }}
-      annotations:
-        checksum/config: {{ include "graylog.datanode.configChecksum" $ }}
-        checksum/secret: {{ include "graylog.secretsChecksum" $ }}
-      {{- with .podAnnotations }}
+      {{- include "graylog.pod.labels" (dict "context" $ "labels" .podLabels "fixed" $fixed "indent" 6) }}
+      {{- $podAnnotations := dict "checksum/config" (include "graylog.datanode.configChecksum" $) "checksum/secret" (include "graylog.secretsChecksum" $) }}
+      {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .podAnnotations "fixed" $podAnnotations "indent" 6) }}
+    spec:
+      dnsPolicy: {{ .dnsPolicy | default "ClusterFirst" }}
+      {{- with .dnsConfig }}
+      dnsConfig:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-    spec:
-      dnsPolicy: ClusterFirst
-      {{- with $.Values.datanode.image.imagePullSecrets | default $.Values.global.imagePullSecrets }}
+      {{- with .hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with .schedulerName }}
+      schedulerName: {{ . | quote }}
+      {{- end }}
+      {{- with .runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
+      {{- if not (kindIs "invalid" .terminationGracePeriodSeconds) }}
+      terminationGracePeriodSeconds: {{ .terminationGracePeriodSeconds | int }}
+      {{- end }}
+      {{- with .image.imagePullSecrets | default $.Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .nodeSelector }}
       nodeSelector: {{ . | toYaml | nindent 8 }}
       {{- end }}
-      {{- if $.Values.serviceAccount.create }}
+      {{- with .topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or $.Values.serviceAccount.create $.Values.serviceAccount.nameOverride }}
       serviceAccountName: {{ include "graylog.serviceAccountName" $ }}
       {{- end }}
       {{- with .podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if or .sysctlInit.enabled .extraInitContainers }}
+      initContainers:
+        {{- if .sysctlInit.enabled }}
+        - name: sysctl-init
+          image: "{{ .sysctlInit.image.repository }}:{{ .sysctlInit.image.tag }}"
+          imagePullPolicy: {{ .sysctlInit.image.imagePullPolicy | default "IfNotPresent" }}
+          {{- with .sysctlInit.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command:
+            - sh
+            - -c
+            - sysctl -w vm.max_map_count={{ .sysctlInit.vmMaxMapCount }}
+        {{- end }}
+        {{- with .extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
       containers:
         - name: graylog-datanode
           image: {{ include "graylog.datanode.image" $ }}
-          imagePullPolicy: {{ $.Values.datanode.image.imagePullPolicy }}
+          imagePullPolicy: {{ .image.imagePullPolicy }}
           {{- with .containerSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -111,39 +155,64 @@ spec:
               mountPath: {{ .persistence.data.mountPath | default "/var/lib/graylog-datanode" | quote }}
             - name: native-libs
               mountPath: {{ .persistence.nativeLibs.mountPath | default "/native_libs" | quote }}
-          {{- if .livenessProbe.enabled }}
-          livenessProbe:
-            tcpSocket:
-              port: {{ .service.ports.api | default 8999 | int }}
-            initialDelaySeconds: {{ .livenessProbe.initialDelaySeconds | int }}
-            periodSeconds: {{ .livenessProbe.periodSeconds | int }}
-            timeoutSeconds: {{ .livenessProbe.timeoutSeconds | int }}
-            failureThreshold: {{ .livenessProbe.failureThreshold | int }}
-            successThreshold: {{ .livenessProbe.successThreshold | int }}
+            {{- with .extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .readinessProbe.enabled }}
-          readinessProbe:
-            tcpSocket:
-              port: {{ .service.ports.api | default 8999 | int }}
-            initialDelaySeconds: {{ .readinessProbe.initialDelaySeconds | int }}
-            periodSeconds: {{ .readinessProbe.periodSeconds | int }}
-            timeoutSeconds: {{ .readinessProbe.timeoutSeconds | int }}
-            failureThreshold: {{ .readinessProbe.failureThreshold | int }}
-            successThreshold: {{ .readinessProbe.successThreshold | int }}
-          {{- end }}
+          {{- /* Probe handlers and the reasoning behind them: _probes.tpl.
+                 Readiness and startup watch the OpenSearch HTTP port, which the
+                 Data Node binds well after its own REST API; liveness watches the
+                 REST API, because that is the process being alive. */}}
+          {{- include "graylog.probe" (dict
+                "name" "startupProbe"
+                "probe" .startupProbe
+                "default" (include "graylog.probe.handler.datanodeDataTcp" $probeCtx)
+                "indent" 10) -}}
+          {{- include "graylog.probe" (dict
+                "name" "livenessProbe"
+                "probe" .livenessProbe
+                "default" (include "graylog.probe.handler.datanodeApiTcp" $probeCtx)
+                "indent" 10) -}}
+          {{- include "graylog.probe" (dict
+                "name" "readinessProbe"
+                "probe" .readinessProbe
+                "default" (include "graylog.probe.handler.datanodeDataTcp" $probeCtx)
+                "indent" 10) -}}
           {{- with .resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- with .extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       tolerations:
       {{- with .tolerations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       affinity:
-      {{- with .affinity }}
-        {{- toYaml . | nindent 8 }}
+      {{- if .affinity }}
+        {{- toYaml .affinity | nindent 8 }}
+      {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/instance
+                      operator: In
+                      values:
+                        - {{ $.Release.Name }}
+                    - key: app
+                      operator: In
+                      values:
+                        - graylog-datanode
+                topologyKey: kubernetes.io/hostname
       {{- end }}
-      {{- if and .persistence.data.enabled .persistence.nativeLibs.enabled | not }}
+      {{- if or (not (and .persistence.data.enabled .persistence.nativeLibs.enabled)) .extraVolumes }}
       volumes:
         {{- if not .persistence.nativeLibs.enabled }}
         - name: native-libs
@@ -153,12 +222,16 @@ spec:
         - name: data
           emptyDir: {}
         {{- end }}
+        {{- with .extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
   {{- if or .persistence.data.enabled .persistence.nativeLibs.enabled }}
   volumeClaimTemplates:
     {{- if .persistence.data.enabled }}
     - metadata:
         name: data
+        {{- include "graylog.claim.metadata" (dict "labels" .persistence.data.labels "annotations" .persistence.data.annotations "indent" 8) }}
       spec:
         accessModes:
         {{- if .persistence.data.accessModes }}
@@ -178,6 +251,7 @@ spec:
     {{- if .persistence.nativeLibs.enabled }}
     - metadata:
         name: native-libs
+        {{- include "graylog.claim.metadata" (dict "labels" .persistence.nativeLibs.labels "annotations" .persistence.nativeLibs.annotations "indent" 8) }}
       spec:
         accessModes:
         {{- if .persistence.nativeLibs.accessModes }}

@@ -1,0 +1,70 @@
+suite: datanode Service
+templates:
+  - service/datanode.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: does not render when datanode.enabled is false
+    set:
+      datanode.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders a headless Service with the expected name
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: graylog-datanode-svc
+      - equal:
+          path: spec.clusterIP
+          value: None
+
+  - it: exposes the default api/data/config ports
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: api
+            port: 8999
+      - contains:
+          path: spec.ports
+          content:
+            name: data
+            port: 9200
+      - contains:
+          path: spec.ports
+          content:
+            name: config
+            port: 9300
+
+  - it: honors custom datanode service ports
+    set:
+      datanode.service.ports.api: 18999
+      datanode.service.ports.data: 19200
+      datanode.service.ports.config: 19300
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: api
+            port: 18999
+      - contains:
+          path: spec.ports
+          content:
+            name: data
+            port: 19200
+      - contains:
+          path: spec.ports
+          content:
+            name: config
+            port: 19300
+
+  - it: selects datanode pods
+    asserts:
+      - equal:
+          path: spec.selector.app
+          value: graylog-datanode

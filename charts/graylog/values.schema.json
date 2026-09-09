@@ -27,6 +27,11 @@
       "type": "string",
       "description": "Override the fully qualified app name."
     },
+    "extraObjects": {
+      "type": "array",
+      "description": "Arbitrary manifests rendered as part of this release (ServiceMonitor, ExternalSecret, NetworkPolicy, ...). Each entry is templated and may be given as a mapping or as a string.",
+      "items": { "type": [ "object", "string" ] }
+    },
     "global": {
       "type": "object",
       "properties": {
@@ -39,7 +44,9 @@
           }
         },
         "storageClass": { "type": "string" },
-        "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" }
+        "existingSecretName": { "type": "string", "description": "Name of existing Graylog secret containing GRAYLOG_MONGODB_URI, GRAYLOG_ROOT_USERNAME, GRAYLOG_PASSWORD_SECRET, and GRAYLOG_ROOT_PASSWORD_SHA2" },
+        "commonLabels": { "type": "object", "description": "Labels added to every object deployed by this chart" },
+        "commonAnnotations": { "type": "object", "description": "Annotations added to every object deployed by this chart" }
       }
     },
     "graylog": {
@@ -54,6 +61,8 @@
           "properties": {
             "nameOverride": { "type": "string" },
             "type": { "type": "string" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "ports": {
               "type": "object",
               "properties": {
@@ -162,6 +171,7 @@
               "type": "object",
               "properties": {
                 "enabled": { "type": "string" },
+                "maxSize": { "type": "string", "description": "On-disk journal cap (message_journal_max_size). Must stay under 90% of graylog.persistence.size; the chart validates this." },
                 "flushAge": { "type": "string" },
                 "flushInterval": { "type": "string" },
                 "maxAge": { "type": "string" },
@@ -228,10 +238,12 @@
                   "type": "object",
                   "properties": {
                     "enabled": { "type": "boolean" },
+                    "existingSecret": { "type": ["string", "null"], "description": "Secret holding the MaxMind credentials, read directly by the sidecar" },
+                    "accountIdKey": { "type": "string", "description": "Key in existingSecret holding the MaxMind account ID" },
+                    "licenseKeyKey": { "type": "string", "description": "Key in existingSecret holding the MaxMind license key" },
                     "accountId": { "type": ["string", "integer", "null"] },
                     "licenseKey": { "type": ["string", "null"] },
-                    "cronSchedule": { "type": "string" },
-                    "postInstallRun": { "type": "boolean" }
+                    "editionIds": { "type": "string", "description": "Space-separated list of MaxMind database editions" }
                   }
                 },
                 "mmdbSources": {
@@ -250,6 +262,57 @@
                         "url": { "type": ["string", "null"] },
                         "checksum": { "type": ["string", "null"] }
                       }
+                    }
+                  }
+                },
+                "sidecar": {
+                  "type": "object",
+                  "description": "GeoIP sidecar container configuration",
+                  "properties": {
+                    "enabled": { "type": "boolean", "description": "Enable sidecar container for GeoIP updates" },
+                    "image": {
+                      "type": "object",
+                      "properties": {
+                        "repository": { "type": "string", "description": "Container image repository" },
+                        "name": { "type": "string", "description": "Deprecated: appended to repository when set" },
+                        "tag": { "type": "string", "description": "Container image tag (pinned version)" },
+                        "imagePullPolicy": { "type": "string" },
+                        "imagePullSecrets": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": { "name": { "type": "string" } },
+                            "required": ["name"]
+                          }
+                        }
+                      }
+                    },
+                    "schedule": {
+                      "type": "string",
+                      "description": "Cron schedule for GeoIP database updates (crontab format)"
+                    },
+                    "resources": {
+                      "type": "object",
+                      "properties": {
+                        "requests": {
+                          "type": "object",
+                          "properties": {
+                            "cpu": { "type": "string" },
+                            "memory": { "type": "string" }
+                          }
+                        },
+                        "limits": {
+                          "type": "object",
+                          "properties": {
+                            "cpu": { "type": "string" },
+                            "memory": { "type": "string" }
+                          }
+                        }
+                      }
+                    },
+                    "securityContext": {
+                      "type": "object",
+                      "description": "Security context for sidecar container"
                     }
                   }
                 }
@@ -336,10 +399,17 @@
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
+            "retentionPolicy": {
+              "type": "object",
+              "description": "PVC lifecycle for the journal volumes. whenScaled must remain Retain; Delete destroys the journal of a scaled-in ordinal.",
+              "properties": {
+                "whenDeleted": { "type": "string", "enum": ["Retain", "Delete"] },
+                "whenScaled": { "type": "string", "enum": ["Retain", "Delete"] }
+              }
+            },
             "storageClass": { "type": [ "string", "null" ] },
             "volumeNameOverride": { "type": [ "string", "null" ] },
             "existingClaim": { "type": [ "string", "null" ] },
-            "mountPath": { "type": [ "string", "null" ] },
             "accessModes": { "type": "array" },
             "size": { "type": [ "string", "null" ] },
             "annotations": {
@@ -347,10 +417,22 @@
             },
             "labels": {
               "type": "object"
-            },
-            "selector": {
-              "type": "object"
             }
+          }
+        },
+        "startupProbe": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialDelaySeconds": { "type": "integer" },
+            "periodSeconds": { "type": "integer" },
+            "timeoutSeconds": { "type": "integer" },
+            "failureThreshold": { "type": "integer" },
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "livenessProbe": {
@@ -361,7 +443,11 @@
             "periodSeconds": { "type": "integer" },
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "readinessProbe": {
@@ -372,14 +458,48 @@
             "periodSeconds": { "type": "integer" },
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
+          }
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Seconds Kubernetes allows for shutdown before SIGKILL. Covers the preStop hook and the SIGTERM that follows it."
+        },
+        "lifecycle": {
+          "type": "object",
+          "description": "Lifecycle hooks for the graylog-app container. postStart/preStop are user-supplied; preStopDrain is the chart-managed journal drain.",
+          "properties": {
+            "postStart": { "type": "object", "description": "User-supplied postStart hook." },
+            "preStop": { "type": "object", "description": "User-supplied preStop hook. Mutually exclusive with preStopDrain.enabled — a container can only have one preStop hook." },
+            "preStopDrain": {
+              "type": "object",
+              "description": "Hold pod termination while the on-disk journal drains, so scaling in does not strand unprocessed messages. Requires graylog.service.metrics.enabled.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "endpointPropagationDelaySeconds": { "type": "integer", "minimum": 0 },
+                "pollIntervalSeconds": { "type": "integer", "minimum": 1 },
+                "shutdownReserveSeconds": { "type": "integer", "minimum": 0 },
+                "stallPolls": { "type": "integer", "minimum": 1 },
+                "statusIntervalSeconds": { "type": "integer", "minimum": 1 },
+                "confirmPolls": { "type": "integer", "minimum": 1 },
+                "metricsRetries": { "type": "integer", "minimum": 1 },
+                "feasibilityWarmupPolls": { "type": "integer", "minimum": 0 }
+              }
+            }
           }
         },
         "podDisruptionBudget": {
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" }
+            "minAvailable": { "type": "integer" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" }
           }
         },
         "podSecurityContext": {
@@ -394,9 +514,12 @@
           "type": ["object", "null"],
           "description": "Container securityContext applied to the graylog-app container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
+        "annotations": { "type": "object", "description": "Annotations for the StatefulSet object" },
+        "labels": { "type": "object", "description": "Labels for the StatefulSet object" },
         "podAnnotations": {
           "type": "object"
         },
+        "podLabels": { "type": "object" },
         "nodeSelector": {
           "type": "object"
         },
@@ -407,10 +530,48 @@
         "affinity": {
           "type": "object"
         },
+        "topologySpreadConstraints": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "priorityClassName": { "type": [ "string", "null" ] },
+        "schedulerName": { "type": [ "string", "null" ] },
+        "runtimeClassName": { "type": [ "string", "null" ] },
+        "dnsPolicy": { "type": [ "string", "null" ] },
+        "dnsConfig": { "type": "object" },
+        "hostAliases": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
         "extraEnv": {
           "type": "array",
           "items": { "type": "object" },
           "description": "Full EnvVar objects (supports valueFrom)"
+        },
+        "extraVolumes": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volumes for the pod"
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volume mounts for the main container"
+        },
+        "extraInitVolumeMounts": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volume mounts for the chart's copy-data init container"
+        },
+        "extraInitContainers": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional init containers, rendered after the chart's own init containers"
+        },
+        "extraContainers": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional sidecar containers"
         }
       }
     },
@@ -423,6 +584,8 @@
         "service": {
           "type": "object",
           "properties": {
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "ports": {
               "type": "object",
               "properties": {
@@ -472,6 +635,31 @@
             }
           }
         },
+        "podManagementPolicy": {
+          "type": [ "string", "null" ],
+          "description": "StatefulSet pod management policy. IMMUTABLE once created; changing it on a live release makes helm upgrade fail.",
+          "enum": [ "OrderedReady", "Parallel", null ]
+        },
+        "sysctlInit": {
+          "type": "object",
+          "description": "Optional privileged init container to set vm.max_map_count during pod startup",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": { "type": "string" },
+                "tag": { "type": "string" },
+                "imagePullPolicy": { "type": "string" }
+              }
+            },
+            "securityContext": {
+              "type": "object",
+              "description": "Container security context"
+            },
+            "vmMaxMapCount": { "type": "integer", "minimum": 262144, "description": "Kernel vm.max_map_count value for OpenSearch (minimum 262144)" }
+          }
+        },
         "updateStrategy": {
           "type": "object",
           "properties": {
@@ -507,13 +695,19 @@
         "persistence": {
           "type": "object",
           "properties": {
-            "enabled": { "type": "boolean" },
+            "retentionPolicy": {
+              "type": "object",
+              "description": "PVC lifecycle for the Data Node volumes. Delete is permitted, unlike on the Graylog StatefulSet, because shard data can be rebuilt from replicas.",
+              "properties": {
+                "whenDeleted": { "type": "string", "enum": ["Retain", "Delete"] },
+                "whenScaled": { "type": "string", "enum": ["Retain", "Delete"] }
+              }
+            },
             "data": {
               "type": "object",
               "properties": {
                 "enabled": { "type": "boolean" },
                 "storageClass": { "type": "string" },
-                "existingClaim": { "type": "string" },
                 "mountPath": { "type": "string" },
                 "accessModes": { "type": "array" },
                 "size": { "type": "string" },
@@ -521,12 +715,6 @@
                   "type": "object"
                 },
                 "labels": {
-                  "type": "object"
-                },
-                "selector": {
-                  "type": "object"
-                },
-                "dataSource": {
                   "type": "object"
                 }
               }
@@ -536,7 +724,6 @@
               "properties": {
                 "enabled": { "type": "boolean" },
                 "storageClass": { "type": "string" },
-                "existingClaim": { "type": "string" },
                 "mountPath": { "type": "string" },
                 "accessModes": { "type": "array" },
                 "size": { "type": "string" },
@@ -545,12 +732,24 @@
                 },
                 "labels": {
                   "type": "object"
-                },
-                "selector": {
-                  "type": "object"
                 }
               }
             }
+          }
+        },
+        "startupProbe": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "initialDelaySeconds": { "type": "integer" },
+            "periodSeconds": { "type": "integer" },
+            "timeoutSeconds": { "type": "integer" },
+            "failureThreshold": { "type": "integer" },
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "livenessProbe": {
@@ -561,7 +760,11 @@
             "periodSeconds": { "type": "integer" },
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "readinessProbe": {
@@ -572,14 +775,20 @@
             "periodSeconds": { "type": "integer" },
             "timeoutSeconds": { "type": "integer" },
             "failureThreshold": { "type": "integer" },
-            "successThreshold": { "type": "integer" }
+            "successThreshold": { "type": "integer" },
+            "httpGet": { "type": "object" },
+            "tcpSocket": { "type": "object" },
+            "exec": { "type": "object" },
+            "grpc": { "type": "object" }
           }
         },
         "podDisruptionBudget": {
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" }
+            "minAvailable": { "type": "integer" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" }
           }
         },
         "podSecurityContext": {
@@ -590,9 +799,12 @@
           "type": ["object", "null"],
           "description": "Container securityContext applied to the graylog-datanode container. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."
         },
+        "annotations": { "type": "object", "description": "Annotations for the StatefulSet object" },
+        "labels": { "type": "object", "description": "Labels for the StatefulSet object" },
         "podAnnotations": {
           "type": "object"
         },
+        "podLabels": { "type": "object" },
         "nodeSelector": {
           "type": "object"
         },
@@ -603,10 +815,78 @@
         "affinity": {
           "type": "object"
         },
+        "topologySpreadConstraints": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "priorityClassName": { "type": [ "string", "null" ] },
+        "schedulerName": { "type": [ "string", "null" ] },
+        "runtimeClassName": { "type": [ "string", "null" ] },
+        "terminationGracePeriodSeconds": { "type": [ "integer", "null" ] },
+        "dnsPolicy": { "type": [ "string", "null" ] },
+        "dnsConfig": { "type": "object" },
+        "hostAliases": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "lifecycle": { "type": "object", "description": "Lifecycle hooks for the main container" },
         "extraEnv": {
           "type": "array",
           "items": { "type": "object" },
           "description": "Full EnvVar objects (supports valueFrom)"
+        },
+        "extraVolumes": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volumes for the pod"
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional volume mounts for the main container"
+        },
+        "extraInitContainers": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional init containers, rendered after the chart's own init containers"
+        },
+        "extraContainers": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Additional sidecar containers"
+        }
+      }
+    },
+    "opensearch": {
+      "type": "object",
+      "description": "Bring Your Own OpenSearch: connect Graylog to an external OpenSearch cluster instead of the bundled Data Node. Mutually exclusive with datanode.enabled.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable external OpenSearch mode. Requires datanode.enabled=false."
+        },
+        "hosts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "OpenSearch node REST URIs (scheme + host + port), without credentials."
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "existingSecret": { "type": "string", "description": "Secret holding OpenSearch username/password, read at template/install time." },
+            "usernameKey": { "type": "string" },
+            "passwordKey": { "type": "string" },
+            "username": { "type": "string", "description": "Inline username (takes precedence over existingSecret; dev/test only)." },
+            "password": { "type": "string", "description": "Inline password (takes precedence over existingSecret; dev/test only)." }
+          }
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "description": "Set false if the OpenSearch HTTP layer is plaintext." },
+            "caSecret": { "type": "string", "description": "Secret with the CA cert for the OpenSearch HTTP layer, imported into Graylog's truststore." },
+            "caKey": { "type": "string", "description": "Key within caSecret holding the CA cert (default ca.crt)." }
+          }
         }
       }
     },
@@ -616,11 +896,14 @@
         "create": { "type": "boolean" },
         "automount": { "type": "boolean" },
         "annotations": { "type": "object" },
+        "labels": { "type": "object" },
         "nameOverride": { "type": "string" },
         "role": {
           "type": "object",
           "properties": {
             "create": { "type": "boolean" },
+            "annotations": { "type": "object", "description": "Annotations for the Role and RoleBinding objects" },
+            "labels": { "type": "object", "description": "Labels for the Role and RoleBinding objects" },
             "rules": { "type": "array" }
           }
         }
@@ -652,6 +935,8 @@
                   "type": "object",
                   "properties": {
                     "existingName": { "type": ["string", "null"] },
+                    "annotations": { "type": "object", "description": "Annotations for the chart-managed cert-manager Issuer" },
+                    "labels": { "type": "object", "description": "Labels for the chart-managed cert-manager Issuer" },
                     "managed": {
                       "type": "object",
                       "properties": {
@@ -671,6 +956,7 @@
             "enabled": { "type": "boolean" },
             "className": { "type": "string" },
             "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "hosts": {
               "type": "array",
               "items": {
@@ -695,30 +981,11 @@
         },
         "forwarder": {
           "type": "object",
+          "description": "Forwarder ingest. Each gRPC channel becomes its own Ingress: the message channel (13301) and the configuration channel (13302).",
           "properties": {
             "enabled": { "type": "boolean" },
-            "className": { "type": "string" },
-            "annotations": { "type": "object" },
-            "hosts": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "host": { "type": "string" },
-                  "paths": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "path": { "type": "string" },
-                        "pathType": { "type": "string" }
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            "tls": { "type": "array" }
+            "messageChannel": { "$ref": "#/$defs/forwarderChannel" },
+            "configChannel": { "$ref": "#/$defs/forwarderChannel" }
           }
         }
       }
@@ -736,6 +1003,68 @@
         "version": { "type": "string" },
         "replicas": { "type": "integer" },
         "arbiters": { "type": "integer" },
+        "annotations": { "type": "object", "description": "Annotations for the MongoDBCommunity object" },
+        "labels": { "type": "object", "description": "Labels for the MongoDBCommunity object" },
+        "resources": {
+          "type": "object",
+          "description": "Compute resources for the mongod container",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "agentResources": {
+          "type": "object",
+          "description": "Compute resources for the mongodb-agent container",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "initResources": {
+          "type": "object",
+          "description": "Compute resources for the mongod-posthook and mongodb-agent-readinessprobe init containers",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
         "persistence": {
           "type": "object",
           "properties": {
@@ -746,7 +1075,9 @@
                 "data": { "type": "string" },
                 "logs": { "type": "string" }
               }
-            }
+            },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" }
           }
         },
         "serviceAccount": {
@@ -755,16 +1086,51 @@
             "create": { "type": "boolean" },
             "automount": { "type": "boolean" },
             "annotations": { "type": "object" },
+            "labels": { "type": "object" },
             "nameOverride": { "type": "string" },
             "role": {
               "type": "object",
               "properties": {
                 "create": { "type": "boolean" },
+                "annotations": { "type": "object", "description": "Annotations for the Role and RoleBinding objects" },
+                "labels": { "type": "object", "description": "Labels for the Role and RoleBinding objects" },
                 "rules": { "type": "array" }
               }
             }
           }
         }
+      }
+    }
+  },
+  "$defs": {
+    "forwarderChannel": {
+      "type": "object",
+      "description": "One forwarder gRPC channel, rendered as its own Ingress.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object" },
+        "labels": { "type": "object" },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": { "type": "string" },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": { "type": "string" },
+                    "pathType": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": { "type": "array" }
       }
     }
   }

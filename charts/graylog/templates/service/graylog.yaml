@@ -3,8 +3,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "graylog.service.name" . }}
-  labels:
-    {{- include "graylog.labels" . | nindent 4 }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.service.labels "fixed" (dict "app.kubernetes.io/component" "server") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.service.annotations "indent" 2) }}
 spec:
   type: {{ .Values.graylog.service.type | default "ClusterIP" }}
   ports:
@@ -24,7 +24,7 @@ spec:
       targetPort: {{ .targetPort | default .port | int }}
       protocol: {{ .protocol }}
     {{- end }}
-    - name: input-fwd-conf
+    - name: {{ include "graylog.service.port.forwarder.config" . }}
       port: 13302
       targetPort: 13302
       protocol: TCP

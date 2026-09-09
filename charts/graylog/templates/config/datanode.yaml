@@ -1,3 +1,4 @@
+{{- if .Values.datanode.enabled }}
 {{- $c := .Values.datanode.config }}
 {{- $sk := $c.s3ClientDefaultSecretKey }}
 {{- $ak := $c.s3ClientDefaultAccessKey }}
@@ -6,11 +7,17 @@
   {{ fail "All three values are required: datanode.config.s3ClientDefaultEndpoint, datanode.config.s3ClientDefaultSecretKey, and datanode.config.s3ClientDefaultAccessKey" }}
 {{- end }}
 {{- range include "graylog.datanode.groups" $ | fromYamlArray }}
+{{- $fixed := dict "app.kubernetes.io/component" "datanode" "app" "graylog-datanode" }}
+{{- with .groupLabel }}
+{{- $_ := set $fixed "graylog-datanode-group" . }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .configmapName }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .labels "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .annotations "indent" 2) }}
 data:
   JAVA_OPTS: {{ .config.javaOpts | quote }}
   GRAYLOG_DATANODE_NODE_ID_FILE: {{ .config.nodeIdFile | default "/var/lib/graylog-datanode/node-id" | quote }}
@@ -24,4 +31,5 @@ data:
   GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_REGION: {{ .config.s3ClientDefaultRegion | quote }}
   GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_PROTOCOL: {{ .config.s3ClientDefaultProtocol | quote }}
   GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_PATH_STYLE_ACCESS: {{ .config.s3ClientDefaultPathStyleAccess | quote }}
+{{- end }}
 {{- end }}

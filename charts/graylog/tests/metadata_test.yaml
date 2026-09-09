@@ -1,0 +1,304 @@
+suite: object labels and annotations
+templates:
+  - workload/statefulsets/graylog.yaml
+  - workload/statefulsets/datanode.yaml
+  - service/graylog.yaml
+  - service/datanode.yaml
+  - config/graylog.yaml
+  - auth/sa.yaml
+  - policy/pdb/graylog.yaml
+  - tests/test-credentials-secret.yaml
+  # The StatefulSets' checksum helpers `include` these templates by path, so
+  # helm-unittest's template filter has to list them for the includes to resolve.
+  - config/datanode.yaml
+  - config/secret/secrets.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: applies global.commonLabels to every object
+    set:
+      global.commonLabels:
+        env: dev
+        team: observability
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: metadata.labels.team
+          value: observability
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: service/graylog.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: service/datanode.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/graylog.yaml
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: auth/sa.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: tests/test-credentials-secret.yaml
+
+  - it: applies global.commonAnnotations to every object
+    set:
+      global.commonAnnotations:
+        owner: platform-team
+    asserts:
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: service/graylog.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/graylog.yaml
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: auth/sa.yaml
+        documentIndex: 0
+
+  - it: applies global.commonLabels and commonAnnotations to the PodDisruptionBudget
+    set:
+      graylog.podDisruptionBudget.enabled: true
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+      graylog.podDisruptionBudget.labels.tier: critical
+      graylog.podDisruptionBudget.annotations.note: keep-two
+    template: policy/pdb/graylog.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.labels.tier
+          value: critical
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+      - equal:
+          path: metadata.annotations.note
+          value: keep-two
+      - equal:
+          path: metadata.labels.app
+          value: graylog-app
+
+  - it: omits the annotations block entirely when nothing is set
+    template: service/graylog.yaml
+    asserts:
+      - notExists:
+          path: metadata.annotations
+
+  - it: renders per-object labels and annotations on the Graylog StatefulSet
+    set:
+      graylog.labels.tier: backend
+      graylog.annotations.note: primary
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: backend
+      - equal:
+          path: metadata.annotations.note
+          value: primary
+
+  - it: renders per-object labels and annotations on the Datanode StatefulSet
+    set:
+      datanode.labels.tier: storage
+      datanode.annotations.note: search
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: storage
+      - equal:
+          path: metadata.annotations.note
+          value: search
+
+  - it: renders service labels and annotations
+    set:
+      graylog.service.labels.tier: frontend
+      graylog.service.annotations:
+        service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+      datanode.service.labels.tier: storage
+      datanode.service.annotations.note: headless
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: frontend
+        template: service/graylog.yaml
+      - equal:
+          path: metadata.annotations["service.beta.kubernetes.io/aws-load-balancer-internal"]
+          value: "true"
+        template: service/graylog.yaml
+      - equal:
+          path: metadata.labels.tier
+          value: storage
+        template: service/datanode.yaml
+      - equal:
+          path: metadata.annotations.note
+          value: headless
+        template: service/datanode.yaml
+
+  - it: lets per-object values override global.commonLabels and commonAnnotations
+    set:
+      global.commonLabels.tier: unset
+      global.commonAnnotations.note: unset
+      graylog.labels.tier: backend
+      graylog.annotations.note: primary
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: backend
+      - equal:
+          path: metadata.annotations.note
+          value: primary
+
+  - it: does not let custom labels override the chart's own identity labels
+    set:
+      graylog.labels:
+        app.kubernetes.io/name: hijacked
+        app: hijacked
+      global.commonLabels:
+        app.kubernetes.io/managed-by: hijacked
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: graylog
+      - equal:
+          path: metadata.labels.app
+          value: graylog-app
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: keeps Helm hook annotations when custom annotations are set
+    set:
+      global.commonAnnotations:
+        helm.sh/hook: pre-install
+        owner: platform-team
+    template: tests/test-credentials-secret.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: test
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+
+  - it: renders pod labels and annotations alongside the config checksums
+    set:
+      graylog.podLabels.tier: backend
+      graylog.podAnnotations.note: primary
+      datanode.podLabels.tier: storage
+      datanode.podAnnotations.note: search
+      global.commonLabels.env: dev
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.tier
+          value: backend
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.metadata.labels.env
+          value: dev
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: graylog-app
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.metadata.annotations.note
+          value: primary
+        template: workload/statefulsets/graylog.yaml
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+        template: workload/statefulsets/graylog.yaml
+      - exists:
+          path: spec.template.metadata.annotations["checksum/secret"]
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.metadata.labels.tier
+          value: storage
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.template.metadata.annotations.note
+          value: search
+        template: workload/statefulsets/datanode.yaml
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+        template: workload/statefulsets/datanode.yaml
+
+  - it: does not let custom pod labels break the workload selector
+    set:
+      graylog.podLabels:
+        app.kubernetes.io/instance: hijacked
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/instance"]
+          value: graylog
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: graylog
+
+  - it: labels and annotates the Role and RoleBinding
+    set:
+      serviceAccount.role.create: true
+      serviceAccount.role.rules:
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["get"]
+      serviceAccount.role.labels.tier: rbac
+      serviceAccount.role.annotations.note: least-privilege
+      serviceAccount.labels.tier: identity
+      serviceAccount.annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/graylog
+    template: auth/sa.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["eks.amazonaws.com/role-arn"]
+          value: arn:aws:iam::123456789012:role/graylog
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.tier
+          value: identity
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.tier
+          value: rbac
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations.note
+          value: least-privilege
+        documentIndex: 1
+      - equal:
+          path: metadata.labels.tier
+          value: rbac
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations.note
+          value: least-privilege
+        documentIndex: 2

@@ -1,0 +1,231 @@
+suite: container probes
+templates:
+  # Both StatefulSets pull in checksum helpers that `include` other templates by
+  # path, so those dependencies have to be listed for the includes to resolve.
+  # Every assertion below is scoped with `template:`.
+  - workload/statefulsets/graylog.yaml
+  - workload/statefulsets/datanode.yaml
+  - config/graylog.yaml           # checksum/config dependency (graylog)
+  - config/datanode.yaml          # checksum/config dependency (datanode)
+  - config/secret/secrets.yaml    # checksum/secret dependency
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # ---------------------------------------------------------------- graylog ---
+  - it: gates graylog readiness on the lbstatus endpoint, not a TCP connect
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+          value:
+            path: /api/system/lbstatus
+            port: 9000
+            scheme: HTTP
+        template: workload/statefulsets/graylog.yaml
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket
+        template: workload/statefulsets/graylog.yaml
+
+  - it: keeps graylog liveness on a TCP connect so a DEAD lbstatus cannot kill the pod
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 9000
+        template: workload/statefulsets/graylog.yaml
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+        template: workload/statefulsets/graylog.yaml
+
+  - it: gives graylog a startup probe with a five-minute default boot budget
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /api/system/lbstatus
+        template: workload/statefulsets/graylog.yaml
+      # failureThreshold x periodSeconds is the budget a slow migration or
+      # journal replay gets before liveness can act at all.
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 10
+        template: workload/statefulsets/graylog.yaml
+
+  - it: switches the probe scheme to HTTPS when TLS is enabled
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.secretName: my-tls-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.scheme
+          value: HTTPS
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.scheme
+          value: HTTPS
+        template: workload/statefulsets/graylog.yaml
+
+  - it: follows a custom graylog app port into the probes
+    set:
+      graylog.service.ports.app: 9500
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 9500
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 9500
+        template: workload/statefulsets/graylog.yaml
+
+  # --------------------------------------------------------------- datanode ---
+  - it: gates datanode readiness on the OpenSearch port, not the datanode API port
+    # The Data Node binds its REST API (8999) well before OpenSearch binds 9200,
+    # so probing 8999 reports Ready while OpenSearch is still down.
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: 9200
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.tcpSocket.port
+          value: 9200
+        template: workload/statefulsets/datanode.yaml
+
+  - it: keeps datanode liveness on the datanode API port
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 8999
+        template: workload/statefulsets/datanode.yaml
+
+  - it: follows custom datanode ports into the probes
+    set:
+      datanode.service.ports.api: 7999
+      datanode.service.ports.data: 7200
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: 7200
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 7999
+        template: workload/statefulsets/datanode.yaml
+
+  # ------------------------------------------------- handler overrides & off ---
+  - it: lets a custom handler replace the chart default entirely
+    set:
+      graylog.readinessProbe:
+        enabled: true
+        periodSeconds: 7
+        exec:
+          command: ["/bin/sh", "-c", "true"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command
+          value: ["/bin/sh", "-c", "true"]
+        template: workload/statefulsets/graylog.yaml
+      # The chart default must be gone, not merged alongside the override.
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+        template: workload/statefulsets/graylog.yaml
+      # Timing fields still apply to a custom handler.
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 7
+        template: workload/statefulsets/graylog.yaml
+
+  - it: lets the datanode take an authenticated httpGet handler
+    set:
+      datanode.readinessProbe:
+        enabled: true
+        httpGet:
+          path: /_cluster/health
+          port: 9200
+          scheme: HTTPS
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /_cluster/health
+        template: workload/statefulsets/datanode.yaml
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket
+        template: workload/statefulsets/datanode.yaml
+
+  - it: refuses a probe that declares two handlers
+    set:
+      graylog.readinessProbe:
+        enabled: true
+        httpGet: { path: /a, port: 9000 }
+        tcpSocket: { port: 9000 }
+    asserts:
+      # helm-unittest matches a fail message from its first line break onward,
+      # so the pattern below starts at the second line of the message.
+      - failedTemplate:
+          errorPattern: "readinessProbe sets httpGet and tcpSocket, and a Kubernetes probe can only have one handler"
+        template: workload/statefulsets/graylog.yaml
+
+  - it: omits each probe when disabled
+    set:
+      graylog.startupProbe.enabled: false
+      graylog.livenessProbe.enabled: false
+      graylog.readinessProbe.enabled: false
+      datanode.startupProbe.enabled: false
+      datanode.livenessProbe.enabled: false
+      datanode.readinessProbe.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].startupProbe
+        template: workload/statefulsets/graylog.yaml
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe
+        template: workload/statefulsets/graylog.yaml
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+        template: workload/statefulsets/graylog.yaml
+      - isNull:
+          path: spec.template.spec.containers[0].startupProbe
+        template: workload/statefulsets/datanode.yaml
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+        template: workload/statefulsets/datanode.yaml
+
+  - it: never renders successThreshold on liveness or startup probes
+    # Kubernetes requires successThreshold=1 there and rejects anything else, so
+    # the template drops it even when values carry one.
+    set:
+      graylog.livenessProbe.successThreshold: 3
+      graylog.startupProbe.successThreshold: 3
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe.successThreshold
+        template: workload/statefulsets/graylog.yaml
+      - isNull:
+          path: spec.template.spec.containers[0].startupProbe.successThreshold
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.successThreshold
+          value: 1
+        template: workload/statefulsets/graylog.yaml
+
+  # ------------------------------------------------------ podManagementPolicy ---
+  - it: defaults the datanode podManagementPolicy to OrderedReady
+    # Immutable field: defaulting to Parallel would make helm upgrade fail on
+    # every existing release.
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: OrderedReady
+        template: workload/statefulsets/datanode.yaml
+
+  - it: allows opting the datanode into Parallel pod management
+    set:
+      datanode.podManagementPolicy: Parallel
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: Parallel
+        template: workload/statefulsets/datanode.yaml

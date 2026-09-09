@@ -7,6 +7,15 @@ assignees: ''
 
 ---
 
+> [!CAUTION]
+> Do not paste credentials into this issue. This includes Kubernetes `Secret` manifests,
+> base64 or decoded secret values, private values files, tokens, private keys, and MongoDB
+> URIs. The output of `helm get all`, `helm template`, and `kubectl get secret` can contain
+> credentials. Redact them before you paste. This issue is public.
+>
+> To report a security vulnerability, contact the maintainers privately. Do not open a
+> public issue.
+
 ## Summary
 _Give a brief description of the problem._
 
@@ -26,8 +35,9 @@ _What is affected by this issue, and why does it matter?_
 - Cloud provider / platform:
 
 ### Pre-flight checks
-- [ ] `helm lint ./graylog` passes
+- [ ] `helm lint ./charts/graylog` passes
 - [ ] Checked existing issues for duplicates
+- [ ] I removed every credential, token, and secret value from the text, logs, and screenshots in this issue
 
 ### Steps to reproduce the issue:
 1. ...

@@ -1,0 +1,28 @@
+# Keeps the SHA-pinned actions in .github/workflows current.
+#
+# Pinning by commit SHA is what stops a moved tag from changing what runs in CI,
+# but a pin never updates itself: without this, the workflows would silently
+# freeze on whatever was current the day they were written, security fixes
+# included. Dependabot reads the `# vX.Y.Z` comment beside each SHA, so its pull
+# requests bump both together and stay readable.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    # Repository tooling must not use fix:/feat:, or it would land in the chart's
+    # changelog and could trigger a release of the chart. `ci:` is a hidden
+    # changelog section, so these never reach a release.
+    commit-message:
+      prefix: ci
+    # One pull request for the routine bumps rather than five. Majors stay
+    # separate: those are the ones that change behaviour and deserve their own
+    # review.
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies

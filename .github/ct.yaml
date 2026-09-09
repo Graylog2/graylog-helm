@@ -12,7 +12,14 @@ validate-maintainers: false
 
 # Defaults below are made explicit to document the chart's CI policy
 # rather than relying on ct's built-in defaults.
-check-version-increment: true
+
+# release-please owns `version:` in Chart.yaml, so contributors no longer bump
+# it: an ordinary chart PR deliberately leaves the version at the last release.
+# An increment check would fail every such PR, or invite hand-edits to a field
+# release-please manages. (`ct lint --all` already overrides this and logs
+# "Version increment checking disabled." — false states the intent instead of
+# relying on that override.)
+check-version-increment: false
 validate-chart-schema: true
 validate-yaml: true
 

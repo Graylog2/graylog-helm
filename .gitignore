@@ -9,3 +9,4 @@ graylog/assets
 .idea/
 *.tmproj
 .vscode/
+.DS_Store

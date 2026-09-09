@@ -1,8 +1,18 @@
 {{- if not .Values.graylog.config.tls.enabled | and .Values.ingress.enabled .Values.ingress.config.tls.issuer.managed.enabled }}
+{{/*
+Fail early with an actionable message when the cert-manager CRDs are missing.
+The lookup guard skips the check for offline renders (helm template, unittest),
+where .Capabilities only contains built-in API versions.
+*/}}
+{{- if and (not (.Capabilities.APIVersions.Has "cert-manager.io/v1/Issuer")) (lookup "v1" "Namespace" "" .Release.Namespace) }}
+{{- fail "The cert-manager CRDs (cert-manager.io/v1) were not found in the cluster. Install cert-manager first (https://cert-manager.io/docs/installation/), or disable the managed issuer (ingress.config.tls.issuer.managed.enabled=false) and reference an existing issuer or TLS secret instead." }}
+{{- end }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   name: {{ include "graylog.cert-manager.issuer.name" . }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.ingress.config.tls.issuer.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.ingress.config.tls.issuer.annotations "indent" 2) }}
 spec:
   acme:
     server: {{ .Values.ingress.config.tls.issuer.managed.staging | ternary "-staging" "" | printf "https://acme%s-v02.api.letsencrypt.org/directory" }}

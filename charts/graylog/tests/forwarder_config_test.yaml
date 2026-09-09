@@ -1,0 +1,22 @@
+suite: graylog forwarder server configuration
+templates:
+  - config/graylog.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders no forwarder server settings while the feature is disabled
+    asserts:
+      - notExists:
+          path: data.GRAYLOG_FORWARDER_BIND_ADDRESS
+      - notExists:
+          path: data.GRAYLOG_FORWARDER_GRPC_ENABLE_TLS
+  - it: renders none even when the forwarder ingress is enabled
+    set:
+      ingress.enabled: true
+      ingress.forwarder.enabled: true
+    asserts:
+      - notExists:
+          path: data.GRAYLOG_FORWARDER_BIND_ADDRESS
+      - notExists:
+          path: data.GRAYLOG_FORWARDER_GRPC_ENABLE_TLS

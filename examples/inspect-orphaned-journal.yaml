@@ -1,0 +1,156 @@
+# Inspect the journal left behind by a scaled-in Graylog node.
+#
+# When you reduce graylog.replicas, the highest ordinal disappears but its PVC is
+# retained. Nothing will ever mount that claim again, so anything still unprocessed
+# in its journal is stranded. This pod mounts the claim READ-ONLY and reports what
+# is on it, so you can decide whether the PVC is safe to delete.
+#
+# ── Usage ────────────────────────────────────────────────────────────────────
+#   # 1. scale in (drain first - see docs/graylog-message-handling.md)
+#   helm upgrade graylog graylog/graylog -n graylog --set graylog.replicas=3 --reuse-values
+#
+#   # 2. confirm the claim of the removed ordinal is still there
+#   kubectl get pvc -n graylog | grep data
+#
+#   # 3. point CLAIM_NAME below at it, then
+#   kubectl apply -n graylog -f inspect-orphaned-journal.yaml
+#   kubectl logs -n graylog journal-inspector -f
+#   kubectl delete -n graylog pod/journal-inspector
+#
+# The claim is named <fullname>-data-<statefulset>-<ordinal>, e.g. for release
+# "graylog" scaling 3 -> 2 the orphan is:
+#   graylog-data-graylog-2
+#
+# Graylog also ships a journal CLI that reads the same files, if you would rather
+# mount the claim yourself and run it against a config whose data_dir points at the
+# mount: `graylog journal show --show-segments`. Do not use `journal truncate`
+# unless you intend to discard entries.
+#
+# ── What this can and cannot tell you ────────────────────────────────────────
+# It CAN prove that messages were stranded: if the committed offset sits below an
+# offset the index shows was written, those messages were never processed.
+#
+# It CANNOT prove the opposite. Graylog's offset index is sparse, so the highest
+# offset it records is only a lower bound on what the segment holds - a journal
+# can look clean here and still have unprocessed records past the last index
+# entry. Measured on a live node: committed was 2750 offsets beyond the last index
+# entry while the live gauge still reported 386 uncommitted messages.
+#
+# For a definitive answer, put the volume back under a running Graylog: scale the
+# StatefulSet back up by one. The ordinal returns, re-binds this same claim, and
+# replays anything unprocessed. Watch gl_journal_entries_uncommitted on that pod;
+# if it settles at 0 with inputs quiesced, nothing was stranded. That is both the
+# test and the fix - if something WAS stranded, replaying it is what you wanted.
+#
+# ── Constraints ──────────────────────────────────────────────────────────────
+#   * RWO: the claim must not be attached elsewhere. After a scale-in the pod is
+#     gone, but an ungraceful node loss can hold the attachment for ~6 minutes.
+#   * Zonal block storage: this pod must schedule into the volume's AZ. The PV's
+#     nodeAffinity handles that automatically; if it cannot be satisfied the pod
+#     just sits Pending.
+#   * readOnly on both the mount and the volume, so inspection cannot alter the
+#     journal or advance any offset.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: journal-inspector
+  labels:
+    app.kubernetes.io/name: journal-inspector
+spec:
+  restartPolicy: Never
+  # Matches the Graylog pod's context: the journal is mode 2770 owned by
+  # 1100:1100, so a different uid cannot read it.
+  securityContext:
+    runAsUser: 1100
+    runAsGroup: 1100
+    fsGroup: 1100
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: inspect
+      # The Graylog image is already present on the nodes and has od/awk/stat.
+      # Any busybox-class image works; keep the tag in step with your release.
+      image: graylog/graylog-enterprise:7.1.6-1
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -u
+          J=/mnt/journal/journal
+          echo "=== orphaned journal: ${J} ==="
+          if [ ! -d "${J}" ]; then
+            echo "no journal directory on this claim - nothing was ever written, or"
+            echo "the mount path differs from the chart default."
+            ls -la /mnt/journal || true
+            exit 0
+          fi
+
+          OFFSET_FILE="${J}/graylog2-committed-read-offset"
+          if [ ! -f "${OFFSET_FILE}" ]; then
+            echo "VERDICT: UNKNOWN - no committed-read-offset file."
+            echo "Cannot tell what was processed. Do not delete this claim without"
+            echo "re-attaching it to a running Graylog."
+            exit 0
+          fi
+          COMMITTED=$(cat "${OFFSET_FILE}")
+          echo "committed-read-offset (last message processed): ${COMMITTED}"
+          echo
+          echo "segments (filename = first offset the segment holds):"
+          for f in "${J}"/messagejournal-0/*.log; do
+            [ -e "${f}" ] || { echo "  (none)"; break; }
+            base=$(basename "${f}" .log | sed 's/^0*//')
+            printf '  base=%-14s %8.1f MiB   last modified %s\n' \
+              "${base}" "$(stat -c %s "${f}" | awk '{print $1/1048576}')" "$(stat -c %y "${f}" | cut -d. -f1)"
+          done
+          echo
+
+          # Highest offset the sparse index proves was written. Index entries are
+          # 8 bytes: 4-byte offset relative to the segment base, 4-byte file
+          # position. The file is preallocated and zero-filled, so the last
+          # non-zero pair is the tail.
+          LAST_LOG=$(ls "${J}"/messagejournal-0/*.log 2>/dev/null | sort | tail -1)
+          [ -n "${LAST_LOG}" ] || { echo "no segments; journal is empty."; exit 0; }
+          BASE=$(basename "${LAST_LOG}" .log | sed 's/^0*//')
+          IDX="${J}/messagejournal-0/$(basename "${LAST_LOG}" .log).index"
+          REL=0
+          [ -f "${IDX}" ] && REL=$(od -An -tu4 -w8 "${IDX}" | awk '$1 != 0 || $2 != 0 {rel=$1} END{print rel+0}')
+          KNOWN_WRITTEN=$(( BASE + REL ))
+          echo "highest offset the index proves was written: ${KNOWN_WRITTEN}"
+          echo
+
+          if [ "${COMMITTED}" -lt "${KNOWN_WRITTEN}" ]; then
+            echo "VERDICT: STRANDED DATA - at least $(( KNOWN_WRITTEN - COMMITTED )) messages"
+            echo "were written past the committed offset and never processed."
+            echo
+            echo "DO NOT DELETE this claim. Scale the StatefulSet back up by one so the"
+            echo "ordinal returns, re-binds this volume and replays them. Expect late"
+            echo "arrivals to hit alerts, dashboards and index retention."
+          else
+            echo "VERDICT: NO EVIDENCE OF STRANDED DATA."
+            echo
+            echo "The committed offset is at or beyond every offset the index records,"
+            echo "so the segments on disk hold already-processed messages retained for"
+            echo "messageJournal.maxAge. Their size is retention, not backlog."
+            echo
+            echo "This is NOT proof the journal was empty: the index is sparse, so"
+            echo "records after the last index entry are invisible here. If you need"
+            echo "certainty, scale back up by one and watch"
+            echo "gl_journal_entries_uncommitted settle at 0 before deleting."
+          fi
+      volumeMounts:
+        - name: orphaned-journal
+          mountPath: /mnt/journal
+          readOnly: true
+  volumes:
+    - name: orphaned-journal
+      persistentVolumeClaim:
+        # CHANGE ME to the claim of the ordinal you removed.
+        claimName: graylog-data-graylog-2
+        readOnly: true

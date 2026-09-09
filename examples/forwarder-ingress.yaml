@@ -1,0 +1,82 @@
+# Graylog Forwarder ingest via AWS ALB
+#
+# A forwarder is configured with a single server hostname plus two ports:
+#   forwarder_message_transmission_port  13301  (log data)
+#   forwarder_configuration_port         13302  (configuration updates)
+#
+# Both must be reachable, on the SAME hostname. The chart therefore renders one
+# Ingress per channel. Give both the same `group.name` so the AWS Load Balancer
+# Controller provisions a SINGLE ALB with two listeners: rules are scoped to the
+# `listen-ports` declared on each Ingress, so each listener reaches its own
+# target group.
+#
+# Prerequisites:
+#   - An enterprise license (the Forwarder is an enterprise feature).
+#   - A Forwarder input created under System > Forwarders. Graylog does not bind
+#     13301/13302 until one exists, so ALB targets stay unhealthy until then.
+#   - An ACM certificate covering the ingest hostname. The ALB terminates TLS and
+#     speaks cleartext HTTP/2 to Graylog, so the forwarder should be configured
+#     with forwarder_grpc_enable_tls = true.
+#
+ingress:
+  enabled: true
+  forwarder:
+    enabled: true
+
+    # Message channel — log data, port 13301.
+    messageChannel:
+      enabled: true
+      className: alb
+      annotations:
+        alb.ingress.kubernetes.io/group.name: my-graylog
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/target-type: ip
+        alb.ingress.kubernetes.io/backend-protocol-version: GRPC
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 13301}]'
+        alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/REPLACE-ME
+        alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+        alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+        alb.ingress.kubernetes.io/healthcheck-port: "13301"
+        alb.ingress.kubernetes.io/healthcheck-path: /grpc.health.v1.Health/Check
+        # gRPC status codes: 0 = OK, 12 = UNIMPLEMENTED. Accepting 12 keeps the
+        # target healthy when the endpoint answers gRPC but does not serve the
+        # standard health service.
+        alb.ingress.kubernetes.io/success-codes: "0,12"
+        alb.ingress.kubernetes.io/healthcheck-interval-seconds: "10"
+        alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+        alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+        alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+        external-dns.alpha.kubernetes.io/hostname: ingest-my-graylog.example.com
+      hosts:
+        - host: ingest-my-graylog.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+
+    # Configuration channel — configuration polling, port 13302.
+    # Same hostname and same ALB group; only the ports differ.
+    configChannel:
+      enabled: true
+      className: alb
+      annotations:
+        alb.ingress.kubernetes.io/group.name: my-graylog
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/target-type: ip
+        alb.ingress.kubernetes.io/backend-protocol-version: GRPC
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 13302}]'
+        alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/REPLACE-ME
+        alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+        alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+        alb.ingress.kubernetes.io/healthcheck-port: "13302"
+        alb.ingress.kubernetes.io/healthcheck-path: /grpc.health.v1.Health/Check
+        alb.ingress.kubernetes.io/success-codes: "0,12"
+        alb.ingress.kubernetes.io/healthcheck-interval-seconds: "10"
+        alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+        alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+        alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+        external-dns.alpha.kubernetes.io/hostname: ingest-my-graylog.example.com
+      hosts:
+        - host: ingest-my-graylog.example.com
+          paths:
+            - path: /
+              pathType: Prefix

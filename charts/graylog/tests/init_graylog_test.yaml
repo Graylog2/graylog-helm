@@ -17,6 +17,47 @@ tests:
       - exists:
           path: data["init-script.sh"]
 
+  # Volume initialization must not be keyed off the journal (J-04). The lock file
+  # only exists while a journal does, so using it as the sentinel meant a disabled
+  # journal re-ran `cp -r` over the volume on every restart.
+  # Runtime behaviour of this logic — including the migration path — is covered by
+  # tests/scripts/init-graylog-behavior-test.sh.
+  - it: uses a dedicated marker file as the initialization sentinel
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'if \[ -f /mnt/data/\.initialized \]; then'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'touch /mnt/data/\.initialized'
+
+  - it: does not gate initialization on the journal lock file
+    asserts:
+      # The lock may still appear as a migration signal, but never as the
+      # first-choice sentinel that decides whether to copy. The leading \s is what
+      # keeps this from matching the legitimate `elif` — "elif" ends in "if", so an
+      # unanchored pattern passes vacuously.
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: '\sif \[ -f /mnt/data/journal/\.lock \]'
+
+  - it: keeps the journal lock only as a migration signal for existing volumes
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'elif \[ -f /mnt/data/journal/\.lock \]'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'initialized by an earlier chart version'
+
+  - it: writes the marker only after a successful copy
+    asserts:
+      # A bare `cp -r ...` followed by an unconditional touch would mark a
+      # half-copied volume as initialized and never retry it.
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'if cp -r /usr/share/graylog/data/\* /mnt/data/; then'
+
   - it: always includes the MongoDB credentials check
     asserts:
       - matchRegex:
@@ -40,6 +81,107 @@ tests:
       - notMatchRegex:
           path: data["init-script.sh"]
           pattern: 'keytool -importcert'
+
+  - it: seeds the truststore from the image JDK truststore before importing certificates
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'cp "\$\{JAVA_HOME_LOCAL\}/lib/security/cacerts" "\$\{CACERTS_TMP\}"'
+      # never mutate the truststore already on the data volume, it may be a truncated
+      # keystore written by an older chart version
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert.*\$\{CACERTS_DST\}'
+
+  - it: locates the JDK truststore without executing java
+    # The java binary in the Graylog image carries a file capability
+    # (cap_net_bind_service=ep) and the init container runs with
+    # allowPrivilegeEscalation: false, which sets no_new_privs. The kernel then
+    # refuses to execve it: "java: Operation not permitted", exit 126. Deriving
+    # the JDK path by running java therefore always yields an empty string and
+    # fails the init container. Resolve it from ${JAVA_HOME} instead.
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'JAVA_HOME_LOCAL="\$\{JAVA_HOME\}"'
+      # No invocation of the java binary anywhere in the script.
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: '\$\(java '
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'java -XshowSettings'
+
+  - it: fails the init container when the image JDK truststore cannot be found
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'if \[ -z "\$\{JAVA_HOME_LOCAL\}" \] \|\| \[ ! -f "\$\{JAVA_HOME_LOCAL\}/lib/security/cacerts" \]; then'
+
+  - it: re-keys the seeded truststore when a custom keyStorePass is set
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+      graylog.config.tls.keyStorePass: s3cr3t
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: "TRUSTSTORE_PASS='s3cr3t'"
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -storepasswd -keystore "\$\{CACERTS_TMP\}" -storepass changeit -new "\$\{TRUSTSTORE_PASS\}"'
+
+  - it: fails the init container when a certificate import fails
+    # An import that fails silently still leaves a truststore behind for the mv
+    # below, and the JVM is pointed at it with -Djavax.net.ssl.trustStore. The
+    # missing certificate then surfaces as unexplained TLS failures at runtime
+    # instead of here. Every import is fatal.
+    set:
+      graylog.config.tls.enabled: true
+      graylog.config.tls.updateKeyStore: true
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert -noprompt -alias byoc -file "/mnt/tls/tls.crt".*\|\| \{ echo "Error: failed to import the Graylog certificate'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert -noprompt -alias byoc-ca .*\|\| \{ echo "Error: failed to import the root CA'
+      # The root CA import must be gated by an if, not chained onto the
+      # [ -n "${ROOT_CA}" ] test: with `&&` the whole line reports failure
+      # whenever ROOT_CA is empty, so an `|| exit 1` there would abort every
+      # deployment whose certificate carries no root CA.
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: '\[ -n "\$\{ROOT_CA\}" \] &&'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'if \[ -n "\$\{ROOT_CA\}" \]; then'
+
+  - it: fails the init container when the BYO OpenSearch CA import fails
+    set:
+      graylog.config.tls.enabled: false
+      opensearch.enabled: true
+      opensearch.tls.enabled: true
+      opensearch.tls.caSecret: os-ca
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'keytool -importcert -noprompt -alias byo-opensearch-ca .*\|\| \{ echo "Error: failed to import the OpenSearch CA'
+
+  - it: builds no truststore when neither Graylog TLS nor a BYO OpenSearch CA needs one
+    asserts:
+      - notMatchRegex:
+          path: data["init-script.sh"]
+          pattern: 'CACERTS_TMP'
 
   - it: skips TLS setup entirely when TLS is disabled
     set:
