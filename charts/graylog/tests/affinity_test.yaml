@@ -141,6 +141,24 @@ tests:
       - isNull:
           path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchExpressions
 
+  - it: mongodb.affinity replaces the chart default entirely
+    template: custom/mongo-rs.yaml
+    set:
+      mongodb.affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: disktype
+                    operator: In
+                    values: ["ssd"]
+    asserts:
+      - isNull:
+          path: spec.statefulSet.spec.template.spec.affinity.podAntiAffinity
+      - equal:
+          path: spec.statefulSet.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: disktype
+
   # The selector must track the CR name, since the operator derives the service
   # name from it.
   - it: mongodb anti-affinity selector tracks the release name

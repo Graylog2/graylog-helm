@@ -95,6 +95,41 @@ tests:
           path: spec.statefulSet.spec.volumeClaimTemplates[1].spec.resources.requests.storage
           value: "5G"
 
+  # Scheduling is merged into the pod spec the operator builds, so unlike
+  # pod labels/annotations these do reach the pods.
+  - it: passes mongodb.nodeSelector and mongodb.tolerations through to the pod spec
+    set:
+      mongodb.communityResource.enabled: true
+      mongodb.nodeSelector:
+        graylog/node_tier: data
+      mongodb.tolerations:
+        - key: dedicated
+          operator: Equal
+          value: graylog
+          effect: NoSchedule
+    asserts:
+      - equal:
+          path: spec.statefulSet.spec.template.spec.nodeSelector["graylog/node_tier"]
+          value: data
+      - equal:
+          path: spec.statefulSet.spec.template.spec.tolerations[0].key
+          value: dedicated
+      - equal:
+          path: spec.statefulSet.spec.template.spec.tolerations[0].effect
+          value: NoSchedule
+
+  # The CR is a patch into the operator's own pod template, so an unset value
+  # must emit no key at all. A bare `nodeSelector:`/`tolerations:` would merge
+  # an explicit null instead of leaving the field to the operator.
+  - it: omits nodeSelector and tolerations entirely when unset
+    set:
+      mongodb.communityResource.enabled: true
+    asserts:
+      - notExists:
+          path: spec.statefulSet.spec.template.spec.nodeSelector
+      - notExists:
+          path: spec.statefulSet.spec.template.spec.tolerations
+
   # The operator injects its own defaults (500m CPU and 500M memory per
   # container) and nothing in the chart could override them before these values
   # existed. The chart's defaults deliberately differ: mongod gets real memory
