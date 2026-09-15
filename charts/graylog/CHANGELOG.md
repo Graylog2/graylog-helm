@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/Graylog2/graylog-helm/compare/graylog-2.0.0...graylog-2.1.0) (2026-09-15)
+
+
+### Features
+
+* **mongodb:** Adding node selector to be passed through to mongo workloads ([#188](https://github.com/Graylog2/graylog-helm/issues/188)) ([6544259](https://github.com/Graylog2/graylog-helm/commit/6544259bf1ed7333fbca07725caadd773c077773))
+
 ## [2.0.0](https://github.com/Graylog2/graylog-helm/compare/graylog-1.0.0...graylog-2.0.0) (2026-08-27)
 
 
