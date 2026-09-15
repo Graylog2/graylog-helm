@@ -177,14 +177,18 @@ MongoDB service account name
 Graylog replicas
 */}}
 {{- define "graylog.replicas" }}
-{{- .Values.graylog.replicas | default 2 | int }}
+{{- .Values.graylog.replicas | int }}
 {{- end }}
 
 {{/*
 Datanode replicas
 */}}
 {{- define "graylog.datanode.replicas" }}
-{{- .Values.datanode.replicas | default 3 | int }}
+{{- $total := 0 }}
+{{- range $group := include "graylog.datanode.groups" . | fromYamlArray }}
+{{- $total = add $total (int $group.replicas) }}
+{{- end }}
+{{- $total }}
 {{- end }}
 
 {{/*
@@ -430,35 +434,122 @@ Graylog data PVC/volume name
 {{- end }}
 
 {{/*
-Graylog Datanode pod prefix
+Normalized Datanode node-group list, returned as a YAML array.
+Parse with: include "graylog.datanode.groups" . | fromYamlArray
+
+The top-level datanode block is the primary group (legacy unsuffixed names); every
+entry in datanode.extraNodeGroups (a map keyed by name) is an additional group that
+inherits the primary's values and overrides only what its value declares. Lists are
+replaced wholesale and an explicit false/0/"" does override a truthy default (e.g. a
+group may set persistence.data.enabled: false).
+
+Each returned group is enriched with derived, ready-to-use fields so templates never
+have to pass (root, group) dicts around:
+  .name, .fullname, .configmapName, .pdbName, .dataStorageClass, .nativeLibsStorageClass
+  .groupLabel  - value for the graylog-datanode-group label; empty unless extra groups
+                 exist (so a plain install keeps today's unlabeled selector).
 */}}
-{{- define "graylog.datanode.name" -}}
-{{- include "graylog.fullname" . | printf "%s-datanode" }}
+{{- define "graylog.datanode.groups" -}}
+{{- $root := . -}}
+{{- $base := omit .Values.datanode "extraNodeGroups" -}}
+{{- $extras := .Values.datanode.extraNodeGroups | default dict -}}
+{{- $multi := gt (len $extras) 0 -}}
+{{- $raw := list (dict "key" "" "spec" (deepCopy $base)) -}}
+{{- range $name, $spec := $extras -}}
+{{- $raw = append $raw (dict "key" $name "spec" (mergeOverwrite (deepCopy $base) (deepCopy ($spec | default dict)))) -}}
+{{- end -}}
+{{- $prefix := printf "%s-datanode" (include "graylog.fullname" $root) -}}
+{{- $pdbPrefix := printf "%s-pdb-datanode" (include "graylog.fullname" $root) -}}
+{{- $provider := include "graylog.provider.storageClassName" $root -}}
+{{- $global := $root.Values.global.storageClass -}}
+{{- $out := list -}}
+{{- range $r := $raw -}}
+{{- $g := $r.spec -}}
+{{- $key := $r.key -}}
+{{- $fullname := $key | empty | ternary $prefix (printf "%s-%s" $prefix $key) -}}
+{{- $_ := set $g "name" $key -}}
+{{- $_ := set $g "fullname" $fullname -}}
+{{- $_ := set $g "configmapName" (printf "%s-config" $fullname) -}}
+{{- $_ := set $g "pdbName" ($key | empty | ternary $pdbPrefix (printf "%s-%s" $pdbPrefix $key)) -}}
+{{- $_ := set $g "groupLabel" ($multi | ternary ($key | empty | ternary "default" $key) "") -}}
+{{- $_ := set $g "dataStorageClass" (coalesce (dig "persistence" "data" "storageClass" "" $g) $global $provider | default "") -}}
+{{- $_ := set $g "nativeLibsStorageClass" (coalesce (dig "persistence" "nativeLibs" "storageClass" "" $g) $global $provider | default "") -}}
+{{- $out = append $out $g -}}
+{{- end -}}
+{{- $out | toYaml -}}
 {{- end }}
 
 {{/*
-Graylog Datanode service name
+Validate datanode node groups.
+
+Names: every extraNodeGroups key becomes part of a StatefulSet/ConfigMap/PDB name, so it
+must be a DNS-1123 label, and the derived pod names must still fit in 63 characters. Role
+names such as cluster_manager are not valid keys - the underscore is legal in a role but
+not in an object name.
+
+Roles: hard-fails when no group is eligible to be a cluster manager (i.e. every group sets
+explicit roles and none includes cluster_manager). A group with empty roles uses the Data
+Node default, which already includes cluster_manager, so the all-defaults install never
+trips this.
+*/}}
+{{- define "graylog.datanode.validate" -}}
+{{- range $name, $spec := (.Values.datanode.extraNodeGroups | default dict) -}}
+{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $name) -}}
+{{- fail (printf "datanode.extraNodeGroups: group name %q is not a valid DNS-1123 label (lowercase alphanumerics and '-', starting and ending alphanumeric). It is used in the StatefulSet, ConfigMap and PDB names. Underscores are valid in OpenSearch *role* names but not in group names - use %q as the key and keep the role in its 'roles' list." $name (regexReplaceAll "[^a-z0-9-]" (lower $name) "-")) -}}
+{{- end -}}
+{{- end -}}
+{{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- $maxPod := printf "%s-%d" $g.fullname (max 0 (sub (int $g.replicas) 1) | int) -}}
+{{- if gt (len $maxPod) 63 -}}
+{{- fail (printf "datanode: node group %q produces pod name %q (%d chars), which exceeds the 63-character DNS label limit. Shorten the group name or the release name." (default "<primary>" $g.name) $maxPod (len $maxPod)) -}}
+{{- end -}}
+{{- end -}}
+{{- $manager := false -}}
+{{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- if or (empty $g.roles) (has "cluster_manager" $g.roles) -}}
+{{- $manager = true -}}
+{{- end -}}
+{{- end -}}
+{{- if not $manager -}}
+{{- fail "datanode: no node group is eligible to be a cluster_manager. Add 'cluster_manager' to datanode.roles or to at least one datanode.extraNodeGroups entry's roles." -}}
+{{- end -}}
+{{- /*
+Data Node refuses to start with the 'search' role and no snapshot repository, so this is a
+guaranteed crash loop rather than a degraded start. Fail the render instead of letting it
+reach the cluster.
+*/ -}}
+{{- $repoConfigured := .Values.datanode.config.s3ClientDefaultEndpoint | empty | not -}}
+{{- $searchNoRepo := list -}}
+{{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- if and (has "search" $g.roles) (not $repoConfigured) -}}
+{{- $searchNoRepo = append $searchNoRepo ($g.name | default "<primary>") -}}
+{{- end -}}
+{{- end -}}
+{{- if $searchNoRepo -}}
+{{- fail (printf "datanode: node group(s) %s declare the 'search' role but no snapshot repository is configured, so the Data Node will fail to start. Set datanode.config.s3ClientDefaultEndpoint (with s3ClientDefaultAccessKey and s3ClientDefaultSecretKey), or remove the 'search' role." ($searchNoRepo | join ", ")) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Graylog Datanode service name (shared across all node groups)
 */}}
 {{- define "graylog.datanode.service.name" -}}
 {{- include "graylog.fullname" . | printf "%s-datanode-svc" }}
 {{- end }}
 
 {{/*
-Graylog Datanode hosts
+Graylog Datanode discovery seed hosts, spanning every node group.
 */}}
 {{- define "graylog.datanode.hosts" -}}
-{{- $builder := list }}
-{{- range $i := include "graylog.datanode.replicas" . | int | until }}
-{{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" (include "graylog.datanode.name" $) $i (include "graylog.datanode.service.name" $) ($.Release.Namespace) | append $builder }}
-{{- end }}
-{{- join "," $builder | quote }}
-{{- end }}
-
-{{/*
-Datanode configmap name
-*/}}
-{{- define "graylog.datanode.configmap.name" -}}
-{{- include "graylog.fullname" . | printf "%s-datanode-config" }}
+{{- $svc := include "graylog.datanode.service.name" . -}}
+{{- $ns := .Release.Namespace -}}
+{{- $builder := list -}}
+{{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- range $i := until (int $g.replicas) -}}
+{{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" $g.fullname $i $svc $ns | append $builder -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $builder | quote -}}
 {{- end }}
 
 {{/*
@@ -674,20 +765,6 @@ Graylog Storage Class name
 */}}
 {{- define "graylog.storageClassName" }}
 {{- include "graylog.provider.storageClassName" . | coalesce .Values.graylog.persistence.storageClass .Values.global.storageClass | default "" }}
-{{- end }}
-
-{{/*
-Datanode data Storage Class name
-*/}}
-{{- define "graylog.datanode.data.storageClassName" }}
-{{- include "graylog.provider.storageClassName" . | coalesce .Values.datanode.persistence.data.storageClass .Values.global.storageClass | default "" }}
-{{- end }}
-
-{{/*
-Datanode native libs Storage Class name
-*/}}
-{{- define "graylog.datanode.nativeLibs.storageClassName" }}
-{{- include "graylog.provider.storageClassName" . | coalesce .Values.datanode.persistence.nativeLibs.storageClass .Values.global.storageClass | default "" }}
 {{- end }}
 
 {{/*

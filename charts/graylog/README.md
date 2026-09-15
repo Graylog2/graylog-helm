@@ -29,6 +29,7 @@ Official Helm chart for Graylog.
   * [Customize deployed Kubernetes resources](#customize-deployed-kubernetes-resources)
   * [Add inputs](#add-inputs)
   * [Enable TLS](#enable-tls)
+  * [Delegate Data Node Roles](#delegate-data-node-roles)
 * [Using External Resources](#using-external-resources)
   * [Managing Secrets Externally](#managing-secrets-externally)
   * [Bring Your Own MongoDB](#bring-your-own-mongodb)
@@ -1010,6 +1011,30 @@ manifest.
 > `graylog.config.geolocation.maxmindGeoIp.existingSecret` to that same Secret name.
 > Inline `accountId`/`licenseKey` values need chart-managed secrets and are rejected together with
 > `global.existingSecretName`.
+## Delegate Data Node Roles
+
+By default, every Data Node carries all OpenSearch roles. In larger clusters you can dedicate
+groups of Data Nodes to specific roles (e.g. a dedicated search/warm tier or dedicated
+cluster-manager nodes) via `datanode.roles` and the `datanode.extraNodeGroups` map:
+
+```yaml
+datanode:
+  roles: [cluster_manager, data, ingest, remote_cluster_client]  # primary (hot) tier
+  config:
+    # The search role requires a snapshot repository; without one the render hard-fails
+    # because the Data Node would not start.
+    s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+    s3ClientDefaultAccessKey: "..."
+    s3ClientDefaultSecretKey: "..."
+  extraNodeGroups:
+    search:
+      roles: [search]
+      replicas: 2
+```
+
+See the [Data Node Roles & Node Groups guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md)
+for the full list of roles, guardrails, the search/warm-tier repository requirement, and how to
+migrate an existing installation to use node groups.
 
 # Using External Resources
 
@@ -1409,6 +1434,8 @@ These values affect Graylog, DataNode, and MongoDB.
 |--------------------------------------------------------|-------------------------------------------------|-------------------|
 | `datanode.enabled`                                     | Enable Graylog datanode.                        | `true`            |
 | `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
+| `datanode.roles`                                       | OpenSearch roles for the primary node group; empty = Data Node default. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `[]` |
+| `datanode.extraNodeGroups`                             | Map of additional node groups keyed by name, each inheriting and overriding `datanode.*`. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `{}` |
 | `datanode.service.annotations`                         | Annotations for the Data Node Service.          | `{}`              |
 | `datanode.service.labels`                              | Labels for the Data Node Service.               | `{}`              |
 | `datanode.service.ports.api`                           | API communication port.                         | `8999`            |

@@ -590,6 +590,8 @@ datanode:
   enabled: true
   # replicas is the number of Datanode pods.
   replicas: 3
+  # Empty = default roles: cluster_manager,data,ingest,remote_cluster_client (search is auto-added with a snapshot repo).
+  roles: []
   service:
     annotations: {}
     labels: {}
@@ -821,6 +823,14 @@ datanode:
   extraInitContainers: []
   # extraContainers adds sidecar containers to the Datanode pods.
   extraContainers: []
+  # extraNodeGroups declares additional Datanode node groups, keyed by name. Each
+  # entry renders its own StatefulSet, ConfigMap and PDB, inherits every datanode.*
+  # value above and overrides only what it declares. See
+  # docs/datanode-node-roles.md.
+  extraNodeGroups: {}
+  #  search:
+  #    roles: [search]
+  #    replicas: 2
 
 
 # External OpenSearch
