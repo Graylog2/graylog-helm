@@ -76,10 +76,12 @@ The chart validates role coverage:
   pod name past 63 characters.
 - **Hard fail**: the release will not render if no group is eligible to be a `cluster_manager` (i.e. every group sets
   explicit roles and none includes it).
+- **Hard fail**: if a group declares the `search` role but no S3-compatible snapshot repository
+  is configured. The Data Node refuses to start in that configuration, so rendering it would
+  only produce a crash loop.
 - **Warning**: if no group is eligible to hold `data`. Shown in the post-install notes.
-- **Warning**: if a group declares the `search` role but no S3-compatible snapshot repository is configured.
 
-Empty roles fall back to the default set, which includes `cluster_manager` and`data`.
+Empty roles fall back to the default set, which includes `cluster_manager` and `data`.
 
 ## Migrating an existing installation to node groups
 

@@ -68,8 +68,8 @@ tests:
   - it: does not fail when the primary keeps default roles
     set:
       datanode.extraNodeGroups:
-        search:
-          roles: [search]
+        warm:
+          roles: [data]
     asserts:
       - hasDocuments:
           count: 2
@@ -90,18 +90,27 @@ tests:
           pattern: "no Data Node group is eligible to hold data"
         template: NOTES.txt
 
-  # Soft warning: search role without a snapshot repository.
-  - it: warns when a search group has no snapshot repository
+  # Hard fail: the search role without a snapshot repository. Data Node refuses to start
+  # in that configuration, so rendering it only produces a crash loop.
+  - it: fails when a search group has no snapshot repository
     set:
       datanode.extraNodeGroups:
         search:
           roles: [search]
     asserts:
-      - matchRegexRaw:
-          pattern: "node group\\(s\\) search declare the 'search' role but no snapshot repository"
-        template: NOTES.txt
+      - failedTemplate:
+          errorPattern: "node group\\(s\\) search declare the 'search' role but no snapshot repository is configured"
+        template: workload/statefulsets/datanode.yaml
 
-  - it: emits no search warning when a repository is configured
+  - it: fails when the primary group declares search with no snapshot repository
+    set:
+      datanode.roles: [search, cluster_manager, data]
+    asserts:
+      - failedTemplate:
+          errorPattern: "node group\\(s\\) <primary> declare the 'search' role"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: renders when a search group has a snapshot repository configured
     set:
       datanode.config.s3ClientDefaultEndpoint: "https://s3.example.com"
       datanode.config.s3ClientDefaultAccessKey: "ak"
@@ -110,6 +119,6 @@ tests:
         search:
           roles: [search]
     asserts:
-      - notMatchRegexRaw:
-          pattern: "declare the 'search' role but no snapshot repository"
-        template: NOTES.txt
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml

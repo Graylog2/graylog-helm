@@ -154,7 +154,7 @@ tests:
     set:
       datanode.extraNodeGroups:
         search:
-          roles: [search]
+          roles: [data]
           replicas: 2
     asserts:
       - equal:
@@ -176,7 +176,7 @@ tests:
     set:
       datanode.extraNodeGroups:
         search:
-          roles: [search]
+          roles: [data]
           replicas: 2
           config:
             opensearchHeap: "4g"
@@ -200,7 +200,7 @@ tests:
     set:
       datanode.extraNodeGroups:
         search:
-          roles: [search]
+          roles: [data]
           replicas: 2
     asserts:
       - equal:
@@ -213,6 +213,10 @@ tests:
 
   - it: emits per-group node_roles and heap in each group's ConfigMap
     set:
+      # The search role requires a snapshot repository or the render hard-fails.
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.example.com"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
       datanode.roles: [cluster_manager, data, ingest, remote_cluster_client]
       datanode.extraNodeGroups:
         search:
@@ -247,7 +251,7 @@ tests:
       datanode.replicas: 2
       datanode.extraNodeGroups:
         search:
-          roles: [search]
+          roles: [data]
           replicas: 1
     asserts:
       - equal:
@@ -262,7 +266,7 @@ tests:
     set:
       datanode.extraNodeGroups:
         warm-tier:
-          roles: [search]
+          roles: [data]
           replicas: 1
     asserts:
       - equal:
@@ -278,7 +282,7 @@ tests:
       datanode.podDisruptionBudget.enabled: true
       datanode.extraNodeGroups:
         search:
-          roles: [search]
+          roles: [data]
           replicas: 2
     asserts:
       - equal:

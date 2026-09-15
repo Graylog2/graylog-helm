@@ -513,6 +513,21 @@ trips this.
 {{- if not $manager -}}
 {{- fail "datanode: no node group is eligible to be a cluster_manager. Add 'cluster_manager' to datanode.roles or to at least one datanode.extraNodeGroups entry's roles." -}}
 {{- end -}}
+{{- /*
+Data Node refuses to start with the 'search' role and no snapshot repository, so this is a
+guaranteed crash loop rather than a degraded start. Fail the render instead of letting it
+reach the cluster.
+*/ -}}
+{{- $repoConfigured := .Values.datanode.config.s3ClientDefaultEndpoint | empty | not -}}
+{{- $searchNoRepo := list -}}
+{{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- if and (has "search" $g.roles) (not $repoConfigured) -}}
+{{- $searchNoRepo = append $searchNoRepo ($g.name | default "<primary>") -}}
+{{- end -}}
+{{- end -}}
+{{- if $searchNoRepo -}}
+{{- fail (printf "datanode: node group(s) %s declare the 'search' role but no snapshot repository is configured, so the Data Node will fail to start. Set datanode.config.s3ClientDefaultEndpoint (with s3ClientDefaultAccessKey and s3ClientDefaultSecretKey), or remove the 'search' role." ($searchNoRepo | join ", ")) -}}
+{{- end -}}
 {{- end }}
 
 {{/*

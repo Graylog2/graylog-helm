@@ -1020,6 +1020,12 @@ cluster-manager nodes) via `datanode.roles` and the `datanode.extraNodeGroups` m
 ```yaml
 datanode:
   roles: [cluster_manager, data, ingest, remote_cluster_client]  # primary (hot) tier
+  config:
+    # The search role requires a snapshot repository; without one the render hard-fails
+    # because the Data Node would not start.
+    s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+    s3ClientDefaultAccessKey: "..."
+    s3ClientDefaultSecretKey: "..."
   extraNodeGroups:
     search:
       roles: [search]
