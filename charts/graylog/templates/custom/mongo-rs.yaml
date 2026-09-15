@@ -75,7 +75,23 @@ spec:
         */}}
         spec:
           serviceAccountName: {{ include "graylog.mongodb.serviceAccountName" . }}
+          {{/*
+          Scheduling constraints are merged into the pod spec the operator
+          builds, the same way the container resources below are. Unlike the
+          StatefulSets, these are emitted only when set: the CR is a patch, and
+          a bare `tolerations:`/`nodeSelector:` key would send an explicit null
+          into that merge rather than leaving the field alone.
+          */}}
+          {{- with .Values.mongodb.nodeSelector }}
+          nodeSelector: {{ . | toYaml | nindent 12 }}
+          {{- end }}
+          {{- with .Values.mongodb.tolerations }}
+          tolerations: {{ . | toYaml | nindent 12 }}
+          {{- end }}
           affinity:
+          {{- if .Values.mongodb.affinity }}
+            {{- toYaml .Values.mongodb.affinity | nindent 12 }}
+          {{- else }}
             podAntiAffinity:
               preferredDuringSchedulingIgnoredDuringExecution:
                 - weight: 100
@@ -87,6 +103,7 @@ spec:
                         # The chart's own labels are not present here.
                         app: {{ include "graylog.mongodb.crName" . | printf "%s-svc" }}
                     topologyKey: kubernetes.io/hostname
+          {{- end }}
           {{- with .Values.mongodb.initResources }}
           {{/*
           Both init containers only copy a binary into a shared volume, but the
