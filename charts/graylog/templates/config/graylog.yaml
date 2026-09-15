@@ -6,6 +6,16 @@ metadata:
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.annotations "indent" 2) }}
 data:
   GRAYLOG_PROMETHEUS_EXPORTER_ENABLED: {{ .Values.graylog.service.metrics.enabled | ternary true false | quote }}
+  {{- if .Values.graylog.service.metrics.enabled }}
+  {{/*
+  Graylog defaults the exporter to 127.0.0.1:9833, so it is unreachable from outside the
+  pod and ignores graylog.service.ports.metrics. Bind it explicitly: to the pod when
+  `expose` is set (so Prometheus can scrape it), to localhost otherwise (enough for the
+  preStop drain), and always on the configured port so the Service, the container port
+  and the drain URL agree.
+  */}}
+  GRAYLOG_PROMETHEUS_EXPORTER_BIND_ADDRESS: {{ printf "%s:%d" (.Values.graylog.service.metrics.expose | ternary "0.0.0.0" "127.0.0.1") (.Values.graylog.service.ports.metrics | default 9833 | int) | quote }}
+  {{- end }}
   {{- if .Values.opensearch.enabled }}
   {{/* Self-signed startup is required for Data Node feature; disable it so Graylog uses elasticsearch_hosts instead of datanode discovery */}}
   GRAYLOG_SELFSIGNED_STARTUP: "false"

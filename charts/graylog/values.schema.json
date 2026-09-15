@@ -73,9 +73,32 @@
             "metrics": {
               "type": "object",
               "properties": {
-                "enabled": { "type":  "boolean" }
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Turn on Graylog's Prometheus exporter. Binds to localhost unless `expose` is set; required by graylog.lifecycle.preStopDrain."
+                },
+                "expose": {
+                  "type": "boolean",
+                  "description": "Bind the exporter to 0.0.0.0 and publish the metrics port on the Service. The exporter is unauthenticated once exposed."
+                }
               }
             }
+          }
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "description": "Prometheus Operator ServiceMonitor for the Graylog exporter. Requires graylog.service.metrics.expose.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "string" },
+            "scrapeTimeout": { "type": "string" },
+            "path": { "type": "string" },
+            "labels": { "type": "object" },
+            "annotations": { "type": "object" },
+            "honorLabels": { "type": "boolean" },
+            "relabelings": { "type": "array", "items": { "type": "object" } },
+            "metricRelabelings": { "type": "array", "items": { "type": "object" } },
+            "namespaceSelector": { "type": "object" }
           }
         },
         "inputs": {

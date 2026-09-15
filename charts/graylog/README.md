@@ -22,6 +22,7 @@ Official Helm chart for Graylog.
   * [Scale DataNode](#scale-datanode)
   * [Data Node Replicas and Data Redundancy](#data-node-replicas-and-data-redundancy)
   * [High Availability Defaults](#high-availability-defaults)
+  * [Prometheus Metrics](#prometheus-metrics)
   * [Health Probes](#health-probes)
   * [Scale MongoDB](#scale-mongodb)
   * [MongoDB Topology](#mongodb-topology)
@@ -487,6 +488,50 @@ clusters and need no configuration for the common case.
 > A PDB makes node drains block rather than proceed destructively. On a cluster
 > with too few nodes to satisfy `minAvailable`, a drain will wait instead of
 > completing — this is the intended protection, not a failure.
+
+## Prometheus Metrics
+
+Graylog ships a Prometheus exporter. The chart enables it by default
+(`graylog.service.metrics.enabled`), but Graylog binds it to `127.0.0.1:9833`, so out of
+the box it is reachable only from inside the pod — which is all
+[`preStopDrain`](#message-journal-lifecycle) needs.
+
+To scrape it, set `expose`. That binds the exporter to `0.0.0.0` and publishes the
+`metrics` port on the Service:
+
+```yaml
+graylog:
+  service:
+    metrics:
+      enabled: true
+      expose: true
+```
+
+> [!WARNING]
+> The exporter is **unauthenticated**. Once exposed, anything that can reach the pod can
+> read it. Restrict access with a NetworkPolicy, and leave `expose` off if you are not
+> scraping.
+
+With the Prometheus Operator installed, the chart can create the ServiceMonitor too. Most
+Operator installs select ServiceMonitors by label, so set whatever yours requires:
+
+```yaml
+graylog:
+  service:
+    metrics:
+      expose: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels:
+      release: kube-prometheus-stack
+```
+
+The chart fails the render if `serviceMonitor.enabled` is set without `metrics.expose`,
+rather than creating a ServiceMonitor whose every scrape would be refused.
+
+Changing `graylog.service.ports.metrics` moves the exporter, the container port, the
+Service port and the drain's metrics URL together.
 
 ## Health Probes
 
@@ -1237,7 +1282,18 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.service.labels`                                              | Labels for the Graylog Service.                             | `{}`                            |
 | `graylog.service.ports.app`                                           | Graylog web UI port.                                        | `9000`                          |
 | `graylog.service.ports.metrics`                                       | Metrics endpoint port.                                      | `9833`                          |
-| `graylog.service.metrics.enabled`                                     | Enable metrics collection.                                  | `true`                          |
+| `graylog.service.metrics.enabled`                                     | Turn on Graylog's Prometheus exporter. Binds to `127.0.0.1` unless `expose` is set. Required by `graylog.lifecycle.preStopDrain`. | `true`                          |
+| `graylog.service.metrics.expose`                                      | Bind the exporter to `0.0.0.0` and publish the metrics port on the Service so Prometheus can scrape it. The exporter is **unauthenticated** once exposed. | `false`                         |
+| `graylog.serviceMonitor.enabled`                                      | Create a Prometheus Operator ServiceMonitor for the exporter. Requires `graylog.service.metrics.expose`. | `false`                         |
+| `graylog.serviceMonitor.interval`                                     | Scrape interval.                                            | `30s`                           |
+| `graylog.serviceMonitor.scrapeTimeout`                                | Scrape timeout. Must not exceed the interval.               | `10s`                           |
+| `graylog.serviceMonitor.path`                                         | Metrics path on the exporter.                               | `/metrics`                      |
+| `graylog.serviceMonitor.labels`                                       | Labels added to the ServiceMonitor. Set whatever your Prometheus Operator selects on. | `{}`                            |
+| `graylog.serviceMonitor.annotations`                                  | Annotations added to the ServiceMonitor.                    | `{}`                            |
+| `graylog.serviceMonitor.honorLabels`                                  | Keep metric labels that collide with the ones Prometheus adds. | `false`                         |
+| `graylog.serviceMonitor.relabelings`                                  | Passed through to the endpoint verbatim.                    | `[]`                            |
+| `graylog.serviceMonitor.metricRelabelings`                            | Passed through to the endpoint verbatim.                    | `[]`                            |
+| `graylog.serviceMonitor.namespaceSelector`                            | Defaults to the release namespace.                          | `{}`                            |
 | `graylog.inputs`                                                      | List of inputs to configure.                                | See below                       |
 | `graylog.plugins`                                                     | List of plugins to configure.                               | See below                       |
 | `graylog.env`                                                         | Custom environment variables.                               | `{}`                            |

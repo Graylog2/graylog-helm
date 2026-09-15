@@ -26,9 +26,12 @@ tests:
           path: spec.type
           value: LoadBalancer
 
-  - it: includes metrics port when graylog.service.metrics.enabled is true
+  # The exporter binds to 127.0.0.1 unless `expose` is set, so publishing the port on
+  # `enabled` alone advertised an endpoint nothing could reach. It now needs both.
+  - it: includes metrics port when the exporter is exposed
     set:
       graylog.service.metrics.enabled: true
+      graylog.service.metrics.expose: true
       graylog.service.ports.metrics: 9833
     asserts:
       - contains:
@@ -39,9 +42,23 @@ tests:
             targetPort: metrics
             protocol: TCP
 
+  - it: skips metrics port when the exporter is enabled but not exposed
+    set:
+      graylog.service.metrics.enabled: true
+      graylog.service.metrics.expose: false
+    asserts:
+      - notContains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9833
+            targetPort: metrics
+            protocol: TCP
+
   - it: skips metrics port when graylog.service.metrics.enabled is false
     set:
       graylog.service.metrics.enabled: false
+      graylog.lifecycle.preStopDrain.enabled: false
     asserts:
       - notContains:
           path: spec.ports
