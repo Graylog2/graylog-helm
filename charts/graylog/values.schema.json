@@ -1005,6 +1005,9 @@
         "arbiters": { "type": "integer" },
         "annotations": { "type": "object", "description": "Annotations for the MongoDBCommunity object" },
         "labels": { "type": "object", "description": "Labels for the MongoDBCommunity object" },
+        "nodeSelector": { "type": "object", "description": "Node selector for the MongoDB pods" },
+        "tolerations": { "type": "array", "items": { "type": "object" }, "description": "Tolerations for the MongoDB pods" },
+        "affinity": { "type": "object", "description": "Replaces the chart's default MongoDB pod anti-affinity" },
         "resources": {
           "type": "object",
           "description": "Compute resources for the mongod container",

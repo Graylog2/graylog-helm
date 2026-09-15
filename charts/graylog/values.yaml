@@ -989,6 +989,18 @@ mongodb:
   # puts there, so the keys would silently do nothing. annotations/labels above
   # apply to the MongoDBCommunity object itself and do work.
   #
+  # Scheduling, unlike pod metadata, does reach the pods: the operator merges
+  # the pod spec below into the one it builds, so these behave like their
+  # graylog.*/datanode.* counterparts.
+  #
+  # nodeSelector constrains MongoDB pods to matching nodes.
+  nodeSelector: {}
+  # tolerations lets MongoDB pods schedule onto tainted nodes.
+  tolerations: []
+  # affinity overrides the default anti-affinity that spreads MongoDB pods
+  # across nodes.
+  affinity: {}
+  #
   # resources are the compute requests/limits of the mongod container, and
   # agentResources those of the mongodb-agent sidecar the operator injects.
   # The operator creates both containers itself and applies its own defaults;
