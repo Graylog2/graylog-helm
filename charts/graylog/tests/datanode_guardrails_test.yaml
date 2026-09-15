@@ -10,6 +10,43 @@ release:
   name: graylog
   namespace: graylog
 tests:
+  # Hard fail: group names must be usable as Kubernetes object names.
+  - it: fails when a group name is not a DNS-1123 label
+    set:
+      datanode.extraNodeGroups:
+        cluster_manager:
+          roles: [cluster_manager]
+    asserts:
+      - failedTemplate:
+          errorMessage: "datanode.extraNodeGroups: group name \"cluster_manager\" is not a valid DNS-1123 label (lowercase alphanumerics and '-', starting and ending alphanumeric). It is used in the StatefulSet, ConfigMap and PDB names. Underscores are valid in OpenSearch *role* names but not in group names - use \"cluster-manager\" as the key and keep the role in its 'roles' list."
+        template: workload/statefulsets/datanode.yaml
+
+  - it: accepts the hyphenated group name with the underscored role
+    set:
+      datanode.extraNodeGroups:
+        cluster-manager:
+          roles: [cluster_manager]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: metadata.name
+          value: graylog-datanode-cluster-manager
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 1
+
+  - it: fails when a group name pushes the pod name past 63 characters
+    set:
+      datanode.replicas: 3
+      datanode.extraNodeGroups:
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:
+          roles: [data]
+    asserts:
+      - failedTemplate:
+          errorMessage: "datanode: node group \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" produces pod name \"graylog-datanode-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-2\" (85 chars), which exceeds the 63-character DNS label limit. Shorten the group name or the release name."
+        template: workload/statefulsets/datanode.yaml
+
   # Hard fail: no cluster_manager-eligible group.
   - it: renders by default (all-default roles cover cluster_manager)
     asserts:

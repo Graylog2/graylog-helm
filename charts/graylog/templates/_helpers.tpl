@@ -480,12 +480,30 @@ have to pass (root, group) dicts around:
 {{- end }}
 
 {{/*
-Validate datanode node-group role coverage. Hard-fails when no group is eligible to be
-a cluster manager (i.e. every group sets explicit roles and none includes
-cluster_manager). A group with empty roles uses the Data Node default, which already
-includes cluster_manager, so the all-defaults install never trips this.
+Validate datanode node groups.
+
+Names: every extraNodeGroups key becomes part of a StatefulSet/ConfigMap/PDB name, so it
+must be a DNS-1123 label, and the derived pod names must still fit in 63 characters. Role
+names such as cluster_manager are not valid keys - the underscore is legal in a role but
+not in an object name.
+
+Roles: hard-fails when no group is eligible to be a cluster manager (i.e. every group sets
+explicit roles and none includes cluster_manager). A group with empty roles uses the Data
+Node default, which already includes cluster_manager, so the all-defaults install never
+trips this.
 */}}
 {{- define "graylog.datanode.validate" -}}
+{{- range $name, $spec := (.Values.datanode.extraNodeGroups | default dict) -}}
+{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $name) -}}
+{{- fail (printf "datanode.extraNodeGroups: group name %q is not a valid DNS-1123 label (lowercase alphanumerics and '-', starting and ending alphanumeric). It is used in the StatefulSet, ConfigMap and PDB names. Underscores are valid in OpenSearch *role* names but not in group names - use %q as the key and keep the role in its 'roles' list." $name (regexReplaceAll "[^a-z0-9-]" (lower $name) "-")) -}}
+{{- end -}}
+{{- end -}}
+{{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- $maxPod := printf "%s-%d" $g.fullname (max 0 (sub (int $g.replicas) 1) | int) -}}
+{{- if gt (len $maxPod) 63 -}}
+{{- fail (printf "datanode: node group %q produces pod name %q (%d chars), which exceeds the 63-character DNS label limit. Shorten the group name or the release name." (default "<primary>" $g.name) $maxPod (len $maxPod)) -}}
+{{- end -}}
+{{- end -}}
 {{- $manager := false -}}
 {{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
 {{- if or (empty $g.roles) (has "cluster_manager" $g.roles) -}}

@@ -581,6 +581,16 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "replicas": { "type": "integer" },
+        "roles": {
+          "type": "array",
+          "description": "OpenSearch roles for the primary node group. Empty uses the Data Node default set.",
+          "items": { "type": "string" }
+        },
+        "extraNodeGroups": {
+          "type": "object",
+          "description": "Additional node groups keyed by name. Each key becomes part of a StatefulSet, ConfigMap and PDB name, so it must be a DNS-1123 label; the chart validates this at render time with an actionable message.",
+          "additionalProperties": { "type": "object" }
+        },
         "service": {
           "type": "object",
           "properties": {

@@ -30,6 +30,13 @@ when a snapshot repository is configured).
   StatefulSet (`<release>-datanode-<name>`), ConfigMap and PodDisruptionBudget, and
   **inherits every `datanode.*` value**, overriding only what it declares.
 
+> [!IMPORTANT]
+> A group name becomes part of those object names, so it must be a **DNS-1123 label**:
+> lowercase alphanumerics and `-`, starting and ending alphanumeric. Role names are not
+> valid group names — `cluster_manager` is a legal *role* but an illegal *name*. Name the
+> group `cluster-manager` and keep `cluster_manager` in its `roles` list. The chart rejects
+> an invalid name at render time.
+
 All groups share one headless Service for discovery, and the OpenSearch discovery seed hosts
 span every group, so they form a single cluster.
 
@@ -65,6 +72,8 @@ documentation.
 
 The chart validates role coverage:
 
+- **Hard fail**: a group name that is not a DNS-1123 label, or that is long enough to push a
+  pod name past 63 characters.
 - **Hard fail**: the release will not render if no group is eligible to be a `cluster_manager` (i.e. every group sets
   explicit roles and none includes it).
 - **Warning**: if no group is eligible to hold `data`. Shown in the post-install notes.
