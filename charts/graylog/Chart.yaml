@@ -44,7 +44,7 @@ annotations:
   artifacthub.io/changes: ""
   artifacthub.io/containsSecurityUpdates: "true"
 # This is the chart version.
-version: 2.0.0
+version: 2.1.0
 # This is the version number of the Graylog application bundled with this chart.
 appVersion: "7.1.8"
 
