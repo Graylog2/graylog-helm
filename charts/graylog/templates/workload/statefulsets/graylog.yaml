@@ -166,6 +166,28 @@ spec:
                   fieldPath: metadata.name
             - name: GRAYLOG_HTTP_PUBLISH_URI
               value: {{ include "graylog.publishUri" . | quote }}
+            {{- if .Values.graylog.config.archive.useGlobalS3Credentials }}
+            {{- $s3 := include "graylog.s3.credentials" (dict "context" $ "component" "") | fromYaml }}
+            {{- /*
+            The archive backend authenticates through the AWS SDK's default credential
+            chain when its document in MongoDB omits aws_access_key_id and
+            aws_secret_access_key. Putting the keys here instead keeps them out of
+            MongoDB. The chain reads these before the web identity token, so this
+            overrides IRSA; values.yaml says so at the flag.
+            */}}
+            {{- with $s3.existingSecret }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $s3.accessKeyKey }}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $s3.secretKeyKey }}
+            {{- end }}
+            {{- end }}
           {{- if or .Values.graylog.env .Values.graylog.extraEnv }}
             {{- include "graylog.env" .Values.graylog | indent 12 }}
           {{- end }}
