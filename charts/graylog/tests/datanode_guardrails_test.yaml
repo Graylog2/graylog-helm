@@ -122,3 +122,75 @@ tests:
       - hasDocuments:
           count: 2
         template: workload/statefulsets/datanode.yaml
+
+  # A snapshot repository does not have to mean static keys in values.yaml.
+  # Credentials can come from a node instance profile or IRSA, in which case
+  # nothing about them is visible to the chart.
+  - it: renders a search group when the repository is declared external
+    set:
+      datanode.config.snapshotRepositoryExternal: true
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+
+  # The Data Node rejects a partial S3 client config at startup, so the chart
+  # refuses to render one. All three or none, endpoint included, even on AWS.
+  - it: rejects static keys with no endpoint
+    set:
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must all be set together"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: still fails a search group when nothing at all is configured
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - failedTemplate:
+          errorPattern: "set datanode.config.snapshotRepositoryExternal=true"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects an access key with no secret key
+    set:
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must all be set together"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects a secret key with no access key
+    set:
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must all be set together"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects an endpoint on its own
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://minio.example.com"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must all be set together"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: accepts all three S3 client settings together
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml

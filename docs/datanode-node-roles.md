@@ -49,10 +49,15 @@ datanode:
   replicas: 3
   config:
     opensearchHeap: "4g"
-    # Snapshot repository required for the search role (see Data Tiering docs)
+    # Snapshot repository required for the search role (see Data Tiering docs).
+    # All three are required together, endpoint included, even on AWS S3.
     s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
     s3ClientDefaultAccessKey: "…"
     s3ClientDefaultSecretKey: "…"
+    # The remaining defaults are wrong for AWS S3 and must be overridden.
+    s3ClientDefaultRegion: "us-east-1"        # default us-east-2
+    s3ClientDefaultProtocol: "https"          # default http
+    s3ClientDefaultPathStyleAccess: "false"   # default true
   extraNodeGroups:
     search:
       roles: [search]
@@ -63,6 +68,51 @@ datanode:
         data:
           size: "500Gi"
 ```
+
+### Reaching the repository without static keys
+
+There is one way, and it is not an IAM role. The Data Node accepts a **filesystem repository**,
+which needs no credentials but does need storage every Data Node can mount, such as EFS on EKS:
+
+```yaml
+datanode:
+  config:
+    snapshotRepositoryExternal: true
+  extraEnv:
+    - name: GRAYLOG_DATANODE_PATH_REPO
+      value: /var/lib/graylog-datanode/repo
+  extraVolumes:
+    - name: snapshot-repo
+      persistentVolumeClaim:
+        claimName: graylog-snapshot-repo   # ReadWriteMany
+  extraVolumeMounts:
+    - name: snapshot-repo
+      mountPath: /var/lib/graylog-datanode/repo
+```
+
+`snapshotRepositoryExternal` relaxes the chart's render-time guard and nothing else, for
+repositories the chart cannot see. The Data Node still applies its own check.
+
+> [!WARNING]
+> **Granting the bucket to an IAM role does not work.** Two independent reasons, and each one is
+> sufficient on its own.
+>
+> First, the Data Node validates its own configuration before OpenSearch starts. It looks for
+> `path_repo` or S3 credentials, finds neither, and exits:
+>
+> ```
+> Your configuration contains the search node role in node_roles but there is no
+> snapshots repository configured. Please remove the role or provide path_repo or
+> S3 repository credentials.
+> ```
+>
+> Second, even past that, the `repository-s3` plugin runs under a SecurityManager whose policy
+> grants `java.net.SocketPermission "*", "connect"` but only `java.io.FilePermission "config",
+> "read"`. It can therefore reach instance metadata and pick up the **node's** role, but it cannot
+> read the projected ServiceAccount token that IRSA depends on. The fallback is silent, so a
+> repository that looks configured may quietly be using the node role.
+>
+> Use static keys, or a filesystem repository.
 
 The `search` role only does something useful when a snapshot repository is configured. See
 the [Data Tiering / warm tier](https://go2docs.graylog.org/current/setting_up_graylog/create_warm_tier_on_data_node.htm)

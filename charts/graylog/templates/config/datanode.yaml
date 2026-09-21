@@ -3,8 +3,22 @@
 {{- $sk := $c.s3ClientDefaultSecretKey }}
 {{- $ak := $c.s3ClientDefaultAccessKey }}
 {{- $endpoint := $c.s3ClientDefaultEndpoint }}
-{{- if or (not $ak | and $sk) (not $endpoint | and $ak) (not $sk | and $endpoint) }}
-  {{ fail "All three values are required: datanode.config.s3ClientDefaultEndpoint, datanode.config.s3ClientDefaultSecretKey, and datanode.config.s3ClientDefaultAccessKey" }}
+{{- /*
+All three or none. This mirrors the Data Node, which refuses to start on a
+partial config with:
+
+  S3 Client not configured properly, all s3_client_default_access_key,
+  s3_client_default_secret_key and s3_client_default_endpoint have to be
+  provided in the configuration!
+
+The endpoint is required even for AWS S3, where the SDK could resolve it from
+the region. Graylog's configuration reference lists it as optional; the running
+code does not agree, and the code is what you get.
+*/ -}}
+{{- $anySet := or $ak $sk $endpoint }}
+{{- $allSet := and $ak $sk $endpoint }}
+{{- if and $anySet (not $allSet) }}
+  {{ fail "datanode: s3ClientDefaultEndpoint, s3ClientDefaultAccessKey and s3ClientDefaultSecretKey must all be set together. The Data Node rejects a partial S3 client configuration at startup. For AWS S3 the endpoint is https://s3.<region>.amazonaws.com." }}
 {{- end }}
 {{- range include "graylog.datanode.groups" $ | fromYamlArray }}
 {{- $fixed := dict "app.kubernetes.io/component" "datanode" "app" "graylog-datanode" }}

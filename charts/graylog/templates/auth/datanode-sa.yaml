@@ -1,0 +1,34 @@
+{{- if and .Values.datanode.enabled .Values.datanode.serviceAccount.create -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "graylog.datanode.serviceAccountName" . }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.serviceAccount.labels "fixed" (dict "app.kubernetes.io/component" "datanode") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.serviceAccount.annotations "indent" 2) }}
+automountServiceAccountToken: {{ dig "automount" true .Values.datanode.serviceAccount }}
+{{- if empty .Values.datanode.serviceAccount.role.rules | not | and .Values.datanode.serviceAccount.role.create }}
+{{- $roleName := include "graylog.datanode.serviceAccountName" . | printf "%s-role" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $roleName }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.serviceAccount.role.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.serviceAccount.role.annotations "indent" 2) }}
+rules: {{ .Values.datanode.serviceAccount.role.rules | toYaml | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "graylog.datanode.serviceAccountName" . | printf "%s-rb" }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.serviceAccount.role.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.serviceAccount.role.annotations "indent" 2) }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "graylog.datanode.serviceAccountName" . }}
+roleRef:
+  kind: Role
+  name: {{ $roleName }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}

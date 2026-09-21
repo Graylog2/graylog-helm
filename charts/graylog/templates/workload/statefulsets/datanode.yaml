@@ -81,8 +81,8 @@ spec:
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or $.Values.serviceAccount.create $.Values.serviceAccount.nameOverride }}
-      serviceAccountName: {{ include "graylog.serviceAccountName" $ }}
+      {{- if include "graylog.datanode.serviceAccountEnabled" $ }}
+      serviceAccountName: {{ include "graylog.datanode.serviceAccountName" $ }}
       {{- end }}
       {{- with .podSecurityContext }}
       securityContext:

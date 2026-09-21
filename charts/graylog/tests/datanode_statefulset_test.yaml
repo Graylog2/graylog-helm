@@ -299,3 +299,62 @@ tests:
         documentSelector:
           path: metadata.name
           value: graylog-pdb-datanode-search
+
+  # ServiceAccount wiring. The default must keep sharing the Graylog account,
+  # because changing it would restart every Datanode pod on upgrade.
+  - it: shares the graylog ServiceAccount by default
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: graylog-sa
+
+  - it: uses a dedicated ServiceAccount when datanode.serviceAccount.create is true
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.serviceAccount.create: true
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: graylog-datanode-sa
+
+  - it: uses an externally managed ServiceAccount via nameOverride
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.serviceAccount.nameOverride: byo-datanode-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: byo-datanode-sa
+
+  - it: keeps its own ServiceAccount when the top-level one is disabled
+    template: workload/statefulsets/datanode.yaml
+    set:
+      serviceAccount.create: false
+      datanode.serviceAccount.create: true
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: graylog-datanode-sa
+
+  - it: omits serviceAccountName when no service account is configured at all
+    template: workload/statefulsets/datanode.yaml
+    set:
+      serviceAccount.create: false
+      datanode.serviceAccount.create: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+
+  - it: applies the dedicated ServiceAccount to extra node groups too
+    template: workload/statefulsets/datanode.yaml
+    documentIndex: 1
+    set:
+      datanode.serviceAccount.create: true
+      datanode.extraNodeGroups:
+        warm:
+          replicas: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: graylog-datanode-sa
