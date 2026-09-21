@@ -357,6 +357,81 @@ Graylog Datanode secret name
 {{- end }}
 
 {{/*
+Resolve the S3 credentials for a component.
+
+Returns a YAML mapping: existingSecret, accessKeyKey, secretKeyKey, accessKey,
+secretKey, source.
+
+A component either brings its own credentials or inherits global.s3 whole. Naming
+any one of its own settings takes the whole component block, rather than merging
+field by field, so a Secret from global.s3 can never end up paired with an inline
+key from the component. Mixed sources are the case that fails at runtime with an
+unhelpful error, so the resolution never produces one.
+
+Call with (dict "context" $ "component" "datanode"), or component "" for global.
+*/}}
+{{- define "graylog.s3.credentials" -}}
+{{- $ctx := .context -}}
+{{- $g := $ctx.Values.global.s3 | default dict -}}
+{{- $own := dict -}}
+{{- $inherit := true -}}
+{{- if eq .component "datanode" -}}
+{{- $c := $ctx.Values.datanode.config -}}
+{{- if or $c.s3ClientDefaultExistingSecret $c.s3ClientDefaultAccessKey $c.s3ClientDefaultSecretKey -}}
+{{- $own = dict
+      "existingSecret" ($c.s3ClientDefaultExistingSecret | default "")
+      "accessKeyKey" ($c.s3ClientDefaultAccessKeyKey | default "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY")
+      "secretKeyKey" ($c.s3ClientDefaultSecretKeyKey | default "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY")
+      "accessKey" ($c.s3ClientDefaultAccessKey | default "")
+      "secretKey" ($c.s3ClientDefaultSecretKey | default "")
+      "source" "datanode" -}}
+{{- else if not $c.s3ClientDefaultEndpoint -}}
+{{- /*
+The endpoint is how the Data Node asks for S3 at all. Without one it has no snapshot
+repository, so it must not pick up global.s3 -- credentials set there purely for
+Graylog archiving would otherwise read as a half-configured S3 client and fail the
+render for a component that was never meant to use them.
+*/ -}}
+{{- $inherit = false -}}
+{{- end -}}
+{{- end -}}
+{{- if $own -}}
+{{- $own | toYaml -}}
+{{- else if not $inherit -}}
+{{- dict
+      "existingSecret" ""
+      "accessKeyKey" "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY"
+      "secretKeyKey" "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY"
+      "accessKey" ""
+      "secretKey" ""
+      "source" "none" | toYaml -}}
+{{- else -}}
+{{- dict
+      "existingSecret" ($g.existingSecret | default "")
+      "accessKeyKey" ($g.accessKeyKey | default "AWS_ACCESS_KEY_ID")
+      "secretKeyKey" ($g.secretKeyKey | default "AWS_SECRET_ACCESS_KEY")
+      "accessKey" ($g.accessKey | default "")
+      "secretKey" ($g.secretKey | default "")
+      "source" "global" | toYaml -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Reject two sources for one credential. Silently preferring one surfaces later as an
+auth failure against the bucket, a long way from the cause.
+*/}}
+{{- define "graylog.s3.validate" -}}
+{{- $creds := include "graylog.s3.credentials" (dict "context" . "component" "datanode") | fromYaml -}}
+{{- if and $creds.existingSecret (or $creds.accessKey $creds.secretKey) -}}
+{{- if eq $creds.source "global" -}}
+{{- fail "global.s3: existingSecret cannot be combined with the inline accessKey/secretKey. Pick one source for the S3 credentials." -}}
+{{- else -}}
+{{- fail "datanode: s3ClientDefaultAccessKey/s3ClientDefaultSecretKey cannot be combined with s3ClientDefaultExistingSecret. Pick one source for the S3 credentials: drop the inline values to read them from the Secret, or clear s3ClientDefaultExistingSecret to keep them in values." -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Graylog backup-secret name
 */}}
 {{- define "graylog.backupSecretName" -}}
@@ -548,10 +623,18 @@ guaranteed crash loop rather than a degraded start. Fail the render instead of l
 reach the cluster.
 */ -}}
 {{- $c := .Values.datanode.config -}}
+{{- /*
+An existing Secret is a complete repository config on its own, so it counts here
+without also setting snapshotRepositoryExternal. That flag is for repositories the
+chart cannot see at all, and overloading it would make an ordinary S3 setup look
+like an escape hatch.
+*/ -}}
+{{- $s3 := include "graylog.s3.credentials" (dict "context" . "component" "datanode") | fromYaml -}}
 {{- $repoConfigured := or
       ($c.s3ClientDefaultEndpoint | empty | not)
-      ($c.s3ClientDefaultAccessKey | empty | not)
-      ($c.s3ClientDefaultSecretKey | empty | not)
+      ($s3.accessKey | empty | not)
+      ($s3.secretKey | empty | not)
+      ($s3.existingSecret | empty | not)
       (eq ($c.snapshotRepositoryExternal | toString) "true") -}}
 {{- $searchNoRepo := list -}}
 {{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
@@ -560,7 +643,7 @@ reach the cluster.
 {{- end -}}
 {{- end -}}
 {{- if $searchNoRepo -}}
-{{- fail (printf "datanode: node group(s) %s declare the 'search' role but no snapshot repository is configured, so the Data Node will fail to start. Set datanode.config.s3ClientDefaultEndpoint, s3ClientDefaultAccessKey and s3ClientDefaultSecretKey together (all three are required, including for AWS S3), or configure a filesystem repository with GRAYLOG_DATANODE_PATH_REPO via datanode.extraEnv and set datanode.config.snapshotRepositoryExternal=true. Note that the Data Node checks its own configuration, so IRSA or a node instance profile granting the bucket does not satisfy it. Otherwise remove the 'search' role." ($searchNoRepo | join ", ")) -}}
+{{- fail (printf "datanode: node group(s) %s declare the 'search' role but no snapshot repository is configured, so the Data Node will fail to start. Set datanode.config.s3ClientDefaultEndpoint, s3ClientDefaultAccessKey and s3ClientDefaultSecretKey together (all three are required, including for AWS S3), or set s3ClientDefaultEndpoint and point s3ClientDefaultExistingSecret at a Secret holding the two credentials, or configure a filesystem repository with GRAYLOG_DATANODE_PATH_REPO via datanode.extraEnv and set datanode.config.snapshotRepositoryExternal=true. Note that the Data Node checks its own configuration, so IRSA or a node instance profile granting the bucket does not satisfy it. Otherwise remove the 'search' role." ($searchNoRepo | join ", ")) -}}
 {{- end -}}
 {{- end }}
 

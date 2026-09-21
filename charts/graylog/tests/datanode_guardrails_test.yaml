@@ -145,7 +145,7 @@ tests:
       datanode.config.s3ClientDefaultSecretKey: "sk"
     asserts:
       - failedTemplate:
-          errorPattern: "must all be set together"
+          errorPattern: "needs an endpoint and both credentials"
         template: workload/statefulsets/datanode.yaml
 
   - it: still fails a search group when nothing at all is configured
@@ -163,7 +163,7 @@ tests:
       datanode.config.s3ClientDefaultAccessKey: "ak"
     asserts:
       - failedTemplate:
-          errorPattern: "must all be set together"
+          errorPattern: "needs an endpoint and both credentials"
         template: workload/statefulsets/datanode.yaml
 
   - it: rejects a secret key with no access key
@@ -171,7 +171,7 @@ tests:
       datanode.config.s3ClientDefaultSecretKey: "sk"
     asserts:
       - failedTemplate:
-          errorPattern: "must all be set together"
+          errorPattern: "needs an endpoint and both credentials"
         template: workload/statefulsets/datanode.yaml
 
   - it: rejects an endpoint on its own
@@ -179,7 +179,7 @@ tests:
       datanode.config.s3ClientDefaultEndpoint: "https://minio.example.com"
     asserts:
       - failedTemplate:
-          errorPattern: "must all be set together"
+          errorPattern: "needs an endpoint and both credentials"
         template: workload/statefulsets/datanode.yaml
 
   - it: accepts all three S3 client settings together
@@ -193,4 +193,115 @@ tests:
     asserts:
       - hasDocuments:
           count: 2
+        template: workload/statefulsets/datanode.yaml
+
+  # An existing Secret replaces the two inline credentials. The endpoint is not
+  # sensitive and stays in values, so it is still required alongside.
+  - it: accepts an existing Secret with an endpoint
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultExistingSecret: "my-s3-creds"
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects an existing Secret with no endpoint
+    set:
+      datanode.config.s3ClientDefaultExistingSecret: "my-s3-creds"
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs an endpoint and both credentials"
+        template: workload/statefulsets/datanode.yaml
+
+  # Two sources for one credential is a mistake worth catching at render time, not
+  # after the Data Node fails to sign a request against the bucket.
+  - it: rejects an existing Secret combined with an inline access key
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultExistingSecret: "my-s3-creds"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+    asserts:
+      - failedTemplate:
+          errorPattern: "Pick one source for the S3 credentials"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects an existing Secret combined with an inline secret key
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultExistingSecret: "my-s3-creds"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+    asserts:
+      - failedTemplate:
+          errorPattern: "Pick one source for the S3 credentials"
+        template: workload/statefulsets/datanode.yaml
+
+  # The Secret is a complete repository config, so it satisfies the search-role
+  # guard on its own without also setting snapshotRepositoryExternal.
+  - it: lets an existing Secret satisfy a search group
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultExistingSecret: "my-s3-creds"
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+
+  # global.s3 covers the components that need credentials. The Data Node inherits it
+  # when it names no S3 credentials of its own.
+  - it: inherits the S3 credentials from global.s3
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      global.s3.existingSecret: "shared-s3"
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects an inline global credential paired with a global Secret
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      global.s3.existingSecret: "shared-s3"
+      global.s3.accessKey: "ak"
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.s3: existingSecret cannot be combined"
+        template: workload/statefulsets/datanode.yaml
+
+  # A component brings its own credentials or inherits global's, never a mix, so an
+  # inline key on the Data Node cannot be paired with the Secret from global.s3.
+  - it: takes the datanode block whole when it names any S3 credential
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      global.s3.existingSecret: "shared-s3"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: workload/statefulsets/datanode.yaml
+
+  # The endpoint is how the Data Node asks for S3 at all. Credentials set in global.s3
+  # purely for Graylog archiving must not read as a half-configured S3 client here.
+  - it: ignores global.s3 when the datanode has no endpoint
+    set:
+      global.s3.existingSecret: "shared-s3"
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: workload/statefulsets/datanode.yaml
+
+  - it: ignores inline global.s3 credentials when the datanode has no endpoint
+    set:
+      global.s3.accessKey: "ak"
+      global.s3.secretKey: "sk"
+    asserts:
+      - hasDocuments:
+          count: 1
         template: workload/statefulsets/datanode.yaml
