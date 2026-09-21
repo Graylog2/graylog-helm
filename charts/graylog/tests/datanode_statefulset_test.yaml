@@ -358,3 +358,128 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: graylog-datanode-sa
+
+  # The credentials reach the container as explicit env entries rather than a second
+  # envFrom, because envFrom cannot rename keys and an existing Secret rarely uses the
+  # GRAYLOG_DATANODE_* names.
+  - it: reads the S3 credentials from an existing Secret
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultExistingSecret: my-s3-creds
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-s3-creds
+                key: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-s3-creds
+                key: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY
+
+  - it: honors custom key names inside the existing Secret
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultExistingSecret: my-s3-creds
+      datanode.config.s3ClientDefaultAccessKeyKey: access_key
+      datanode.config.s3ClientDefaultSecretKeyKey: secret_key
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-s3-creds
+                key: access_key
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-s3-creds
+                key: secret_key
+
+  - it: wires the existing Secret into extra node groups too
+    template: workload/statefulsets/datanode.yaml
+    documentIndex: 1
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultExistingSecret: my-s3-creds
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-s3-creds
+                key: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+
+  - it: adds no S3 env entries when no existing Secret is set
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultAccessKey: ak
+      datanode.config.s3ClientDefaultSecretKey: sk
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: my-s3-creds
+                key: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+
+  - it: reads the global S3 Secret with its default AWS key names
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      global.s3.existingSecret: shared-s3
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: shared-s3
+                key: AWS_ACCESS_KEY_ID
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: shared-s3
+                key: AWS_SECRET_ACCESS_KEY
+
+  - it: lets the datanode Secret override the global one
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      global.s3.existingSecret: shared-s3
+      datanode.config.s3ClientDefaultExistingSecret: dn-s3
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: dn-s3
+                key: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
