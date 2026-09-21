@@ -1,0 +1,196 @@
+suite: datanode node-group guardrails
+templates:
+  # StatefulSet (where the hard-fail validation is included) plus its checksum
+  # dependencies, and NOTES.txt where the soft warnings are emitted.
+  - workload/statefulsets/datanode.yaml
+  - config/datanode.yaml
+  - config/secret/secrets.yaml
+  - NOTES.txt
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  # Hard fail: group names must be usable as Kubernetes object names.
+  - it: fails when a group name is not a DNS-1123 label
+    set:
+      datanode.extraNodeGroups:
+        cluster_manager:
+          roles: [cluster_manager]
+    asserts:
+      - failedTemplate:
+          errorMessage: "datanode.extraNodeGroups: group name \"cluster_manager\" is not a valid DNS-1123 label (lowercase alphanumerics and '-', starting and ending alphanumeric). It is used in the StatefulSet, ConfigMap and PDB names. Underscores are valid in OpenSearch *role* names but not in group names - use \"cluster-manager\" as the key and keep the role in its 'roles' list."
+        template: workload/statefulsets/datanode.yaml
+
+  - it: accepts the hyphenated group name with the underscored role
+    set:
+      datanode.extraNodeGroups:
+        cluster-manager:
+          roles: [cluster_manager]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: metadata.name
+          value: graylog-datanode-cluster-manager
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 1
+
+  - it: fails when a group name pushes the pod name past 63 characters
+    set:
+      datanode.replicas: 3
+      datanode.extraNodeGroups:
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:
+          roles: [data]
+    asserts:
+      - failedTemplate:
+          errorMessage: "datanode: node group \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" produces pod name \"graylog-datanode-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-2\" (85 chars), which exceeds the 63-character DNS label limit. Shorten the group name or the release name."
+        template: workload/statefulsets/datanode.yaml
+
+  # Hard fail: no cluster_manager-eligible group.
+  - it: renders by default (all-default roles cover cluster_manager)
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: workload/statefulsets/datanode.yaml
+
+  - it: fails when no node group is eligible to be a cluster_manager
+    set:
+      datanode.roles: [data, ingest]
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - failedTemplate:
+          errorMessage: "datanode: no node group is eligible to be a cluster_manager. Add 'cluster_manager' to datanode.roles or to at least one datanode.extraNodeGroups entry's roles."
+        template: workload/statefulsets/datanode.yaml
+
+  - it: does not fail when the primary keeps default roles
+    set:
+      datanode.extraNodeGroups:
+        warm:
+          roles: [data]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+
+  # Soft warning: no data-eligible group.
+  - it: warns when no node group is eligible to hold data
+    set:
+      datanode.roles: [cluster_manager, ingest]
+    asserts:
+      - matchRegexRaw:
+          pattern: "no Data Node group is eligible to hold data"
+        template: NOTES.txt
+
+  - it: emits no data warning with default roles
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "no Data Node group is eligible to hold data"
+        template: NOTES.txt
+
+  # Hard fail: the search role without a snapshot repository. Data Node refuses to start
+  # in that configuration, so rendering it only produces a crash loop.
+  - it: fails when a search group has no snapshot repository
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - failedTemplate:
+          errorPattern: "node group\\(s\\) search declare the 'search' role but no snapshot repository is configured"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: fails when the primary group declares search with no snapshot repository
+    set:
+      datanode.roles: [search, cluster_manager, data]
+    asserts:
+      - failedTemplate:
+          errorPattern: "node group\\(s\\) <primary> declare the 'search' role"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: renders when a search group has a snapshot repository configured
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.example.com"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+
+  # A snapshot repository does not have to mean static keys in values.yaml.
+  # Credentials can come from a node instance profile or IRSA, in which case
+  # nothing about them is visible to the chart.
+  - it: renders a search group when the repository is declared external
+    set:
+      datanode.config.snapshotRepositoryExternal: true
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml
+
+  # The Data Node rejects a partial S3 client config at startup, so the chart
+  # refuses to render one. All three or none, endpoint included, even on AWS.
+  - it: rejects static keys with no endpoint
+    set:
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must all be set together"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: still fails a search group when nothing at all is configured
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - failedTemplate:
+          errorPattern: "set datanode.config.snapshotRepositoryExternal=true"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects an access key with no secret key
+    set:
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must all be set together"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects a secret key with no access key
+    set:
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must all be set together"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: rejects an endpoint on its own
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://minio.example.com"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must all be set together"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: accepts all three S3 client settings together
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultSecretKey: "sk"
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: workload/statefulsets/datanode.yaml

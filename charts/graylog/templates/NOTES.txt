@@ -27,6 +27,16 @@ SUMMARY
   volume ownership (e.g. AWS EBS). See the "Hardened Environments" section of the README before opting out.
   {{- end }}
 
+  {{- $dataEligible := false }}
+  {{- range $g := include "graylog.datanode.groups" . | fromYamlArray }}
+  {{- if or (empty $g.roles) (has "data" $g.roles) }}{{- $dataEligible = true }}{{- end }}
+  {{- end }}
+  {{- if not $dataEligible }}
+
+  WARNING: no Data Node group is eligible to hold data (every group sets explicit roles and none includes
+  'data'). Indices will have nowhere to be allocated. Add 'data' to datanode.roles or to an extraNodeGroups entry.
+  {{- end }}
+
   Use the following command to list all the resources deployed with this release:
 
     helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}

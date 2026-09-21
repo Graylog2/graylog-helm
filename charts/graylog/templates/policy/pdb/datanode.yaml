@@ -1,17 +1,27 @@
 {{- if and .Values.datanode.enabled .Values.datanode.podDisruptionBudget.enabled }}
-{{- if ge (include "graylog.datanode.replicas" . | int) 1 }}
+{{- range include "graylog.datanode.groups" $ | fromYamlArray }}
+{{- if ge (.replicas | int) 1 }}
+{{- $fixed := dict "app.kubernetes.io/component" "datanode" "app" "graylog-datanode" }}
+{{- with .groupLabel }}
+{{- $_ := set $fixed "graylog-datanode-group" . }}
+{{- end }}
+---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "graylog.fullname" . | printf "%s-pdb-datanode" }}
-  namespace: {{ .Release.Namespace }}
-  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.podDisruptionBudget.labels "fixed" (dict "app.kubernetes.io/component" "datanode" "app" "graylog-datanode") "indent" 2) }}
-  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.podDisruptionBudget.annotations "indent" 2) }}
+  name: {{ .pdbName }}
+  namespace: {{ $.Release.Namespace }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .podDisruptionBudget.labels "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .podDisruptionBudget.annotations "indent" 2) }}
 spec:
-  minAvailable: {{ .Values.datanode.podDisruptionBudget.minAvailable | default 3 | int }}
+  minAvailable: {{ .podDisruptionBudget.minAvailable | default 3 | int }}
   selector:
     matchLabels:
       app: graylog-datanode
-      {{- include "graylog.selectorLabels" . | nindent 6 }}
+      {{- with .groupLabel }}
+      graylog-datanode-group: {{ . }}
+      {{- end }}
+      {{- include "graylog.selectorLabels" $ | nindent 6 }}
+{{- end }}
 {{- end }}
 {{- end }}

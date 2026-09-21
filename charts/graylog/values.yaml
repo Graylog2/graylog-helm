@@ -590,6 +590,8 @@ datanode:
   enabled: true
   # replicas is the number of Datanode pods.
   replicas: 3
+  # Empty = default roles: cluster_manager,data,ingest,remote_cluster_client (search is auto-added with a snapshot repo).
+  roles: []
   service:
     annotations: {}
     labels: {}
@@ -603,6 +605,24 @@ datanode:
   # env sets additional environment variables on the Datanode container as a
   # simple key/value map.
   env: {}
+  # serviceAccount gives the Datanode pods their own ServiceAccount instead of
+  # sharing the Graylog one. Fields mirror the top-level serviceAccount block.
+  #
+  # Left at create=false with no nameOverride, the Datanode keeps using the
+  # top-level serviceAccount, which is the historical behaviour. Set create=true
+  # to split it onto its own identity, for example to annotate it with a
+  # different IRSA role ARN than the Graylog server uses.
+  serviceAccount:
+    create: false
+    automount: true
+    annotations: {}
+    labels: {}
+    nameOverride: ""
+    role:
+      create: false
+      annotations: {}
+      labels: {}
+      rules: []
   # config maps to Graylog Data Node configuration settings.
   config:
     # nodeIdFile is the path of the node-id file inside the container.
@@ -615,11 +635,29 @@ datanode:
     skipPreflightChecks: "false"
     # nodeSearchCacheSize is the OpenSearch search cache size.
     nodeSearchCacheSize: "10gb"
-    # s3ClientDefault* configure the S3 client used for searchable snapshots;
-    # endpoint, accessKey, and secretKey must be set together.
+    # s3ClientDefault* configure the S3 client used for searchable snapshots.
+    # endpoint, accessKey and secretKey must all be set together, or all be
+    # empty. The Data Node rejects a partial config at startup, and it requires
+    # the endpoint even for AWS S3, where the SDK could have resolved it from
+    # the region: "S3 Client not configured properly, all
+    # s3_client_default_access_key, s3_client_default_secret_key and
+    # s3_client_default_endpoint have to be provided in the configuration!"
+    # For AWS that means https://s3.<region>.amazonaws.com.
+    #
+    # The Data Node validates this itself at startup and refuses to run the
+    # 'search' role unless it sees either path_repo or S3 credentials. Ambient
+    # AWS credentials (node instance profile, IRSA) do NOT satisfy that check,
+    # however the bucket is granted, because the check reads configuration
+    # rather than testing access.
     s3ClientDefaultSecretKey: ""
     s3ClientDefaultAccessKey: ""
     s3ClientDefaultEndpoint: ""
+    # snapshotRepositoryExternal declares that a repository is configured through
+    # a route this chart does not model, in practice GRAYLOG_DATANODE_PATH_REPO
+    # set via datanode.extraEnv over a shared filesystem volume. It only relaxes
+    # the render-time guard; the Data Node still applies its own check, so
+    # setting this without a real repository produces a crash loop.
+    snapshotRepositoryExternal: false
     s3ClientDefaultRegion: "us-east-2"
     s3ClientDefaultProtocol: "http"
     s3ClientDefaultPathStyleAccess: "true"
@@ -821,6 +859,14 @@ datanode:
   extraInitContainers: []
   # extraContainers adds sidecar containers to the Datanode pods.
   extraContainers: []
+  # extraNodeGroups declares additional Datanode node groups, keyed by name. Each
+  # entry renders its own StatefulSet, ConfigMap and PDB, inherits every datanode.*
+  # value above and overrides only what it declares. See
+  # docs/datanode-node-roles.md.
+  extraNodeGroups: {}
+  #  search:
+  #    roles: [search]
+  #    replicas: 2
 
 
 # External OpenSearch

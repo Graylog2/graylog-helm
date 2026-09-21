@@ -113,17 +113,17 @@ tests:
       - hasDocuments:
           count: 1
 
-  # KNOWN QUIRK: `datanode.replicas | default 3` coerces an explicit 0 back to 3,
-  # so the `ge replicas 1` guard can never be false via replicas:0 and the PDB
-  # still renders. Pins the actual behavior.
-  - it: datanode replicas 0 is coerced to the default, so PDB still renders
+  # The node-group replica count is summed straight from values, with no
+  # `| default 3` fallback to coerce an explicit 0 back to 3, so replicas:0
+  # really does switch the `ge replicas 1` guard off.
+  - it: datanode replicas 0 renders no PDB
     template: policy/pdb/datanode.yaml
     set:
       datanode.podDisruptionBudget.enabled: true
       datanode.replicas: 0
     asserts:
       - hasDocuments:
-          count: 1
+          count: 0
 
   - it: datanode PDB is not rendered when datanode.enabled is false
     template: policy/pdb/datanode.yaml
