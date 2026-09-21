@@ -1021,20 +1021,57 @@ cluster-manager nodes) via `datanode.roles` and the `datanode.extraNodeGroups` m
 datanode:
   roles: [cluster_manager, data, ingest, remote_cluster_client]  # primary (hot) tier
   config:
-    # The search role requires a snapshot repository; without one the render hard-fails
-    # because the Data Node would not start.
+    # The search role needs a snapshot repository. All three settings are
+    # required together, including the endpoint on AWS S3.
     s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
     s3ClientDefaultAccessKey: "..."
     s3ClientDefaultSecretKey: "..."
+    s3ClientDefaultRegion: "us-east-1"        # default us-east-2
+    s3ClientDefaultProtocol: "https"          # default http
+    s3ClientDefaultPathStyleAccess: "false"   # default true
   extraNodeGroups:
     search:
       roles: [search]
       replicas: 2
 ```
 
-See the [Data Node Roles & Node Groups guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md)
-for the full list of roles, guardrails, the search/warm-tier repository requirement, and how to
-migrate an existing installation to use node groups.
+Static keys are not the only way. The Data Node also accepts a filesystem repository, which needs
+no credentials at all but does need storage every Data Node can mount, such as EFS on EKS:
+
+```yaml
+datanode:
+  config:
+    snapshotRepositoryExternal: true
+  extraEnv:
+    - name: GRAYLOG_DATANODE_PATH_REPO
+      value: /var/lib/graylog-datanode/repo
+  extraVolumes:
+    - name: snapshot-repo
+      persistentVolumeClaim:
+        claimName: graylog-snapshot-repo   # ReadWriteMany
+  extraVolumeMounts:
+    - name: snapshot-repo
+      mountPath: /var/lib/graylog-datanode/repo
+```
+
+`snapshotRepositoryExternal` only relaxes the chart's render-time guard, for repositories the chart
+cannot see. The Data Node still applies its own check, so setting it without a real repository
+gives you a crash loop rather than a render error.
+
+> [!WARNING]
+> **An IAM role granting the bucket does not satisfy the Data Node.** It validates its own
+> configuration at startup and looks for `path_repo` or S3 credentials, so it refuses the `search`
+> role with:
+>
+> ```
+> Your configuration contains the search node role in node_roles but there is no
+> snapshots repository configured.
+> ```
+>
+> That happens before OpenSearch starts and is independent of whether the pod could reach the
+> bucket. IRSA is doubly unavailable here: the `repository-s3` plugin runs under a SecurityManager
+> policy granting `FilePermission "config", "read"` and network connect, so it can talk to instance
+> metadata but cannot read the projected ServiceAccount token. Static keys or `path_repo`.
 
 # Using External Resources
 
@@ -1442,6 +1479,15 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.service.ports.data`                          | Data communication port.                        | `9200`            |
 | `datanode.service.ports.config`                        | Configuration communication port.               | `9300`            |
 | `datanode.env`                                         | Custom environment variables.                   | `{}`              |
+| `datanode.serviceAccount.create`                       | Give the Data Node its own ServiceAccount instead of sharing the Graylog one. | `false` |
+| `datanode.serviceAccount.automount`                    | Automount the Data Node service account token.  | `true`            |
+| `datanode.serviceAccount.annotations`                  | Annotations for the Data Node service account.  | `{}`              |
+| `datanode.serviceAccount.labels`                       | Labels for the Data Node service account.       | `{}`              |
+| `datanode.serviceAccount.nameOverride`                 | Name of the Data Node service account, or of an existing one to use. | `""` |
+| `datanode.serviceAccount.role.create`                  | Create a Role/RoleBinding for the Data Node service account. | `false` |
+| `datanode.serviceAccount.role.rules`                   | Rules for that Role.                            | `[]`              |
+| `datanode.serviceAccount.role.annotations`             | Annotations for the Role and RoleBinding.       | `{}`              |
+| `datanode.serviceAccount.role.labels`                  | Labels for the Role and RoleBinding.            | `{}`              |
 | `datanode.config.nodeIdFile`                           | Path to datanode ID file.                       | `""`              |
 | `datanode.config.opensearchHeap`                       | OpenSearch heap size.                           | `"2g"`            |
 | `datanode.config.javaOpts`                             | Java options for datanode.                      | `"-Xms1g -Xmx1g"` |
@@ -1453,6 +1499,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.config.s3ClientDefaultRegion`                | Default S3 client region.                       | `"us-east-2"`     |
 | `datanode.config.s3ClientDefaultProtocol`              | Default S3 client protocol.                     | `"http"`          |
 | `datanode.config.s3ClientDefaultPathStyleAccess`       | Enable path-style access for S3 client.         | `"true"`          |
+| `datanode.config.snapshotRepositoryExternal`           | Declare that a snapshot repository is configured by a route the chart cannot see, such as `GRAYLOG_DATANODE_PATH_REPO` via `extraEnv`. Relaxes the render guard only; the Data Node still applies its own check. | `false` |
 | `datanode.image.repository`                            | Datanode image repository.                      | `""`              |
 | `datanode.image.tag`                                   | Datanode image tag.                             | `""`              |
 | `datanode.image.imagePullPolicy`                       | Image pull policy.                              | `IfNotPresent`    |
@@ -1556,6 +1603,53 @@ Mutually exclusive with `datanode.enabled`. See [Bring Your Own OpenSearch](#bri
 | `serviceAccount.role.rules`   | Rules for the new role to bind to this service account. | `[]`    |
 | `serviceAccount.role.annotations` | Annotations for the Role and RoleBinding.           | `{}`    |
 | `serviceAccount.role.labels`  | Labels for the Role and RoleBinding.                    | `{}`    |
+
+The chart creates one service account, `<release>-sa`, and both the Graylog server and the Data
+Node pods run under it. MongoDB is the exception and always has its own, `<release>-mongo-sa`.
+
+### Giving the Data Node its own service account
+
+Set `datanode.serviceAccount.create=true` to move the Data Node pods onto `<release>-datanode-sa`.
+The fields mirror the top-level block.
+
+```yaml
+datanode:
+  serviceAccount:
+    create: true
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/graylog-datanode
+```
+
+Do this when the Data Node needs different cloud permissions than the Graylog server, which is the
+usual reason on EKS. A pod carries exactly one IAM role, so sharing an account means sharing every
+permission on it.
+
+The default is `false`, and the Data Node keeps using the top-level account. Turning it on changes
+the pod template and rolls every Data Node pod, so treat it as a planned restart rather than a
+config tweak.
+
+To point the Data Node at a service account you manage yourself, leave `create` at `false` and set
+`nameOverride`:
+
+```yaml
+datanode:
+  serviceAccount:
+    nameOverride: my-existing-sa
+```
+
+> [!IMPORTANT]
+> On EKS the IRSA webhook injects `AWS_ROLE_ARN` and the projected token when the pod is **created**.
+> Annotating a service account does nothing to pods that are already running, and there is no
+> warning. Restart the workload afterwards and confirm the variable is present.
+
+> [!WARNING]
+> An IRSA role on the Data Node does **not** reach its snapshot repository. As of Data Node 7.1 with
+> OpenSearch 2.19, the `repository-s3` plugin reads a web identity token only through a file inside
+> the OpenSearch config directory, and the Data Node regenerates that directory under a new random
+> name on every start. The plugin falls back to the EC2 instance profile of the node it runs on,
+> silently. Searchable snapshots still need `datanode.config.s3ClientDefaultAccessKey` and
+> `s3ClientDefaultSecretKey`. This is worth knowing for its own sake: without those keys a snapshot
+> repository inherits whatever the node role can reach.
 
 
 ## Ingress

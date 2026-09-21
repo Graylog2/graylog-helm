@@ -174,6 +174,35 @@ MongoDB service account name
 {{- end }}
 
 {{/*
+Datanode service account name.
+
+Falls back to the shared Graylog service account when datanode.serviceAccount is
+not configured, so existing installs keep the single-identity behaviour they
+already have. Only a create or a nameOverride splits the Datanode off onto its
+own account.
+*/}}
+{{- define "graylog.datanode.serviceAccountName" }}
+{{- $sa := .Values.datanode.serviceAccount | default dict }}
+{{- if $sa.nameOverride }}
+{{- $sa.nameOverride }}
+{{- else if $sa.create }}
+{{- include "graylog.fullname" . | printf "%s-datanode-sa" }}
+{{- else }}
+{{- include "graylog.serviceAccountName" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+True when the Datanode pods should carry an explicit serviceAccountName.
+*/}}
+{{- define "graylog.datanode.serviceAccountEnabled" }}
+{{- $sa := .Values.datanode.serviceAccount | default dict }}
+{{- if or $sa.create $sa.nameOverride .Values.serviceAccount.create .Values.serviceAccount.nameOverride }}
+{{- true }}
+{{- end }}
+{{- end }}
+
+{{/*
 Graylog replicas
 */}}
 {{- define "graylog.replicas" }}
@@ -518,7 +547,12 @@ Data Node refuses to start with the 'search' role and no snapshot repository, so
 guaranteed crash loop rather than a degraded start. Fail the render instead of letting it
 reach the cluster.
 */ -}}
-{{- $repoConfigured := .Values.datanode.config.s3ClientDefaultEndpoint | empty | not -}}
+{{- $c := .Values.datanode.config -}}
+{{- $repoConfigured := or
+      ($c.s3ClientDefaultEndpoint | empty | not)
+      ($c.s3ClientDefaultAccessKey | empty | not)
+      ($c.s3ClientDefaultSecretKey | empty | not)
+      (eq ($c.snapshotRepositoryExternal | toString) "true") -}}
 {{- $searchNoRepo := list -}}
 {{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
 {{- if and (has "search" $g.roles) (not $repoConfigured) -}}
@@ -526,7 +560,7 @@ reach the cluster.
 {{- end -}}
 {{- end -}}
 {{- if $searchNoRepo -}}
-{{- fail (printf "datanode: node group(s) %s declare the 'search' role but no snapshot repository is configured, so the Data Node will fail to start. Set datanode.config.s3ClientDefaultEndpoint (with s3ClientDefaultAccessKey and s3ClientDefaultSecretKey), or remove the 'search' role." ($searchNoRepo | join ", ")) -}}
+{{- fail (printf "datanode: node group(s) %s declare the 'search' role but no snapshot repository is configured, so the Data Node will fail to start. Set datanode.config.s3ClientDefaultEndpoint, s3ClientDefaultAccessKey and s3ClientDefaultSecretKey together (all three are required, including for AWS S3), or configure a filesystem repository with GRAYLOG_DATANODE_PATH_REPO via datanode.extraEnv and set datanode.config.snapshotRepositoryExternal=true. Note that the Data Node checks its own configuration, so IRSA or a node instance profile granting the bucket does not satisfy it. Otherwise remove the 'search' role." ($searchNoRepo | join ", ")) -}}
 {{- end -}}
 {{- end }}
 

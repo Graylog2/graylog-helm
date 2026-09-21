@@ -4,6 +4,7 @@ suite: object labels and annotations coverage
 # so a new template can never ship without the metadata helpers.
 templates:
   - auth/mongo-sa.yaml
+  - auth/datanode-sa.yaml
   - config/datanode.yaml
   - config/init-graylog.yaml
   - config/geoip-sidecar-entrypoint.yaml
@@ -553,3 +554,53 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/component"]
           value: server
+
+  - it: labels and annotates the Datanode ServiceAccount, Role and RoleBinding
+    set:
+      datanode.serviceAccount.create: true
+      datanode.serviceAccount.labels.tier: identity
+      datanode.serviceAccount.annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/datanode
+      datanode.serviceAccount.role.create: true
+      datanode.serviceAccount.role.rules:
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["get"]
+      datanode.serviceAccount.role.labels.tier: rbac
+      datanode.serviceAccount.role.annotations.note: least-privilege
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: auth/datanode-sa.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: identity
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["eks.amazonaws.com/role-arn"]
+          value: arn:aws:iam::123456789012:role/datanode
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.tier
+          value: rbac
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations.note
+          value: least-privilege
+        documentIndex: 1
+      - equal:
+          path: metadata.labels.tier
+          value: rbac
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations.note
+          value: least-privilege
+        documentIndex: 2

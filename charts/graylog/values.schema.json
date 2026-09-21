@@ -581,6 +581,32 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "replicas": { "type": "integer" },
+        "serviceAccount": {
+          "type": "object",
+          "description": "ServiceAccount for the Datanode pods. Falls back to the top-level serviceAccount when create is false and nameOverride is unset.",
+          "properties": {
+            "create": { "type": "boolean" },
+            "automount": { "type": "boolean" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
+            "nameOverride": { "type": "string" },
+            "role": {
+              "type": "object",
+              "properties": {
+                "create": { "type": "boolean" },
+                "annotations": {
+                  "type": "object",
+                  "description": "Annotations for the Role and RoleBinding objects"
+                },
+                "labels": {
+                  "type": "object",
+                  "description": "Labels for the Role and RoleBinding objects"
+                },
+                "rules": { "type": "array" }
+              }
+            }
+          }
+        },
         "roles": {
           "type": "array",
           "description": "OpenSearch roles for the primary node group. Empty uses the Data Node default set.",
@@ -626,7 +652,11 @@
             "s3ClientDefaultEndpoint": { "type": "string" },
             "s3ClientDefaultRegion": { "type": "string" },
             "s3ClientDefaultProtocol": { "type": "string" },
-            "s3ClientDefaultPathStyleAccess": { "type": "string" }
+            "s3ClientDefaultPathStyleAccess": { "type": "string" },
+            "snapshotRepositoryExternal": {
+              "type": "boolean",
+              "description": "Declare that a snapshot repository is configured by a route the chart cannot model, such as GRAYLOG_DATANODE_PATH_REPO via extraEnv. Relaxes the render-time guard only; the Data Node applies its own check at startup."
+            }
           }
         },
         "image": {
