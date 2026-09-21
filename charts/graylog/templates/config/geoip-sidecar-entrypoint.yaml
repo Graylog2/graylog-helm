@@ -78,6 +78,22 @@ data:
     # Trigger file for manual updates
     TRIGGER_FILE="/tmp/geoip-update-trigger"
 
+    # Exit promptly on SIGTERM.
+    #
+    # This shell is PID 1 in the sidecar, and Linux does not deliver uncaught signals to
+    # PID 1. Without an explicit trap the container ignores SIGTERM entirely and the kubelet
+    # has to SIGKILL it once terminationGracePeriodSeconds expires. graylog.terminationGrace
+    # is 300s to give the journal drain room, so every Graylog pod sat in Terminating for a
+    # full five minutes after Graylog itself had already exited.
+    term_handler() {
+        echo "[$(date "$TIMESTAMP_FORMAT")] SIGTERM received, shutting down"
+        if [ -n "$SLEEP_PID" ]; then
+            kill "$SLEEP_PID" 2>/dev/null || true
+        fi
+        exit 0
+    }
+    trap term_handler TERM INT
+
     # Function to run the update
     run_update() {
         TIMESTAMP=$(date "$TIMESTAMP_FORMAT")
@@ -109,7 +125,11 @@ data:
             LAST_RUN_TIME="$CURRENT_TIME"
         fi
 
-        # Sleep for 60 seconds before checking again
-        sleep 60
+        # Sleep in the background and wait on it, rather than sleeping in the foreground.
+        # A foreground `sleep` blocks the trap until it returns, so SIGTERM would still take
+        # up to 60 seconds to act on. `wait` is interruptible, so the handler runs at once.
+        sleep 60 &
+        SLEEP_PID=$!
+        wait "$SLEEP_PID" || true
     done
 {{- end }}

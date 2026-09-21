@@ -244,6 +244,30 @@ tests:
       - isNotNull:
           path: data["entrypoint.sh"]
 
+  # The sidecar shell is PID 1, and Linux discards uncaught signals sent to PID 1. Without
+  # this trap the container ignores SIGTERM and the kubelet SIGKILLs it only after
+  # terminationGracePeriodSeconds (300s), holding every Graylog pod in Terminating for five
+  # minutes after Graylog itself has exited.
+  - it: entrypoint traps SIGTERM so the sidecar does not block pod termination
+    template: config/geoip-sidecar-entrypoint.yaml
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.sidecar.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.accountId: "test-account"
+      graylog.config.geolocation.maxmindGeoIp.licenseKey: "test-key"
+    asserts:
+      - matchRegex:
+          path: data["entrypoint.sh"]
+          pattern: "trap term_handler TERM INT"
+      # A foreground `sleep` blocks the trap until it returns, so the sleep must run in the
+      # background with an interruptible `wait` or SIGTERM still takes up to 60s to act on.
+      - matchRegex:
+          path: data["entrypoint.sh"]
+          pattern: 'sleep 60 &\n\s+SLEEP_PID=\$!\n\s+wait "\$SLEEP_PID"'
+      - notMatchRegex:
+          path: data["entrypoint.sh"]
+          pattern: '\n\s+sleep 60\n'
+
   # Test: Entrypoint ConfigMap not created when geolocation disabled
   - it: should not create entrypoint ConfigMap when geolocation disabled
     template: config/geoip-sidecar-entrypoint.yaml
