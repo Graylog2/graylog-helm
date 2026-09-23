@@ -8,7 +8,7 @@ metadata:
   {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.graylog.podDisruptionBudget.labels "fixed" (dict "app.kubernetes.io/component" "server" "app" "graylog-app") "indent" 2) }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.graylog.podDisruptionBudget.annotations "indent" 2) }}
 spec:
-  minAvailable: {{ .Values.graylog.podDisruptionBudget.minAvailable | default 1 | int }}
+  {{ include "graylog.pdb.limit" (dict "pdb" .Values.graylog.podDisruptionBudget "subject" "graylog") }}
   selector:
     matchLabels:
       app: graylog-app

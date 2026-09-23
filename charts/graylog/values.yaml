@@ -302,6 +302,7 @@ graylog:
         # expected to carry MaxMind credentials. See
         # examples/graylog-geoip-secret.yaml.
         existingSecret: ""
+        existingSecretName:
         accountIdKey: "GEO_IP_MAXMIND_ACCOUNT_ID"
         licenseKeyKey: "GEO_IP_MAXMIND_LICENSE_KEY"
         # OR provide the credentials inline; the chart then stores them in its own
@@ -571,7 +572,20 @@ graylog:
   # Set enabled: false only for non-production clusters or single-replica deployments
   podDisruptionBudget:
     enabled: true
-    minAvailable: 1
+    # maxUnavailable caps how many Graylog pods a drain may evict at once. Empty
+    # means 1, which is what you get when neither field is set here.
+    #
+    # It is a cap rather than a floor so that one value stays correct at any
+    # replica count. A floor of 1 permits three simultaneous evictions at four
+    # replicas, which drops most of the tier and takes its journals offline with
+    # it. Rendered only at replicas >= 2.
+    #
+    # Accepts a percentage string such as "25%".
+    maxUnavailable: ""
+    # minAvailable is the opposite form, a floor on how many must stay up. It
+    # replaces maxUnavailable rather than adding to it, and setting both fails the
+    # render, because a PodDisruptionBudget accepts only one of them.
+    minAvailable: ""
     annotations: {}
     labels: {}
   # podSecurityContext / initContainerSecurityContext / containerSecurityContext
@@ -659,6 +673,28 @@ datanode:
   replicas: 3
   # Empty = default roles: cluster_manager,data,ingest,remote_cluster_client (search is auto-added with a snapshot repo).
   roles: []
+  # discovery controls how the Data Nodes find each other. Release-wide: the seed
+  # list is one string shared by every node group, so setting this on an
+  # extraNodeGroups entry has no effect.
+  discovery:
+    # seedHosts selects which pods go into
+    # GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS.
+    #
+    #   all             every pod of every node group (default)
+    #   clusterManagers only pods in groups eligible to be cluster manager
+    #
+    # The seed list is part of every group's pod spec, so with "all" a change to
+    # any group's replica count rewrites it everywhere and rolls the whole Data
+    # Node tier. "clusterManagers" is all discovery actually needs: a joining node
+    # has to reach a manager to find the cluster, not to know every node in it. On
+    # a dedicated-manager topology that makes scaling the data, ingest and search
+    # groups a pure replica change with no restart.
+    #
+    # It does not help where the group being scaled is itself manager-eligible,
+    # which includes the default single-group install.
+    #
+    # Switching costs one roll, because the variable itself changes.
+    seedHosts: all
   service:
     annotations: {}
     labels: {}
@@ -879,9 +915,28 @@ datanode:
   # PodDisruptionBudgets are enabled by default for production deployments
   # They prevent cluster upgrades and maintenance from disrupting all instances
   # Set enabled: false only for non-production clusters or single-replica deployments
+  #
+  # One PodDisruptionBudget is rendered per node group, and each group gets these
+  # settings unless it overrides them.
   podDisruptionBudget:
     enabled: true
-    minAvailable: 2
+    # maxUnavailable caps how many Data Nodes in a single group a drain may evict
+    # at once. Empty means 1, which is what a group gets when neither field is
+    # set here.
+    #
+    # It is a cap rather than a floor, so one value stays correct at any replica
+    # count. minAvailable does not: a floor of 2 permits 18 simultaneous evictions
+    # in a 20-replica group and permits none at all in a 2-replica one, which
+    # blocks drains outright.
+    #
+    # Accepts a percentage string such as "25%".
+    maxUnavailable: ""
+    # minAvailable is the opposite form, a floor on how many must stay up. Set it
+    # only when you specifically want a floor, and size it against the group's own
+    # replica count. It replaces maxUnavailable rather than adding to it, and
+    # setting both fails the render, because a PodDisruptionBudget accepts only
+    # one of them.
+    minAvailable: ""
     annotations: {}
     labels: {}
   podSecurityContext:

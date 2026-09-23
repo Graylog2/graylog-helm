@@ -1,0 +1,177 @@
+suite: checksum isolation
+# The Graylog and Data Node pods watch different Secrets, so their
+# checksum/secret annotations must move independently. Hashing the whole Graylog
+# Secret on both tiers rolled every Data Node pod whenever a Graylog-only
+# credential changed.
+#
+# Every value that the chart would otherwise generate at random is pinned below,
+# because `helm template` has no `lookup` and would regenerate the pepper and the
+# MongoDB password on each render, making the hashes differ for the wrong reason.
+#
+# The literal hashes are the point of the suite: they prove a value moved one
+# annotation and not the other. Changing the default contents of either Secret
+# changes them, and they must then be updated together.
+templates:
+  - workload/statefulsets/datanode.yaml
+  - workload/statefulsets/graylog.yaml
+  - config/datanode.yaml
+  - config/graylog.yaml
+  - config/secret/secrets.yaml
+  - config/secret/datanode.yaml
+release:
+  name: graylog
+  namespace: graylog
+set:
+  graylog.config.customSecretPepper: pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+  graylog.config.rootPassword: fixedpw
+  mongodb.communityResource.enabled: false
+  graylog.config.mongodb.customUri: mongodb://u:p@h:27017/graylog
+tests:
+  - it: gives the two tiers different checksums from the same values
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: 8e62f32e1b3aec74674df675cb6d8c9ec7feda55495faf4003b7547cfea0fb66
+        template: workload/statefulsets/graylog.yaml
+      - equal:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: cae6719d33991f075b9f707379849b44c7218832b8391b52ea0f6912e549ee84
+        template: workload/statefulsets/datanode.yaml
+
+  # A Graylog-only credential. The Data Node runs no GeoIP sidecar and never
+  # reads these keys, so its pods must not roll.
+  - it: leaves the Data Node checksum alone when a Graylog-only credential changes
+    set:
+      graylog.config.geolocation.enabled: true
+      graylog.config.geolocation.maxmindGeoIp.accountId: "131"
+      graylog.config.geolocation.maxmindGeoIp.licenseKey: abc
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: cae6719d33991f075b9f707379849b44c7218832b8391b52ea0f6912e549ee84
+        template: workload/statefulsets/datanode.yaml
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: 8e62f32e1b3aec74674df675cb6d8c9ec7feda55495faf4003b7547cfea0fb66
+        template: workload/statefulsets/graylog.yaml
+
+  # The Data Node's own Secret, loaded with envFrom. This had no checksum at all
+  # before, so rotating the S3 credentials restarted nothing.
+  - it: rolls only the Data Node when its own S3 credentials change
+    set:
+      datanode.config.s3ClientDefaultEndpoint: https://s3.example.com
+      datanode.config.s3ClientDefaultAccessKey: AK
+      datanode.config.s3ClientDefaultSecretKey: SK
+    asserts:
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: cae6719d33991f075b9f707379849b44c7218832b8391b52ea0f6912e549ee84
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: 8e62f32e1b3aec74674df675cb6d8c9ec7feda55495faf4003b7547cfea0fb66
+        template: workload/statefulsets/graylog.yaml
+
+  # GRAYLOG_PASSWORD_SECRET is one of the two keys the Data Node takes from the
+  # Graylog Secret, so this one legitimately rolls both tiers.
+  - it: rolls both tiers when the shared password secret changes
+    set:
+      graylog.config.customSecretPepper: qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+    asserts:
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: cae6719d33991f075b9f707379849b44c7218832b8391b52ea0f6912e549ee84
+        template: workload/statefulsets/datanode.yaml
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: 8e62f32e1b3aec74674df675cb6d8c9ec7feda55495faf4003b7547cfea0fb66
+        template: workload/statefulsets/graylog.yaml
+
+  # Chart identity labels live in the Secret's metadata, not its data. Hashing
+  # the rendered document put them in the checksum, so every chart version bump
+  # rolled every pod.
+  - it: ignores labels that do not change any credential
+    set:
+      global.commonLabels.rolloutCanary: "yes"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: cae6719d33991f075b9f707379849b44c7218832b8391b52ea0f6912e549ee84
+        template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          value: 8e62f32e1b3aec74674df675cb6d8c9ec7feda55495faf4003b7547cfea0fb66
+        template: workload/statefulsets/graylog.yaml
+
+  # config/datanode.yaml renders one ConfigMap per node group. Hashing the whole
+  # template gave every group the same checksum, so a change to one group rolled
+  # every group, and because each group rolls independently that took several
+  # Data Nodes down at once.
+  - it: gives each node group its own config checksum
+    set: &nodeGroups
+      datanode.extraNodeGroups.search.roles: [search]
+      datanode.extraNodeGroups.search.replicas: 2
+      datanode.config.s3ClientDefaultEndpoint: https://s3.example.com
+      datanode.config.s3ClientDefaultAccessKey: AK
+      datanode.config.s3ClientDefaultSecretKey: SK
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: a17a3428790766702403492a4c7630a13881ad184ba862b703a4545ce20a2775
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: fd172ab58ee97d0fa0d1fcda809ca9f7d364999b2a945e4a6ec7ab780d08d8aa
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 1
+
+  - it: leaves other groups alone when one group's config changes
+    set:
+      <<: *nodeGroups
+      datanode.extraNodeGroups.search.config.opensearchHeap: 3g
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: a17a3428790766702403492a4c7630a13881ad184ba862b703a4545ce20a2775
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 0
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: fd172ab58ee97d0fa0d1fcda809ca9f7d364999b2a945e4a6ec7ab780d08d8aa
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 1
+
+  # Extra groups inherit the primary block, so a primary change really does
+  # change both ConfigMaps. Both must move.
+  - it: rolls every group when the inherited primary config changes
+    set:
+      <<: *nodeGroups
+      datanode.config.opensearchHeap: 5g
+    asserts:
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: a17a3428790766702403492a4c7630a13881ad184ba862b703a4545ce20a2775
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 0
+      - notEqual:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: fd172ab58ee97d0fa0d1fcda809ca9f7d364999b2a945e4a6ec7ab780d08d8aa
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 1
+
+  - it: keeps config checksums stable across labels that change no config
+    set:
+      <<: *nodeGroups
+      global.commonLabels.rolloutCanary: "yes"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: a17a3428790766702403492a4c7630a13881ad184ba862b703a4545ce20a2775
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 0
+      - equal:
+          path: spec.template.metadata.annotations["checksum/config"]
+          value: fd172ab58ee97d0fa0d1fcda809ca9f7d364999b2a945e4a6ec7ab780d08d8aa
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 1

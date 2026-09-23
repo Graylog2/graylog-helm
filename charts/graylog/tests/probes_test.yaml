@@ -8,6 +8,7 @@ templates:
   - config/graylog.yaml           # checksum/config dependency (graylog)
   - config/datanode.yaml          # checksum/config dependency (datanode)
   - config/secret/secrets.yaml    # checksum/secret dependency
+  - config/secret/datanode.yaml    # checksum/secret dependency (datanode)
 release:
   name: graylog
   namespace: graylog

@@ -7,6 +7,7 @@ templates:
   - workload/statefulsets/datanode.yaml
   - config/datanode.yaml          # checksum/config dependency
   - config/secret/secrets.yaml    # checksum/secret dependency
+  - config/secret/datanode.yaml    # checksum/secret dependency (datanode)
   - policy/pdb/datanode.yaml      # node-group PDB coverage
 release:
   name: graylog
@@ -133,6 +134,62 @@ tests:
           path: spec.template.spec.containers[0].env[2].name
           value: GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS
         template: workload/statefulsets/datanode.yaml
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "graylog-datanode-0.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-1.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-2.graylog-datanode-svc.graylog.svc.cluster.local"
+        template: workload/statefulsets/datanode.yaml
+
+  # The seed list is part of every group's pod spec, so under "all" a replica
+  # change in one group rewrites it everywhere and rolls the whole tier.
+  - it: seeds every group by default
+    set:
+      datanode.replicas: 0
+      datanode.extraNodeGroups:
+        cluster-manager:
+          roles: [cluster_manager]
+          replicas: 1
+        data:
+          roles: [data]
+          replicas: 2
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "graylog-datanode-cluster-manager-0.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-data-0.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-data-1.graylog-datanode-svc.graylog.svc.cluster.local"
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 0
+
+  - it: seeds only manager-eligible groups when asked to
+    set:
+      datanode.discovery.seedHosts: clusterManagers
+      datanode.replicas: 0
+      datanode.extraNodeGroups:
+        cluster-manager:
+          roles: [cluster_manager]
+          replicas: 1
+        data:
+          roles: [data]
+          replicas: 2
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "graylog-datanode-cluster-manager-0.graylog-datanode-svc.graylog.svc.cluster.local"
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 0
+      # Same string in the data group's own spec, so scaling that group changes
+      # no pod template anywhere and needs no restart.
+      - equal:
+          path: spec.template.spec.containers[0].env[2].value
+          value: "graylog-datanode-cluster-manager-0.graylog-datanode-svc.graylog.svc.cluster.local"
+        template: workload/statefulsets/datanode.yaml
+        documentIndex: 1
+
+  # A group with no explicit roles gets the Data Node default set, which includes
+  # cluster_manager, so it stays in the seed list. Same rule the role guardrail
+  # uses. This is why the default single-group install is unaffected by the mode.
+  - it: counts a group with no explicit roles as manager-eligible
+    set:
+      datanode.discovery.seedHosts: clusterManagers
+    asserts:
       - equal:
           path: spec.template.spec.containers[0].env[2].value
           value: "graylog-datanode-0.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-1.graylog-datanode-svc.graylog.svc.cluster.local,graylog-datanode-2.graylog-datanode-svc.graylog.svc.cluster.local"

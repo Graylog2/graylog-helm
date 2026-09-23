@@ -12,6 +12,7 @@ templates:
   # helm-unittest's template filter has to list them for the includes to resolve.
   - config/datanode.yaml
   - config/secret/secrets.yaml
+  - config/secret/datanode.yaml    # checksum/secret dependency (datanode)
 release:
   name: graylog
   namespace: graylog

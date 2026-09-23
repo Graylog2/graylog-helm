@@ -540,7 +540,14 @@
           "type": "object",
           "properties": {
             "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" },
+            "maxUnavailable": {
+              "type": ["integer", "string"],
+              "description": "Cap on how many Graylog pods may be evicted at once. Empty means 1. Accepts a percentage string such as \"25%\". Mutually exclusive with minAvailable."
+            },
+            "minAvailable": {
+              "type": ["integer", "string"],
+              "description": "Floor on how many Graylog pods must stay up. Replaces maxUnavailable, and setting both fails the render."
+            },
             "annotations": { "type": "object" },
             "labels": { "type": "object" }
           }
@@ -654,6 +661,17 @@
           "type": "array",
           "description": "OpenSearch roles for the primary node group. Empty uses the Data Node default set.",
           "items": { "type": "string" }
+        },
+        "discovery": {
+          "type": "object",
+          "description": "How the Data Nodes find each other. Release-wide; setting it on an extraNodeGroups entry has no effect.",
+          "properties": {
+            "seedHosts": {
+              "type": "string",
+              "enum": ["all", "clusterManagers"],
+              "description": "Which pods go into GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS. \"all\" lists every pod, so scaling any group rewrites the seed list in every group and rolls the whole tier. \"clusterManagers\" lists only manager-eligible groups, which is all discovery needs."
+            }
+          }
         },
         "extraNodeGroups": {
           "type": "object",
@@ -879,9 +897,17 @@
         },
         "podDisruptionBudget": {
           "type": "object",
+          "description": "Rendered once per node group. Each group inherits these settings unless it overrides them.",
           "properties": {
             "enabled": { "type": "boolean" },
-            "minAvailable": { "type": "integer" },
+            "maxUnavailable": {
+              "type": ["integer", "string"],
+              "description": "Cap on how many Data Nodes in one group may be evicted at once. Empty means 1. Accepts a percentage string such as \"25%\". Mutually exclusive with minAvailable."
+            },
+            "minAvailable": {
+              "type": ["integer", "string"],
+              "description": "Floor on how many Data Nodes in one group must stay up. Replaces maxUnavailable, and setting both fails the render. Size it against the group's own replica count."
+            },
             "annotations": { "type": "object" },
             "labels": { "type": "object" }
           }

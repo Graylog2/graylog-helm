@@ -14,9 +14,13 @@ tests:
           count: 1
       - isKind:
           of: PodDisruptionBudget
+      # A cap, not a floor: a floor of 1 permits three simultaneous evictions at
+      # four replicas, taking most of the tier and its journals offline at once.
       - equal:
-          path: spec.minAvailable
+          path: spec.maxUnavailable
           value: 1
+      - isNull:
+          path: spec.minAvailable
 
   - it: is not rendered when podDisruptionBudget is explicitly disabled
     template: policy/pdb/graylog.yaml
@@ -44,7 +48,7 @@ tests:
           path: metadata.namespace
           value: graylog
       - equal:
-          path: spec.minAvailable
+          path: spec.maxUnavailable
           value: 1
       - equal:
           path: spec.selector.matchLabels.app
@@ -59,6 +63,8 @@ tests:
       - hasDocuments:
           count: 0
 
+  # Still supported, and it replaces the cap rather than sitting alongside it, so
+  # values files written against earlier chart versions keep working unchanged.
   - it: honors graylog.podDisruptionBudget.minAvailable
     template: policy/pdb/graylog.yaml
     set:
@@ -69,6 +75,17 @@ tests:
       - equal:
           path: spec.minAvailable
           value: 2
+      - isNull:
+          path: spec.maxUnavailable
+
+  - it: rejects setting both fields on the Graylog budget
+    template: policy/pdb/graylog.yaml
+    set:
+      graylog.podDisruptionBudget.minAvailable: 2
+      graylog.podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - failedTemplate:
+          errorMessage: "graylog: podDisruptionBudget sets both minAvailable (2) and maxUnavailable (1). A PodDisruptionBudget accepts only one. Clear minAvailable to keep the maxUnavailable cap, which is the default, or clear maxUnavailable to use a floor."
 
   - it: is not rendered when graylog.enabled is false
     template: policy/pdb/graylog.yaml
@@ -99,10 +116,14 @@ tests:
       - equal:
           path: spec.selector.matchLabels.app
           value: graylog-datanode
-      # default minAvailable comes from values.yaml (2)
+      # A cap, not a floor. minAvailable was an absolute number sized for the
+      # 3-replica default, so it permitted 18 simultaneous evictions in a
+      # 20-replica group and none at all in a 2-replica one.
       - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - isNull:
           path: spec.minAvailable
-          value: 2
 
   - it: datanode PDB renders when enabled with a single replica
     template: policy/pdb/datanode.yaml
@@ -134,6 +155,8 @@ tests:
       - hasDocuments:
           count: 0
 
+  # Still supported, and it replaces the cap rather than sitting alongside it.
+  # Values files written against earlier chart versions keep working unchanged.
   - it: honors datanode.podDisruptionBudget.minAvailable
     template: policy/pdb/datanode.yaml
     set:
@@ -143,3 +166,68 @@ tests:
       - equal:
           path: spec.minAvailable
           value: 1
+      - isNull:
+          path: spec.maxUnavailable
+
+  # 0 is a real choice, so the template cannot reach for `| default` or `empty`
+  # to decide whether the field was set.
+  - it: keeps an explicit minAvailable of 0
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.minAvailable: 0
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 0
+
+  - it: passes a percentage through unconverted
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.maxUnavailable: 25%
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 25%
+
+  - it: rejects setting both fields, which a PodDisruptionBudget cannot hold
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.minAvailable: 2
+      datanode.podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - failedTemplate:
+          errorMessage: 'datanode node group "<primary>": podDisruptionBudget sets both minAvailable (2) and maxUnavailable (1). A PodDisruptionBudget accepts only one. Clear minAvailable to keep the maxUnavailable cap, which is the default, or clear maxUnavailable to use a floor.'
+
+  # The cap is per group, so a small group is drainable and a large one is not
+  # wide open. Under the old floor of 2 the search group allowed 0 disruptions
+  # and the 20-replica group allowed 18.
+  - it: caps each node group independently
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.replicas: 3
+      datanode.config.s3ClientDefaultEndpoint: https://s3.example.com
+      datanode.config.s3ClientDefaultAccessKey: AK
+      datanode.config.s3ClientDefaultSecretKey: SK
+      datanode.extraNodeGroups.search.roles: [search]
+      datanode.extraNodeGroups.search.replicas: 2
+      datanode.extraNodeGroups.warm.replicas: 20
+      datanode.extraNodeGroups.warm.podDisruptionBudget.maxUnavailable: 2
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+        documentIndex: 1
+      - equal:
+          path: spec.selector.matchLabels["graylog-datanode-group"]
+          value: search
+        documentIndex: 1
+      - equal:
+          path: spec.maxUnavailable
+          value: 2
+        documentIndex: 2
+      - equal:
+          path: spec.selector.matchLabels["graylog-datanode-group"]
+          value: warm
+        documentIndex: 2

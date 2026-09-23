@@ -46,7 +46,7 @@ spec:
   template:
     metadata:
       {{- include "graylog.pod.labels" (dict "context" $ "labels" .podLabels "fixed" $fixed "indent" 6) }}
-      {{- $podAnnotations := dict "checksum/config" (include "graylog.datanode.configChecksum" $) "checksum/secret" (include "graylog.secretsChecksum" $) }}
+      {{- $podAnnotations := dict "checksum/config" (include "graylog.datanode.configChecksum" (dict "context" $ "name" .configmapName)) "checksum/secret" (include "graylog.datanode.secretsChecksum" $) }}
       {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .podAnnotations "fixed" $podAnnotations "indent" 6) }}
     spec:
       dnsPolicy: {{ .dnsPolicy | default "ClusterFirst" }}

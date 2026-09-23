@@ -360,7 +360,7 @@ Graylog Datanode secret name
 Resolve the S3 credentials for a component.
 
 Returns a YAML mapping: existingSecret, accessKeyKey, secretKeyKey, accessKey,
-secretKey, source.
+secretKey.
 
 A component either brings its own credentials or inherits global.s3 whole. Naming
 any one of its own settings takes the whole component block, rather than merging
@@ -383,8 +383,7 @@ Call with (dict "context" $ "component" "datanode"), or component "" for global.
       "accessKeyKey" ($c.s3ClientDefaultAccessKeyKey | default "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY")
       "secretKeyKey" ($c.s3ClientDefaultSecretKeyKey | default "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY")
       "accessKey" ($c.s3ClientDefaultAccessKey | default "")
-      "secretKey" ($c.s3ClientDefaultSecretKey | default "")
-      "source" "datanode" -}}
+      "secretKey" ($c.s3ClientDefaultSecretKey | default "") -}}
 {{- else if not $c.s3ClientDefaultEndpoint -}}
 {{- /*
 The endpoint is how the Data Node asks for S3 at all. Without one it has no snapshot
@@ -403,31 +402,37 @@ render for a component that was never meant to use them.
       "accessKeyKey" "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY"
       "secretKeyKey" "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY"
       "accessKey" ""
-      "secretKey" ""
-      "source" "none" | toYaml -}}
+      "secretKey" "" | toYaml -}}
 {{- else -}}
 {{- dict
       "existingSecret" ($g.existingSecret | default "")
       "accessKeyKey" ($g.accessKeyKey | default "AWS_ACCESS_KEY_ID")
       "secretKeyKey" ($g.secretKeyKey | default "AWS_SECRET_ACCESS_KEY")
       "accessKey" ($g.accessKey | default "")
-      "secretKey" ($g.secretKey | default "")
-      "source" "global" | toYaml -}}
+      "secretKey" ($g.secretKey | default "") | toYaml -}}
 {{- end -}}
 {{- end }}
 
 {{/*
 Reject two sources for one credential. Silently preferring one surfaces later as an
 auth failure against the bucket, a long way from the cause.
+
+Each block is checked on its own terms rather than through the resolution, because
+the resolution only ever returns one block. Checking what it returned left the
+other block unvalidated: with datanode.enabled=false nothing looked at global.s3
+at all, and a Secret there paired with an inline key rendered both, the Secret
+quietly winning because env beats envFrom.
+
+Called from config/secret/secrets.yaml, which renders whatever else is enabled.
 */}}
 {{- define "graylog.s3.validate" -}}
-{{- $creds := include "graylog.s3.credentials" (dict "context" . "component" "datanode") | fromYaml -}}
-{{- if and $creds.existingSecret (or $creds.accessKey $creds.secretKey) -}}
-{{- if eq $creds.source "global" -}}
+{{- $g := .Values.global.s3 | default dict -}}
+{{- if and $g.existingSecret (or $g.accessKey $g.secretKey) -}}
 {{- fail "global.s3: existingSecret cannot be combined with the inline accessKey/secretKey. Pick one source for the S3 credentials." -}}
-{{- else -}}
-{{- fail "datanode: s3ClientDefaultAccessKey/s3ClientDefaultSecretKey cannot be combined with s3ClientDefaultExistingSecret. Pick one source for the S3 credentials: drop the inline values to read them from the Secret, or clear s3ClientDefaultExistingSecret to keep them in values." -}}
 {{- end -}}
+{{- $c := .Values.datanode.config -}}
+{{- if and $c.s3ClientDefaultExistingSecret (or $c.s3ClientDefaultAccessKey $c.s3ClientDefaultSecretKey) -}}
+{{- fail "datanode: s3ClientDefaultAccessKey/s3ClientDefaultSecretKey cannot be combined with s3ClientDefaultExistingSecret. Pick one source for the S3 credentials: drop the inline values to read them from the Secret, or clear s3ClientDefaultExistingSecret to keep them in values." -}}
 {{- end -}}
 {{- end }}
 
@@ -655,15 +660,36 @@ Graylog Datanode service name (shared across all node groups)
 {{- end }}
 
 {{/*
-Graylog Datanode discovery seed hosts, spanning every node group.
+Graylog Datanode discovery seed hosts.
+
+Every pod of every node group by default (datanode.discovery.seedHosts: all).
+
+That list lands in the pod spec of every group, so scaling any one group rewrites
+it everywhere and rolls every group at once. Setting seedHosts to
+"clusterManagers" lists only the groups eligible to be cluster manager, which is
+all discovery needs: a joining node has to reach a manager to find the cluster,
+not to know every node in it. Scaling a data, ingest or search group then changes
+no pod spec at all.
+
+Read from the top-level datanode block only. Extra node groups inherit it like any
+other value, but the seed list is one release-wide string, so a per-group override
+would not mean anything.
+
+A group with no explicit roles gets the Data Node default set, which includes
+cluster_manager, so it counts as eligible here. Same rule as
+"graylog.datanode.validate", which guarantees at least one group qualifies and
+therefore that this list is never empty.
 */}}
 {{- define "graylog.datanode.hosts" -}}
 {{- $svc := include "graylog.datanode.service.name" . -}}
 {{- $ns := .Release.Namespace -}}
+{{- $managersOnly := eq (dig "discovery" "seedHosts" "all" .Values.datanode) "clusterManagers" -}}
 {{- $builder := list -}}
 {{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- if or (not $managersOnly) (empty $g.roles) (has "cluster_manager" $g.roles) -}}
 {{- range $i := until (int $g.replicas) -}}
 {{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" $g.fullname $i $svc $ns | append $builder -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- join "," $builder | quote -}}
@@ -1123,26 +1149,176 @@ Default ingress pathType
 {{- end }}
 
 {{/*
-Graylog ConfigMap template checksum
+The minAvailable or maxUnavailable field of a PodDisruptionBudget, as one line.
+
+A cap rather than a floor by default, because a floor has to be sized against the
+workload's replica count and the chart cannot know it: minAvailable 2 permits 18
+simultaneous evictions in a 20-replica group and permits none at all in a
+2-replica one, which blocks drains outright. A cap of 1 is correct at every size.
+
+nil and "" mean unset. 0 is a real choice and must survive, which rules out
+`| default` and `empty`. Neither field is passed through `int`, because both are
+IntOrString and a percentage such as "25%" has to reach the API unconverted.
+
+Setting both fails rather than picking one: a PodDisruptionBudget accepts only a
+single field, and the API server rejects an object carrying both.
+
+Usage:
+  {{ include "graylog.pdb.limit" (dict "pdb" $pdb "subject" "graylog") }}
 */}}
-{{- define "graylog.configChecksum" }}
-{{- include (print $.Template.BasePath "/config/graylog.yaml") . | sha256sum }}
+{{- define "graylog.pdb.limit" -}}
+{{- $min := .pdb.minAvailable -}}
+{{- $max := .pdb.maxUnavailable -}}
+{{- $minSet := and (not (kindIs "invalid" $min)) (ne (toString $min) "") -}}
+{{- $maxSet := and (not (kindIs "invalid" $max)) (ne (toString $max) "") -}}
+{{- if and $minSet $maxSet -}}
+{{- fail (printf "%s: podDisruptionBudget sets both minAvailable (%v) and maxUnavailable (%v). A PodDisruptionBudget accepts only one. Clear minAvailable to keep the maxUnavailable cap, which is the default, or clear maxUnavailable to use a floor." .subject $min $max) -}}
+{{- end -}}
+{{- if $minSet -}}
+minAvailable: {{ $min }}
+{{- else -}}
+maxUnavailable: {{ $maxSet | ternary $max 1 }}
+{{- end -}}
 {{- end }}
 
 {{/*
-Datanode ConfigMap template checksum
+Graylog ConfigMap checksum, for the Graylog pods.
+
+Covers the ConfigMap's data only, for the reason given on "graylog.renderedData":
+hashing the document put helm.sh/chart in the checksum and rolled every Graylog
+pod on a chart version bump.
 */}}
-{{- define "graylog.datanode.configChecksum" }}
-{{- include (print $.Template.BasePath "/config/datanode.yaml") . | sha256sum }}
+{{- define "graylog.configChecksum" -}}
+{{- include "graylog.renderedData" (dict
+      "context" .
+      "template" "/config/graylog.yaml"
+      "name" (include "graylog.configmap.name" .)) | sha256sum -}}
 {{- end }}
 
 {{/*
-Secrets template checksum
-Renders the secrets template once and caches the result for consistent checksums
+Datanode ConfigMap checksum, for one node group's pods.
+
+config/datanode.yaml renders one ConfigMap per node group, so hashing the whole
+template gave every group the same checksum. Editing the search group's heap then
+rolled the data group too, and each group's rollout is independent, so several
+Data Nodes terminated at once and the OpenSearch cluster went red.
+
+Takes the group's own ConfigMap name and hashes only that ConfigMap's data. The
+name-to-data map is built once per render and cached, because otherwise each group
+would re-render the template for every other group.
+
+Usage:
+  include "graylog.datanode.configChecksum" (dict "context" $ "name" .configmapName)
+*/}}
+{{- define "graylog.datanode.configChecksum" -}}
+{{- $ctx := .context -}}
+{{- if not (index $ctx "__datanodeConfigData") -}}
+{{- $byName := dict -}}
+{{- range regexSplit "(?m)^---$" (include (print $ctx.Template.BasePath "/config/datanode.yaml") $ctx) -1 -}}
+{{- $doc := . | fromYaml -}}
+{{- with dig "metadata" "name" "" $doc -}}
+{{- $_ := set $byName . ($doc.data | default dict) -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $ctx "__datanodeConfigData" $byName -}}
+{{- end -}}
+{{- dig .name (dict) (index $ctx "__datanodeConfigData") | toYaml | sha256sum -}}
+{{- end }}
+
+{{/*
+The `data` block of one Secret or ConfigMap rendered by one of the chart's own
+templates, returned as YAML. Parse with `fromYaml`.
+
+Every checksum in this chart is built from this rather than from the rendered
+document, because the document carries metadata.labels, which include
+helm.sh/chart and app.kubernetes.io/version. Hashing those rolled every pod on a
+chart version bump with nothing having actually changed, and global.commonLabels
+did the same.
+
+A template may render more than one object, so the name selects which. Returns an
+empty mapping when the template renders nothing under that name, which is the
+case whenever the object is disabled.
+
+Usage:
+  include "graylog.renderedData" (dict
+    "context" $
+    "template" "/config/secret/secrets.yaml"
+    "name" (include "graylog.secretsName" $))
+*/}}
+{{- define "graylog.renderedData" -}}
+{{- $ctx := .context -}}
+{{- $name := .name -}}
+{{- $data := dict -}}
+{{- range regexSplit "(?m)^---$" (include (print $ctx.Template.BasePath .template) $ctx) -1 -}}
+{{- $doc := . | fromYaml -}}
+{{- if eq (dig "metadata" "name" "" $doc) $name -}}
+{{- $data = $doc.data | default dict -}}
+{{- end -}}
+{{- end -}}
+{{- $data | toYaml -}}
+{{- end -}}
+
+{{/*
+Graylog Secret checksum, for the Graylog pods.
+
+Covers the whole primary Secret, because the Graylog container loads it with
+envFrom and therefore reads every key in it.
+
+The backup Secret is skipped deliberately: it exists to let an operator recover a
+generated password, no pod mounts it, and it disappears from the render once it
+exists in the cluster.
+
+Cached so every consumer in one render agrees. toYaml sorts map keys, so the hash
+does not depend on key order.
+
+Hashes an empty mapping when global.existingSecretName is set and the chart
+renders no Secret. That is stable by design: the chart cannot see an external
+Secret's contents, so it has nothing to react to.
 */}}
 {{- define "graylog.secretsChecksum" -}}
 {{- if not (index $ "__secretsChecksum") -}}
-  {{- $_ := include (print $.Template.BasePath "/config/secret/secrets.yaml") . | sha256sum | set $ "__secretsChecksum" -}}
+{{- $_ := include "graylog.renderedData" (dict
+      "context" $
+      "template" "/config/secret/secrets.yaml"
+      "name" (include "graylog.secretsName" $)) | sha256sum | set $ "__secretsChecksum" -}}
 {{- end -}}
 {{- index $ "__secretsChecksum" -}}
+{{- end -}}
+
+{{/*
+Data Node Secret checksum, for the Data Node pods.
+
+Deliberately narrower than graylog.secretsChecksum. The Data Node takes only two
+keys out of the Graylog Secret, by secretKeyRef, so hashing the whole thing rolled
+the entire Data Node tier whenever a Graylog-only credential changed. Removing the
+MaxMind GeoIP keys, read by a Graylog sidecar the Data Node does not run, rolled
+every Data Node pod.
+
+It also covers the Data Node's own Secret, which the container loads with envFrom.
+That one had no checksum at all, so rotating the S3 credentials restarted nothing
+and the pods kept the old keys in their environment.
+
+Credentials from datanode.config.s3ClientDefaultExistingSecret are not covered and
+cannot be: the chart does not render that Secret and cannot see its contents. The
+README says to roll the Data Node by hand after rotating it.
+
+Keep the watched key list in step with the secretKeyRef entries in
+workload/statefulsets/datanode.yaml.
+*/}}
+{{- define "graylog.datanode.secretsChecksum" -}}
+{{- if not (index $ "__datanodeSecretsChecksum") -}}
+{{- $shared := include "graylog.renderedData" (dict
+      "context" $
+      "template" "/config/secret/secrets.yaml"
+      "name" (include "graylog.secretsName" $)) | fromYaml -}}
+{{- $watched := dict "own" (include "graylog.renderedData" (dict
+      "context" $
+      "template" "/config/secret/datanode.yaml"
+      "name" (include "graylog.datanode.secretsName" $)) | fromYaml) -}}
+{{- range $key := list "GRAYLOG_PASSWORD_SECRET" "GRAYLOG_MONGODB_URI" -}}
+{{- $_ := set $watched $key (index $shared $key | default "") -}}
+{{- end -}}
+{{- $_ := $watched | toYaml | sha256sum | set $ "__datanodeSecretsChecksum" -}}
+{{- end -}}
+{{- index $ "__datanodeSecretsChecksum" -}}
 {{- end -}}

@@ -5,16 +5,18 @@
 {{- with .groupLabel }}
 {{- $_ := set $fixed "graylog-datanode-group" . }}
 {{- end }}
+{{- $pdb := .podDisruptionBudget }}
+{{- $subject := printf "datanode node group %q" (default "<primary>" .name) }}
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ .pdbName }}
   namespace: {{ $.Release.Namespace }}
-  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .podDisruptionBudget.labels "fixed" $fixed "indent" 2) }}
-  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .podDisruptionBudget.annotations "indent" 2) }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $pdb.labels "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $pdb.annotations "indent" 2) }}
 spec:
-  minAvailable: {{ .podDisruptionBudget.minAvailable | default 3 | int }}
+  {{ include "graylog.pdb.limit" (dict "pdb" $pdb "subject" $subject) }}
   selector:
     matchLabels:
       app: graylog-datanode

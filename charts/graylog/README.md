@@ -478,16 +478,31 @@ clusters and need no configuration for the common case.
   `preferredDuringSchedulingIgnoredDuringExecution`, so pods still schedule when
   there aren't enough nodes to spread across. Setting `graylog.affinity` or
   `datanode.affinity` replaces the chart default entirely for that tier.
-- **PodDisruptionBudgets** for Graylog (`minAvailable: 1`) and Data Node
-  (`minAvailable: 2`), which keep node drains and cluster upgrades from evicting
-  a whole tier at once. The Graylog PDB only renders at `replicas >= 2`. Disable
-  with `graylog.podDisruptionBudget.enabled=false` /
+- **PodDisruptionBudgets** for Graylog and Data Node, both `maxUnavailable: 1`,
+  which keep node drains and cluster upgrades from evicting a whole tier at once.
+  The Graylog PDB only renders at `replicas >= 2`, and the Data Node renders one
+  per node group. Disable with `graylog.podDisruptionBudget.enabled=false` /
   `datanode.podDisruptionBudget.enabled=false`.
+
+Both budgets cap how many pods may go at once rather than setting a floor on how
+many must remain. A floor has to be sized against a replica count the chart does
+not know: `minAvailable: 2` permits 18 simultaneous evictions in a 20-replica Data
+Node group, and permits none at all in a 2-replica one, which blocks drains
+outright. A cap of 1 is correct at every size.
+
+Setting `minAvailable` on either tier still works and replaces the cap. Set one or
+the other, since a PodDisruptionBudget cannot hold both.
 
 > [!NOTE]
 > A PDB makes node drains block rather than proceed destructively. On a cluster
-> with too few nodes to satisfy `minAvailable`, a drain will wait instead of
-> completing — this is the intended protection, not a failure.
+> too small to satisfy the budget, a drain will wait instead of completing. That
+> is the intended protection, not a failure.
+
+> [!IMPORTANT]
+> A PDB only gates the eviction API, which is what `kubectl drain` and the cluster
+> autoscaler use. It does not pace a rolling update: the StatefulSet controller
+> deletes pods directly. Each node group also rolls independently, so a change to
+> a value every group inherits restarts one pod per group at the same time.
 
 ## Prometheus Metrics
 
@@ -1562,8 +1577,9 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.lifecycle.preStopDrain.feasibilityWarmupPolls`                | Polls observed before projecting whether the drain can finish; aborts early if it cannot. `0` disables. | `5` |
 | `graylog.persistence.retentionPolicy.whenDeleted`                      | PVC fate when the StatefulSet is deleted.                   | `Retain`                        |
 | `graylog.persistence.retentionPolicy.whenScaled`                       | PVC fate when scaled in. `Delete` is refused — it destroys a scaled-in node's journal. | `Retain` |
-| `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
-| `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                   | `1`                             |
+| `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget. Renders only at `replicas >= 2`. | `false`                        |
+| `graylog.podDisruptionBudget.maxUnavailable`                          | Cap on Graylog pods evictable at once. Empty means 1. Accepts a percentage such as `"25%"`. | `""` (1) |
+| `graylog.podDisruptionBudget.minAvailable`                            | Floor on Graylog pods that must stay up. Replaces `maxUnavailable`; setting both fails the render. | `""` |
 | `graylog.podDisruptionBudget.annotations`                             | Annotations for the PodDisruptionBudget.                    | `{}`                            |
 | `graylog.podDisruptionBudget.labels`                                  | Labels for the PodDisruptionBudget.                         | `{}`                            |
 | `graylog.annotations`                                                 | Annotations for the Graylog StatefulSet, ConfigMaps and Secrets. | `{}`                       |
@@ -1623,6 +1639,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.enabled`                                     | Enable Graylog datanode.                        | `true`            |
 | `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
 | `datanode.roles`                                       | OpenSearch roles for the primary node group; empty = Data Node default. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `[]` |
+| `datanode.discovery.seedHosts`                         | Which pods go in the OpenSearch seed list: `all`, or `clusterManagers` to seed only manager-eligible groups so scaling other groups does not roll the tier. | `all` |
 | `datanode.extraNodeGroups`                             | Map of additional node groups keyed by name, each inheriting and overriding `datanode.*`. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `{}` |
 | `datanode.service.annotations`                         | Annotations for the Data Node Service.          | `{}`              |
 | `datanode.service.labels`                              | Labels for the Data Node Service.               | `{}`              |
@@ -1699,8 +1716,9 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.readinessProbe.successThreshold`             | Success threshold for the readiness probe.      | `1`               |
 | `datanode.{startup,liveness,readiness}Probe.{httpGet,tcpSocket,exec,grpc}` | Custom probe handler, standard Kubernetes syntax. Replaces the chart default. | _(unset)_ |
 | `datanode.podManagementPolicy`                         | `OrderedReady` or `Parallel`. Immutable once the StatefulSet exists. | `OrderedReady` |
-| `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
-| `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
+| `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget. One is rendered per node group. | `false` |
+| `datanode.podDisruptionBudget.maxUnavailable`          | Cap on Data Nodes in one group evictable at once. Empty means 1. Accepts a percentage such as `"25%"`. | `""` (1) |
+| `datanode.podDisruptionBudget.minAvailable`            | Floor on Data Nodes in one group that must stay up. Replaces `maxUnavailable`; setting both fails the render. | `""` |
 | `datanode.podDisruptionBudget.annotations`             | Annotations for the PodDisruptionBudget.        | `{}`              |
 | `datanode.podDisruptionBudget.labels`                  | Labels for the PodDisruptionBudget.             | `{}`              |
 | `datanode.annotations`                                 | Annotations for the Data Node StatefulSet, ConfigMap and Secret. | `{}` |

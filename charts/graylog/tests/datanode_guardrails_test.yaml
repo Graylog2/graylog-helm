@@ -5,6 +5,7 @@ templates:
   - workload/statefulsets/datanode.yaml
   - config/datanode.yaml
   - config/secret/secrets.yaml
+  - config/secret/datanode.yaml    # checksum/secret dependency (datanode)
   - NOTES.txt
 release:
   name: graylog
@@ -273,6 +274,38 @@ tests:
       - failedTemplate:
           errorPattern: "global.s3: existingSecret cannot be combined"
         template: workload/statefulsets/datanode.yaml
+
+  # The guard used to live in config/datanode.yaml, inside `if datanode.enabled`,
+  # so a BYO-OpenSearch release skipped it entirely. Both sources then rendered:
+  # the inline keys into the chart Secret and the existing Secret onto the Graylog
+  # pod, where env beats envFrom and the Secret quietly won.
+  - it: rejects the global pair with the Data Node disabled
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["http://opensearch:9200"]
+      global.s3.existingSecret: "shared-s3"
+      global.s3.accessKey: "ak"
+      graylog.config.archive.useGlobalS3Credentials: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "global.s3: existingSecret cannot be combined"
+        template: config/secret/secrets.yaml
+
+  # Each block is checked on its own terms rather than through the resolution, so
+  # a contradictory datanode block is caught even when the Data Node is off and
+  # that block could never be the one in use.
+  - it: rejects the datanode pair with the Data Node disabled
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["http://opensearch:9200"]
+      datanode.config.s3ClientDefaultExistingSecret: "datanode-s3"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+    asserts:
+      - failedTemplate:
+          errorPattern: "datanode: s3ClientDefaultAccessKey/s3ClientDefaultSecretKey cannot be combined"
+        template: config/secret/secrets.yaml
 
   # A component brings its own credentials or inherits global's, never a mix, so an
   # inline key on the Data Node cannot be paired with the Secret from global.s3.
