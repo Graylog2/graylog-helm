@@ -168,3 +168,35 @@ volumes and cluster state, remains the cluster manager, and the new group's node
 > replaces the manager quorum and moves data placement at the same time; this is effectively a
 > **rebuild**, not an in-place migration. Plan it as a new cluster (fresh volumes) with
 > snapshots/replicas to preserve data, rather than an upgrade.
+
+## Coordinating a rollout across node groups
+
+Each node group is its own StatefulSet, and each StatefulSet's controller rolls its
+own pods independently. A value every group inherits - the image tag, a shared
+`datanode.config` field, the seed host list above - changes all of their pod specs
+at once, and every group starts replacing its own pod(s) at the same time. With N
+groups, that is up to N Data Node pods down simultaneously, not one.
+
+```yaml
+datanode:
+  rollout:
+    orchestrated: true
+```
+
+This pins every node group's `updateStrategy` to `OnDelete`, so a group's own
+StatefulSet controller never replaces a pod on its own. A `post-upgrade` Job takes
+over instead: it walks every group's pods still on the previous revision as one
+queue and replaces them strictly one at a time, waiting for each replacement to be
+Ready before deleting the next. At most one Data Node pod is down across the whole
+tier at any point in the rollout, no matter how many groups it spans.
+
+`datanode.rollout.strategy` picks the queue order - `sequential` (default) finishes
+one group before starting the next; `round-robin` interleaves one pod per group in
+turn. Either way the Job runs with a ServiceAccount scoped to exactly this release's
+node-group StatefulSets and pods (see `templates/auth/datanode-rollout-sa.yaml`),
+never a namespace-wide `delete` on pods.
+
+This is orthogonal to the seed-hosts narrowing above: `clusterManagers` (once
+implemented) reduces how many pods actually need replacing on a given change;
+`rollout.orchestrated` controls how the pods that *do* need replacing are sequenced,
+regardless of how many that is.

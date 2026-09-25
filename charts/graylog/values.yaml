@@ -774,6 +774,70 @@ datanode:
     rollingUpdate:
       maxUnavailable: 1
       partition:
+  # rollout coordinates rolling every datanode node group under one Job
+  # instead of each group's own StatefulSet controller. Without it, a value
+  # inherited by every group (e.g. the image tag) rolls one pod per group
+  # concurrently - as many pods down at once as there are node groups.
+  #
+  # orchestrated: true forces updateStrategy.type: OnDelete on every datanode
+  # StatefulSet, in every node group, overriding the updateStrategy set above
+  # (and any extraNodeGroups override of it). Only this Job's own
+  # `kubectl delete pod` then rolls a Data Node pod - the StatefulSet
+  # controllers themselves never do. A post-upgrade Job builds one queue of
+  # every group's pods still on the old revision and replaces them strictly
+  # one at a time, waiting for each replacement to be Ready before deleting
+  # the next, so at most one Data Node pod is ever down across the whole
+  # tier.
+  #
+  # A plain `kubectl delete statefulset --cascade=orphan` (see
+  # podManagementPolicy above) is unaffected; only the automatic per-pod
+  # rollout on `helm upgrade` is redirected through the Job.
+  rollout:
+    orchestrated: false
+    # sequential finishes one node group before starting the next.
+    # round-robin interleaves one pod per group in turn instead.
+    strategy: sequential
+    # podReadyTimeoutSeconds bounds how long the Job waits for each
+    # replacement pod to become Ready before failing the hook, leaving
+    # whatever pods it hasn't reached yet on their old revision.
+    podReadyTimeoutSeconds: 300
+    # settleSeconds pauses after each pod becomes Ready, before the Job
+    # deletes the next one. Ready proves the process is listening, not that
+    # shard recovery/rebalancing has finished.
+    settleSeconds: 10
+    # jobDeadlineSeconds is the Job's own activeDeadlineSeconds, an overall
+    # ceiling across the whole queue.
+    jobDeadlineSeconds: 3600
+    # bitnami/kubectl is gone - Bitnami discontinued the free-tier images in
+    # 2025. alpine/k8s is community-maintained, tracks upstream kubectl
+    # releases 1:1, and ships a real shell alongside kubectl.
+    image:
+      repository: "alpine/k8s"
+      tag: "1.31.1"
+      imagePullPolicy: IfNotPresent
+    serviceAccount:
+      annotations: {}
+    resources:
+      limits:
+        cpu: "200m"
+        memory: "128Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1001
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+    nodeSelector: {}
+    tolerations: []
+    annotations: {}
+    labels: {}
   # resources are the compute requests/limits of the Datanode container.
   resources:
     limits:

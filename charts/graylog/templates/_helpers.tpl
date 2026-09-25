@@ -670,6 +670,48 @@ Graylog Datanode discovery seed hosts, spanning every node group.
 {{- end }}
 
 {{/*
+Datanode rollout Job ServiceAccount name.
+*/}}
+{{- define "graylog.datanode.rollout.serviceAccountName" -}}
+{{- include "graylog.fullname" . | printf "%s-datanode-rollout" }}
+{{- end }}
+
+{{/*
+Datanode rollout queue: one pod per line, tab-separated with its StatefulSet
+name, in the order the rollout Job should replace them.
+
+sequential (default) finishes one node group before starting the next.
+round-robin interleaves one pod per group in turn (group1-0, group2-0,
+group1-1, group2-1, ...), skipping a group once its own replicas are
+exhausted.
+*/}}
+{{- define "graylog.datanode.rollout.queue" -}}
+{{- $groups := include "graylog.datanode.groups" . | fromYamlArray -}}
+{{- $strategy := .Values.datanode.rollout.strategy | default "sequential" -}}
+{{- $lines := list -}}
+{{- if eq $strategy "round-robin" -}}
+{{- $max := 0 -}}
+{{- range $g := $groups -}}
+{{- if gt (int $g.replicas) $max -}}{{- $max = int $g.replicas -}}{{- end -}}
+{{- end -}}
+{{- range $i := until $max -}}
+{{- range $g := $groups -}}
+{{- if lt $i (int $g.replicas) -}}
+{{- $lines = append $lines (printf "%s-%d\t%s" $g.fullname $i $g.fullname) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- else -}}
+{{- range $g := $groups -}}
+{{- range $i := until (int $g.replicas) -}}
+{{- $lines = append $lines (printf "%s-%d\t%s" $g.fullname $i $g.fullname) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- join "\n" $lines -}}
+{{- end }}
+
+{{/*
 BYO OpenSearch / Data Node mutual-exclusion validation.
 Exactly one indexer source must be selected.
 */}}

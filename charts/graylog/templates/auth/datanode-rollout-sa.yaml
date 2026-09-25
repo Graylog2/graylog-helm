@@ -1,0 +1,59 @@
+{{- if and .Values.datanode.enabled .Values.datanode.rollout.orchestrated }}
+{{- $fixed := dict "app.kubernetes.io/component" "datanode-rollout" }}
+{{- $groups := include "graylog.datanode.groups" $ | fromYamlArray }}
+{{- $stsNames := list }}
+{{- $podNames := list }}
+{{- range $g := $groups }}
+{{- $stsNames = append $stsNames $g.fullname }}
+{{- range $i := until (int $g.replicas) }}
+{{- $podNames = append $podNames (printf "%s-%d" $g.fullname $i) }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "graylog.datanode.rollout.serviceAccountName" . }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.rollout.serviceAccount.annotations "indent" 2) }}
+automountServiceAccountToken: true
+---
+# list/watch cannot be scoped by resourceNames in Kubernetes RBAC - only
+# single-object requests (get, delete, patch, update) can - so those two
+# verbs stay namespace-wide read-only on pods. The verb that actually acts
+# (delete), and the read of each StatefulSet's rollout status, are pinned to
+# the exact object names this release's node groups produce at render time.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "graylog.datanode.rollout.serviceAccountName" . | printf "%s-role" }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "indent" 2) }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get"]
+    resourceNames:
+      {{- toYaml $stsNames | nindent 6 }}
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+    resourceNames:
+      {{- toYaml $podNames | nindent 6 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "graylog.datanode.rollout.serviceAccountName" . | printf "%s-rb" }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "indent" 2) }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "graylog.datanode.rollout.serviceAccountName" . }}
+roleRef:
+  kind: Role
+  name: {{ include "graylog.datanode.rollout.serviceAccountName" . | printf "%s-role" }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

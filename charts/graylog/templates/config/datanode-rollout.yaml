@@ -1,0 +1,87 @@
+{{- if and .Values.datanode.enabled .Values.datanode.rollout.orchestrated }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "graylog.fullname" . }}-datanode-rollout
+  {{- include "graylog.metadata.labels" (dict "context" $ "fixed" (dict "app.kubernetes.io/component" "datanode-rollout") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "indent" 2) }}
+data:
+  # pod<TAB>statefulset, one per line, in rollout order. See
+  # graylog.datanode.rollout.queue in _helpers.tpl.
+  queue.tsv: |
+{{ include "graylog.datanode.rollout.queue" . | indent 4 }}
+  rollout.sh: |
+    #!/bin/sh
+    # Replaces every queued pod strictly one at a time: delete, wait for the
+    # replacement to be Ready, then move on. Run as a post-upgrade hook Job
+    # against a queue this chart precomputed at render time (see queue.tsv),
+    # so nothing here has to discover node groups on its own.
+    set -eu
+
+    NAMESPACE=${NAMESPACE:?NAMESPACE not set}
+    QUEUE_FILE=${QUEUE_FILE:-/rollout/queue.tsv}
+    READY_TIMEOUT=${READY_TIMEOUT:-300}
+    SETTLE_SECONDS=${SETTLE_SECONDS:-10}
+    POLL_SECONDS=3
+
+    K="kubectl -n ${NAMESPACE}"
+
+    # A pod's own Ready condition, not just its phase - Running still covers
+    # a container that is up but has not yet passed the readiness probe.
+    pod_ready() {
+      phase=$($K get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+      [ "$phase" = "Running" ] || return 1
+      ready=$($K get pod "$1" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)
+      [ "$ready" = "True" ]
+    }
+
+    # Waits for a *named* pod object to exist first: a fresh scale-out (more
+    # replicas than the previous revision had) creates new pods directly on
+    # the new revision - the StatefulSet controller does this regardless of
+    # updateStrategy - so there is nothing here to delete, only to wait for.
+    wait_ready() {
+      pod=$1
+      deadline=$(($(date +%s) + READY_TIMEOUT))
+      while ! $K get pod "$pod" >/dev/null 2>&1; do
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+          echo "rollout: pod/${pod} never appeared" >&2
+          return 1
+        fi
+        sleep "$POLL_SECONDS"
+      done
+      while ! pod_ready "$pod"; do
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+          echo "rollout: timed out waiting for pod/${pod} to become Ready" >&2
+          return 1
+        fi
+        sleep "$POLL_SECONDS"
+      done
+    }
+
+    [ -f "$QUEUE_FILE" ] || { echo "rollout: ${QUEUE_FILE} not found"; exit 1; }
+
+    total=$(grep -c . "$QUEUE_FILE" || true)
+    n=0
+    while IFS="$(printf '\t')" read -r pod sts; do
+      [ -n "$pod" ] || continue
+      n=$((n + 1))
+      echo "rollout: [$n/$total] checking pod/${pod} (statefulset/${sts})"
+
+      wait_ready "$pod"
+
+      update_rev=$($K get statefulset "$sts" -o jsonpath='{.status.updateRevision}')
+      current_rev=$($K get pod "$pod" -o jsonpath='{.metadata.labels.controller-revision-hash}' 2>/dev/null || true)
+      if [ "$current_rev" = "$update_rev" ]; then
+        echo "rollout: pod/${pod} already on revision ${update_rev}, skipping"
+        continue
+      fi
+
+      echo "rollout: replacing pod/${pod} (${current_rev:-<none>} -> ${update_rev})"
+      $K delete pod "$pod" --wait=true
+      wait_ready "$pod"
+      echo "rollout: pod/${pod} is Ready"
+      sleep "$SETTLE_SECONDS"
+    done < "$QUEUE_FILE"
+
+    echo "rollout: complete"
+{{- end }}

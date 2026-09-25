@@ -29,9 +29,14 @@ spec:
       graylog-datanode-group: {{ . }}
       {{- end }}
       {{- include "graylog.selectorLabels" $ | nindent 6 }}
+  {{/* datanode.rollout.orchestrated pins every group to OnDelete, overriding
+       this group's own updateStrategy - only the rollout Job's own
+       `kubectl delete pod` then replaces a pod. See datanode.rollout in
+       values.yaml. */}}
+  {{- $strategyType := $.Values.datanode.rollout.orchestrated | ternary "OnDelete" (.updateStrategy.type | default "RollingUpdate") }}
   updateStrategy:
-    type: {{ .updateStrategy.type | default "RollingUpdate" | quote }}
-    {{- if .updateStrategy.type | default "RollingUpdate" | eq "RollingUpdate" }}
+    type: {{ $strategyType | quote }}
+    {{- if eq $strategyType "RollingUpdate" }}
     rollingUpdate:
       maxUnavailable: {{ .updateStrategy.rollingUpdate.maxUnavailable | default 1 }}
       {{- with .updateStrategy.rollingUpdate.partition }}

@@ -1,0 +1,130 @@
+suite: datanode orchestrated rollout
+templates:
+  - workload/jobs/datanode-rollout.yaml
+  - config/datanode-rollout.yaml
+  - auth/datanode-rollout-sa.yaml
+  - workload/statefulsets/datanode.yaml
+  - config/datanode.yaml          # checksum/config dependency
+  - config/secret/secrets.yaml    # checksum/secret dependency
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders nothing when rollout.orchestrated is left at its default
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: workload/jobs/datanode-rollout.yaml
+      - hasDocuments:
+          count: 0
+        template: config/datanode-rollout.yaml
+      - hasDocuments:
+          count: 0
+        template: auth/datanode-rollout-sa.yaml
+
+  - it: leaves the StatefulSet's updateStrategy at RollingUpdate when not orchestrated
+    asserts:
+      - equal:
+          path: spec.updateStrategy.type
+          value: RollingUpdate
+        template: workload/statefulsets/datanode.yaml
+
+  - it: forces OnDelete on every node group's StatefulSet when orchestrated
+    set:
+      datanode.rollout.orchestrated: true
+      datanode.extraNodeGroups:
+        cluster-manager:
+          roles: [cluster_manager]
+          replicas: 3
+        data:
+          roles: [data]
+          replicas: 3
+    asserts:
+      - equal:
+          path: spec.updateStrategy.type
+          value: OnDelete
+        template: workload/statefulsets/datanode.yaml
+      - notExists:
+          path: spec.updateStrategy.rollingUpdate
+        template: workload/statefulsets/datanode.yaml
+
+  - it: renders the rollout Job as a post-upgrade hook using the dedicated ServiceAccount
+    set:
+      datanode.rollout.orchestrated: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-upgrade
+        template: workload/jobs/datanode-rollout.yaml
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: graylog-datanode-rollout
+        template: workload/jobs/datanode-rollout.yaml
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "alpine/k8s:1.31.1"
+        template: workload/jobs/datanode-rollout.yaml
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+        template: workload/jobs/datanode-rollout.yaml
+
+  - it: scopes the rollout ServiceAccount's RBAC to this release's own statefulsets and pods
+    set:
+      datanode.rollout.orchestrated: true
+      datanode.replicas: 2
+      datanode.extraNodeGroups:
+        cluster-manager:
+          roles: [cluster_manager]
+          replicas: 2
+    asserts:
+      - equal:
+          path: rules[0].resourceNames
+          value:
+            - graylog-datanode
+            - graylog-datanode-cluster-manager
+        template: auth/datanode-rollout-sa.yaml
+        documentIndex: 1
+      - equal:
+          path: rules[2].resourceNames
+          value:
+            - graylog-datanode-0
+            - graylog-datanode-1
+            - graylog-datanode-cluster-manager-0
+            - graylog-datanode-cluster-manager-1
+        template: auth/datanode-rollout-sa.yaml
+        documentIndex: 1
+      - notContains:
+          path: rules[2].verbs
+          content: list
+        template: auth/datanode-rollout-sa.yaml
+        documentIndex: 1
+
+  - it: queues pods sequentially, group by group, by default
+    set:
+      datanode.rollout.orchestrated: true
+      datanode.replicas: 1
+      datanode.extraNodeGroups:
+        cluster-manager:
+          roles: [cluster_manager]
+          replicas: 2
+    asserts:
+      - matchRegex:
+          path: data["queue.tsv"]
+          pattern: "^graylog-datanode-0\\tgraylog-datanode\\ngraylog-datanode-cluster-manager-0\\tgraylog-datanode-cluster-manager\\ngraylog-datanode-cluster-manager-1\\tgraylog-datanode-cluster-manager\\n?$"
+        template: config/datanode-rollout.yaml
+
+  - it: interleaves the queue round-robin across groups when requested
+    set:
+      datanode.rollout.orchestrated: true
+      datanode.rollout.strategy: round-robin
+      datanode.replicas: 1
+      datanode.extraNodeGroups:
+        cluster-manager:
+          roles: [cluster_manager]
+          replicas: 2
+    asserts:
+      - matchRegex:
+          path: data["queue.tsv"]
+          pattern: "^graylog-datanode-0\\tgraylog-datanode\\ngraylog-datanode-cluster-manager-0\\tgraylog-datanode-cluster-manager\\ngraylog-datanode-cluster-manager-1\\tgraylog-datanode-cluster-manager\\n?$"
+        template: config/datanode-rollout.yaml

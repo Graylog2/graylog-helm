@@ -886,6 +886,38 @@
             "labels": { "type": "object" }
           }
         },
+        "rollout": {
+          "type": "object",
+          "description": "Coordinates rolling every datanode node group under one Job instead of each group's own StatefulSet controller.",
+          "properties": {
+            "orchestrated": { "type": "boolean" },
+            "strategy": { "type": "string", "enum": ["sequential", "round-robin"] },
+            "podReadyTimeoutSeconds": { "type": "integer" },
+            "settleSeconds": { "type": "integer" },
+            "jobDeadlineSeconds": { "type": "integer" },
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": { "type": "string" },
+                "tag": { "type": "string" },
+                "imagePullPolicy": { "type": "string" }
+              }
+            },
+            "serviceAccount": {
+              "type": "object",
+              "properties": {
+                "annotations": { "type": "object" }
+              }
+            },
+            "resources": { "type": "object" },
+            "podSecurityContext": { "type": "object" },
+            "containerSecurityContext": { "type": "object" },
+            "nodeSelector": { "type": "object" },
+            "tolerations": { "type": "array" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" }
+          }
+        },
         "podSecurityContext": {
           "type": ["object", "null"],
           "description": "Pod-level securityContext for the Datanode StatefulSet. Set to null to omit it entirely ({} is coalesced back to the chart defaults)."

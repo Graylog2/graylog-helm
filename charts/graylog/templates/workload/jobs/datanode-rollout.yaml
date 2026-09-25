@@ -1,0 +1,64 @@
+{{- if and .Values.datanode.enabled .Values.datanode.rollout.orchestrated }}
+{{- $fixed := dict "app.kubernetes.io/component" "datanode-rollout" }}
+{{- $hooks := dict "helm.sh/hook" "post-upgrade" "helm.sh/hook-weight" "10" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "graylog.fullname" . }}-datanode-rollout
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .Values.datanode.rollout.labels "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .Values.datanode.rollout.annotations "fixed" $hooks "indent" 2) }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.datanode.rollout.jobDeadlineSeconds | default 3600 | int }}
+  template:
+    metadata:
+      {{- include "graylog.pod.labels" (dict "context" $ "fixed" $fixed "indent" 6) }}
+    spec:
+      serviceAccountName: {{ include "graylog.datanode.rollout.serviceAccountName" . }}
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.datanode.rollout.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.datanode.rollout.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.datanode.rollout.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: datanode-rollout
+          image: "{{ .Values.datanode.rollout.image.repository }}:{{ .Values.datanode.rollout.image.tag }}"
+          imagePullPolicy: {{ .Values.datanode.rollout.image.imagePullPolicy | default "IfNotPresent" }}
+          command: ["/bin/sh", "/rollout/rollout.sh"]
+          env:
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: READY_TIMEOUT
+              value: {{ .Values.datanode.rollout.podReadyTimeoutSeconds | default 300 | quote }}
+            - name: SETTLE_SECONDS
+              value: {{ .Values.datanode.rollout.settleSeconds | default 10 | quote }}
+          {{- with .Values.datanode.rollout.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.datanode.rollout.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: rollout
+              mountPath: /rollout
+              readOnly: true
+      volumes:
+        - name: rollout
+          configMap:
+            name: {{ include "graylog.fullname" . }}-datanode-rollout
+            defaultMode: 0555
+{{- end }}

@@ -1661,6 +1661,13 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.updateStrategy.type`                         | Pod update strategy for StatefulSet.            | `"RollingUpdate"` |
 | `datanode.updateStrategy.rollingUpdate.maxUnavailable` | Max unavailable pods during an update. Honored only where the `MaxUnavailableStatefulSet` feature gate is enabled, silently dropped otherwise. | `1`               |
 | `datanode.updateStrategy.rollingUpdate.partition`      | Pods that will remain unaffected by the update. | `""`              |
+| `datanode.rollout.orchestrated`                        | Roll every node group's pods one at a time across the whole tier via a post-upgrade Job, instead of each group's StatefulSet controller rolling independently. Forces `updateStrategy.type: OnDelete` on every datanode StatefulSet. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md#coordinating-a-rollout-across-node-groups). | `false` |
+| `datanode.rollout.strategy`                            | Queue order for the rollout Job: `sequential` finishes one group before the next, `round-robin` interleaves one pod per group. | `sequential`      |
+| `datanode.rollout.podReadyTimeoutSeconds`               | How long the Job waits for each replacement pod to become Ready before failing. | `300`             |
+| `datanode.rollout.settleSeconds`                        | Pause after each pod becomes Ready before the Job deletes the next one. | `10`              |
+| `datanode.rollout.jobDeadlineSeconds`                   | `activeDeadlineSeconds` for the rollout Job, an overall ceiling across the whole queue. | `3600`            |
+| `datanode.rollout.image.repository`                     | Image the rollout Job runs (needs `kubectl` and `/bin/sh`). | `"alpine/k8s"`    |
+| `datanode.rollout.image.tag`                            | Tag of the rollout Job image.                   | `"1.31.1"`        |
 | `datanode.resources.limits.cpu`                        | CPU limit for the datanode pod.                 | `"1"`             |
 | `datanode.resources.limits.memory`                     | Memory limit for the datanode pod.              | `"5Gi"`           |
 | `datanode.resources.requests.cpu`                      | CPU request for the datanode pod.               | `"500m"`          |
