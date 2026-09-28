@@ -482,7 +482,20 @@ clusters and need no configuration for the common case.
   (`minAvailable: 2`), which keep node drains and cluster upgrades from evicting
   a whole tier at once. The Graylog PDB only renders at `replicas >= 2`. Disable
   with `graylog.podDisruptionBudget.enabled=false` /
-  `datanode.podDisruptionBudget.enabled=false`.
+  `datanode.podDisruptionBudget.enabled=false`. With `datanode.extraNodeGroups`,
+  the chart renders one PDB per group by default; set
+  `datanode.podDisruptionBudget.consolidated=true` for a single PDB spanning the
+  primary group and every extra group instead. Either PDB can use
+  `podDisruptionBudget.maxUnavailable` instead of `minAvailable`. Set one or the
+  other, since Kubernetes rejects a PDB with both.
+- **Reloader opt-out** on every Data Node ConfigMap/Secret
+  (`datanode.reloader.autoReload: false`), so [Stakater
+  Reloader](https://github.com/stakater/Reloader), if installed cluster-wide, does not
+  auto-restart Data Node groups on config changes. With multiple node groups, Reloader
+  restarts each group's StatefulSet independently, which can roll two groups at once. A
+  PDB does not prevent this, since it only applies to the Eviction API, not a StatefulSet
+  controller replacing its own pod. See the [node groups
+  guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md).
 
 > [!NOTE]
 > A PDB makes node drains block rather than proceed destructively. On a cluster
@@ -1564,6 +1577,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.persistence.retentionPolicy.whenScaled`                       | PVC fate when scaled in. `Delete` is refused — it destroys a scaled-in node's journal. | `Retain` |
 | `graylog.podDisruptionBudget.enabled`                                 | Enable PodDisruptionBudget.                                 | `false`                         |
 | `graylog.podDisruptionBudget.minAvailable`                            | Minimum available pods during disruption.                   | `1`                             |
+| `graylog.podDisruptionBudget.maxUnavailable`                          | Alternative to `minAvailable` (int or `"N%"`); mutually exclusive, wins over `minAvailable` when set. | `""` |
 | `graylog.podDisruptionBudget.annotations`                             | Annotations for the PodDisruptionBudget.                    | `{}`                            |
 | `graylog.podDisruptionBudget.labels`                                  | Labels for the PodDisruptionBudget.                         | `{}`                            |
 | `graylog.annotations`                                                 | Annotations for the Graylog StatefulSet, ConfigMaps and Secrets. | `{}`                       |
@@ -1624,6 +1638,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
 | `datanode.roles`                                       | OpenSearch roles for the primary node group; empty = Data Node default. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `[]` |
 | `datanode.extraNodeGroups`                             | Map of additional node groups keyed by name, each inheriting and overriding `datanode.*`. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `{}` |
+| `datanode.reloader.autoReload`                         | Allow Stakater Reloader to restart this group's pods on its own ConfigMap/Secret change. Off by default. See the node groups guide. | `false` |
 | `datanode.service.annotations`                         | Annotations for the Data Node Service.          | `{}`              |
 | `datanode.service.labels`                              | Labels for the Data Node Service.               | `{}`              |
 | `datanode.service.ports.api`                           | API communication port.                         | `8999`            |
@@ -1701,8 +1716,10 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.podManagementPolicy`                         | `OrderedReady` or `Parallel`. Immutable once the StatefulSet exists. | `OrderedReady` |
 | `datanode.podDisruptionBudget.enabled`                 | Enable PodDisruptionBudget.                     | `false`           |
 | `datanode.podDisruptionBudget.minAvailable`            | Minimum available pods during disruption.       | `2`               |
+| `datanode.podDisruptionBudget.maxUnavailable`          | Alternative to `minAvailable` (int or `"N%"`); mutually exclusive, wins over `minAvailable` when set. Applies per group unless `consolidated` is set. | `""` |
 | `datanode.podDisruptionBudget.annotations`             | Annotations for the PodDisruptionBudget.        | `{}`              |
 | `datanode.podDisruptionBudget.labels`                  | Labels for the PodDisruptionBudget.             | `{}`              |
+| `datanode.podDisruptionBudget.consolidated`            | Render one PDB spanning the primary group and all `extraNodeGroups`, instead of one per group. | `false` |
 | `datanode.annotations`                                 | Annotations for the Data Node StatefulSet, ConfigMap and Secret. | `{}` |
 | `datanode.labels`                                      | Labels for the Data Node StatefulSet, ConfigMap and Secret.      | `{}` |
 | `datanode.podAnnotations`                              | Additional pod annotations.                     | `{}`              |

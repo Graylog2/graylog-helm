@@ -572,6 +572,11 @@ graylog:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+    # maxUnavailable is an alternative to minAvailable. A PDB can only use one or
+    # the other. Set this (an int or a "N%" string) to switch the PDB to
+    # maxUnavailable; minAvailable above is then ignored. Leave empty to keep
+    # using minAvailable.
+    maxUnavailable: ""
     annotations: {}
     labels: {}
   # podSecurityContext / initContainerSecurityContext / containerSecurityContext
@@ -659,6 +664,20 @@ datanode:
   replicas: 3
   # Empty = default roles: cluster_manager,data,ingest,remote_cluster_client (search is auto-added with a snapshot repo).
   roles: []
+  reloader:
+    # autoReload controls whether Stakater Reloader is allowed to restart this
+    # group's Data Node pods when its ConfigMap/Secret changes. Defaults to
+    # false: with datanode.extraNodeGroups, every group has its own ConfigMap
+    # and its own StatefulSet, and Reloader watches/restarts each one
+    # independently with no coordination between groups. That can roll pods in
+    # two different node groups (e.g. the primary group and a "data" group) at
+    # the same moment, which is a bigger simultaneous-disruption than any
+    # single-group PodDisruptionBudget models. With this off, config changes
+    # still land in the ConfigMap/Secret but you trigger the rollout yourself
+    # (helm upgrade, or a script that steps through groups one at a time) so
+    # only one group rolls at once. Set to true per-group to opt a group back
+    # into Reloader's default behavior.
+    autoReload: false
   service:
     annotations: {}
     labels: {}
@@ -882,8 +901,22 @@ datanode:
   podDisruptionBudget:
     enabled: true
     minAvailable: 2
+    # maxUnavailable is an alternative to minAvailable. A PDB can only use one or
+    # the other. Set this (an int or a "N%" string) to switch the PDB to
+    # maxUnavailable; minAvailable above is then ignored. Leave empty to keep
+    # using minAvailable. In non-consolidated mode this also applies per group,
+    # since each group inherits datanode.podDisruptionBudget unless it overrides
+    # its own in extraNodeGroups.
+    maxUnavailable: ""
     annotations: {}
     labels: {}
+    # consolidated renders a single PDB spanning the primary node group and every
+    # datanode.extraNodeGroups entry, instead of one PDB per group. Use this when
+    # minAvailable/maxUnavailable should protect the Data Node fleet as a whole
+    # (e.g. "keep 2 nodes up somewhere") rather than per role/tier. minAvailable,
+    # maxUnavailable, annotations and labels above apply to that one PDB; each
+    # group's own podDisruptionBudget overrides are ignored while this is on.
+    consolidated: false
   podSecurityContext:
     fsGroup: 999
     fsGroupChangePolicy: "OnRootMismatch"
