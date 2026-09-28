@@ -24,6 +24,7 @@ templates:
   - config/fallback.yaml
   - service/fallback.yaml
   - workload/fallback.yaml
+  - monitoring/servicemonitor-graylog.yaml
   # The StatefulSets' checksum helpers `include` these templates by path, so
   # helm-unittest's template filter has to list them for the includes to resolve.
   - config/graylog.yaml
@@ -554,6 +555,32 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/component"]
           value: server
+
+  - it: labels and annotates the Graylog ServiceMonitor
+    set:
+      graylog.service.metrics.expose: true
+      graylog.serviceMonitor.enabled: true
+      graylog.serviceMonitor.labels.tier: observability
+      graylog.serviceMonitor.annotations.note: scrape-me
+      global.commonLabels.env: dev
+      global.commonAnnotations.owner: platform-team
+    template: monitoring/servicemonitor-graylog.yaml
+    asserts:
+      - equal:
+          path: metadata.labels.tier
+          value: observability
+      - equal:
+          path: metadata.labels.env
+          value: dev
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: server
+      - equal:
+          path: metadata.annotations.note
+          value: scrape-me
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
 
   - it: labels and annotates the Datanode ServiceAccount, Role and RoleBinding
     set:

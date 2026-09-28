@@ -17,6 +17,10 @@ spec:
       port: {{ .Values.datanode.service.ports.data | default 9200 | int }}
     - name: config
       port: {{ .Values.datanode.service.ports.config | default 9300 |int }}
+    {{- if .Values.datanode.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.datanode.service.ports.metrics | default 9114 | int }}
+    {{- end }}
   selector:
     app: graylog-datanode
     {{- include "graylog.selectorLabels" . | nindent 4 }}

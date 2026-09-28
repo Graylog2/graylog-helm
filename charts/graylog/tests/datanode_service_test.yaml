@@ -68,3 +68,36 @@ tests:
       - equal:
           path: spec.selector.app
           value: graylog-datanode
+
+  - it: does not publish the metrics port by default
+    asserts:
+      - notContains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9114
+
+  - it: publishes the metrics port when the exporter is enabled
+    set:
+      datanode.metrics.enabled: true
+      datanode.metrics.adminDN: "CN=metrics-exporter"
+      datanode.metrics.existingSecretName: datanode-metrics-cert
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9114
+
+  - it: honors a custom metrics port
+    set:
+      datanode.metrics.enabled: true
+      datanode.metrics.adminDN: "CN=metrics-exporter"
+      datanode.metrics.existingSecretName: datanode-metrics-cert
+      datanode.service.ports.metrics: 19114
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 19114

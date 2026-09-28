@@ -84,9 +84,32 @@
             "metrics": {
               "type": "object",
               "properties": {
-                "enabled": { "type":  "boolean" }
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Turn on Graylog's Prometheus exporter. Binds to localhost unless `expose` is set; required by graylog.lifecycle.preStopDrain."
+                },
+                "expose": {
+                  "type": "boolean",
+                  "description": "Bind the exporter to 0.0.0.0 and publish the metrics port on the Service. The exporter is unauthenticated once exposed."
+                }
               }
             }
+          }
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "description": "Prometheus Operator ServiceMonitor for the Graylog exporter. Requires graylog.service.metrics.expose.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "string" },
+            "scrapeTimeout": { "type": "string" },
+            "path": { "type": "string" },
+            "labels": { "type": "object" },
+            "annotations": { "type": "object" },
+            "honorLabels": { "type": "boolean" },
+            "relabelings": { "type": "array", "items": { "type": "object" } },
+            "metricRelabelings": { "type": "array", "items": { "type": "object" } },
+            "namespaceSelector": { "type": "object" }
           }
         },
         "inputs": {
@@ -647,9 +670,62 @@
               "properties": {
                 "api": { "type": "integer" },
                 "data": { "type": "integer" },
-                "config": { "type": "integer" }
+                "config": { "type": "integer" },
+                "metrics": { "type": "integer" }
               }
             }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "description": "Adds an elasticsearch_exporter sidecar that scrapes this Datanode's own OpenSearch API over mTLS and re-exposes it as Prometheus metrics.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "existingSecretName": {
+              "type": "string",
+              "description": "Secret holding the client certificate trusted by Datanode's OpenSearch security layer. Datanode manages its own internal CA, so this chart cannot generate a trusted certificate - generate one via Graylog's Web UI \"Client Certificate\" feature."
+            },
+            "certSecretKeys": {
+              "type": "object",
+              "properties": {
+                "cert": { "type": "string" },
+                "key": { "type": "string" },
+                "ca": { "type": "string" }
+              }
+            },
+            "adminDN": {
+              "type": "string",
+              "description": "The client certificate's subject DN. Passed through to Datanode as opensearch.plugins.security.authcz.admin_dn."
+            },
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": { "type": "string" },
+                "tag": { "type": "string" },
+                "pullPolicy": { "type": "string" }
+              }
+            },
+            "resources": { "type": "object" },
+            "extraArgs": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "description": "Prometheus Operator ServiceMonitor for the Datanode metrics exporter. Requires datanode.metrics.enabled.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "interval": { "type": "string" },
+            "scrapeTimeout": { "type": "string" },
+            "path": { "type": "string" },
+            "labels": { "type": "object" },
+            "annotations": { "type": "object" },
+            "honorLabels": { "type": "boolean" },
+            "relabelings": { "type": "array", "items": { "type": "object" } },
+            "metricRelabelings": { "type": "array", "items": { "type": "object" } },
+            "namespaceSelector": { "type": "object" }
           }
         },
         "env": {
