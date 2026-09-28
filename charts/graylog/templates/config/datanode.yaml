@@ -52,5 +52,14 @@ data:
   GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_REGION: {{ .config.s3ClientDefaultRegion | quote }}
   GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_PROTOCOL: {{ .config.s3ClientDefaultProtocol | quote }}
   GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_PATH_STYLE_ACCESS: {{ .config.s3ClientDefaultPathStyleAccess | quote }}
+  {{- if .metrics.enabled }}
+  {{- if not .metrics.adminDN }}
+  {{ fail "datanode.metrics.enabled=true requires datanode.metrics.adminDN.\n  This is the client certificate's subject DN, trusted via opensearch.plugins.security.authcz.admin_dn so the metrics exporter can authenticate to Datanode's OpenSearch API." }}
+  {{- end }}
+  {{- if not .metrics.existingSecretName }}
+  {{ fail "datanode.metrics.enabled=true requires datanode.metrics.existingSecretName, naming a Secret with the client certificate used to scrape Datanode. Datanode manages its own internal CA, so this chart cannot generate a trusted certificate - generate one via Graylog's Web UI \"Client Certificate\" feature." }}
+  {{- end }}
+  opensearch.plugins.security.authcz.admin_dn: {{ .metrics.adminDN | quote }}
+  {{- end }}
 {{- end }}
 {{- end }}

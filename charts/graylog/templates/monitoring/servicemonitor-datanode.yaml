@@ -1,0 +1,46 @@
+{{- if and .Values.datanode.enabled .Values.datanode.serviceMonitor.enabled }}
+{{- $sm := .Values.datanode.serviceMonitor }}
+{{- if not .Values.datanode.metrics.enabled }}
+{{- fail "datanode.serviceMonitor.enabled=true requires datanode.metrics.enabled=true.\n  The ServiceMonitor scrapes the Datanode metrics exporter sidecar, which that value turns on." }}
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "graylog.fullname" . }}-datanode-servicemonitor
+  namespace: {{ .Release.Namespace }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $sm.labels "fixed" (dict "app.kubernetes.io/component" "datanode") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $sm.annotations "indent" 2) }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: datanode
+      {{- include "graylog.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    {{- if $sm.namespaceSelector }}
+    {{- toYaml $sm.namespaceSelector | nindent 4 }}
+    {{- else }}
+    matchNames:
+      - {{ .Release.Namespace }}
+    {{- end }}
+  endpoints:
+    - port: metrics
+      path: {{ $sm.path | default "/metrics" }}
+      scheme: http
+      {{- with $sm.interval }}
+      interval: {{ . }}
+      {{- end }}
+      {{- with $sm.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+      {{- if $sm.honorLabels }}
+      honorLabels: true
+      {{- end }}
+      {{- with $sm.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $sm.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

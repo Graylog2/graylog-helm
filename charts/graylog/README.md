@@ -23,6 +23,7 @@ Official Helm chart for Graylog.
   * [Data Node Replicas and Data Redundancy](#data-node-replicas-and-data-redundancy)
   * [High Availability Defaults](#high-availability-defaults)
   * [Prometheus Metrics](#prometheus-metrics)
+  * [Data Node Prometheus Metrics](#data-node-prometheus-metrics)
   * [Health Probes](#health-probes)
   * [Scale MongoDB](#scale-mongodb)
   * [MongoDB Topology](#mongodb-topology)
@@ -532,6 +533,13 @@ rather than creating a ServiceMonitor whose every scrape would be refused.
 
 Changing `graylog.service.ports.metrics` moves the exporter, the container port, the
 Service port and the drain's metrics URL together.
+
+## Data Node Prometheus Metrics
+
+Data Node has no built-in metrics exporter. This chart can add a sidecar that scrapes its
+OpenSearch API and re-exposes it as Prometheus metrics, but it needs a client certificate
+first, since that API is mTLS-only. See
+[Data Node Prometheus metrics](../../docs/datanode/prometheus-metrics.md) for setup.
 
 ## Health Probes
 
@@ -1629,6 +1637,28 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.service.ports.api`                           | API communication port.                         | `8999`            |
 | `datanode.service.ports.data`                          | Data communication port.                        | `9200`            |
 | `datanode.service.ports.config`                        | Configuration communication port.               | `9300`            |
+| `datanode.service.ports.metrics`                       | Port serving the Data Node Prometheus exporter sidecar. | `9114`            |
+| `datanode.metrics.enabled`                             | Add an `elasticsearch_exporter` sidecar that scrapes this Data Node's own OpenSearch API and re-exposes it as Prometheus metrics. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode/prometheus-metrics.md). | `false` |
+| `datanode.metrics.existingSecretName`                  | Secret holding the client certificate trusted by Data Node's OpenSearch security layer. Data Node manages its own internal CA, so this chart cannot generate a trusted certificate. | `""` |
+| `datanode.metrics.certSecretKeys.cert`                 | Key in that Secret holding the client certificate. | `"tls.crt"`       |
+| `datanode.metrics.certSecretKeys.key`                  | Key in that Secret holding the client private key. | `"tls.key"`       |
+| `datanode.metrics.certSecretKeys.ca`                   | Key in that Secret holding the CA that signed Data Node's server certificate. | `"ca.crt"` |
+| `datanode.metrics.adminDN`                             | The client certificate's subject DN. Passed through to Data Node as `opensearch.plugins.security.authcz.admin_dn`. | `""` |
+| `datanode.metrics.image.repository`                    | Exporter image repository.                      | `"quay.io/prometheuscommunity/elasticsearch-exporter"` |
+| `datanode.metrics.image.tag`                           | Exporter image tag.                             | `"v1.9.0"`        |
+| `datanode.metrics.image.pullPolicy`                    | Exporter image pull policy.                     | `IfNotPresent`    |
+| `datanode.metrics.resources`                           | Resources for the exporter sidecar.             | `{}`              |
+| `datanode.metrics.extraArgs`                           | Extra command-line flags appended to the exporter verbatim. | `[]`      |
+| `datanode.serviceMonitor.enabled`                      | Create a Prometheus Operator ServiceMonitor for the exporter. Requires `datanode.metrics.enabled`. | `false` |
+| `datanode.serviceMonitor.interval`                     | Scrape interval.                                | `30s`             |
+| `datanode.serviceMonitor.scrapeTimeout`                | Scrape timeout. Must not exceed the interval.   | `10s`             |
+| `datanode.serviceMonitor.path`                         | Metrics path on the exporter.                   | `/metrics`        |
+| `datanode.serviceMonitor.labels`                       | Labels added to the ServiceMonitor. Set whatever your Prometheus Operator selects on. | `{}` |
+| `datanode.serviceMonitor.annotations`                  | Annotations added to the ServiceMonitor.        | `{}`              |
+| `datanode.serviceMonitor.honorLabels`                  | Keep metric labels that collide with the ones Prometheus adds. | `false`   |
+| `datanode.serviceMonitor.relabelings`                  | Passed through to the endpoint verbatim.        | `[]`              |
+| `datanode.serviceMonitor.metricRelabelings`             | Passed through to the endpoint verbatim.        | `[]`              |
+| `datanode.serviceMonitor.namespaceSelector`             | Defaults to the release namespace.              | `{}`              |
 | `datanode.env`                                         | Custom environment variables.                   | `{}`              |
 | `datanode.serviceAccount.create`                       | Give the Data Node its own ServiceAccount instead of sharing the Graylog one. | `false` |
 | `datanode.serviceAccount.automount`                    | Automount the Data Node service account token.  | `true`            |

@@ -669,6 +669,58 @@ datanode:
       data: 9200
       # config is the OpenSearch transport port.
       config: 9300
+      # metrics is the port serving the Datanode Prometheus exporter sidecar.
+      metrics: 9114
+  # metrics adds an elasticsearch_exporter sidecar that scrapes this Datanode's own
+  # OpenSearch API and re-exposes it as Prometheus metrics.
+  #
+  # Datanode's OpenSearch API is HTTPS with mTLS client-certificate auth, and Datanode
+  # manages its own internal CA - this chart cannot generate a trusted client cert.
+  # Generate one via Graylog's Web UI "Client Certificate" feature, create a Secret from
+  # it, and point existingSecretName/adminDN at it. See the README for the full steps.
+  metrics:
+    enabled: false
+    # existingSecretName is a Secret holding the client certificate (tls.crt/tls.key) and
+    # the CA that signed Datanode's server certificate (ca.crt), trusted by OpenSearch.
+    existingSecretName: ""
+    # certSecretKeys names the keys inside existingSecretName.
+    certSecretKeys:
+      cert: tls.crt
+      key: tls.key
+      ca: ca.crt
+    # adminDN is the client certificate's subject DN. Passed through to Datanode as
+    # opensearch.plugins.security.authcz.admin_dn so OpenSearch trusts it for admin
+    # access.
+    adminDN: ""
+    image:
+      repository: quay.io/prometheuscommunity/elasticsearch-exporter
+      tag: v1.9.0
+      pullPolicy: IfNotPresent
+    resources: {}
+    # extraArgs are appended to the exporter's command-line flags verbatim.
+    extraArgs: []
+  # serviceMonitor creates a Prometheus Operator ServiceMonitor for the Datanode
+  # exporter. Requires datanode.metrics.enabled and a cluster running the Prometheus
+  # Operator CRDs.
+  serviceMonitor:
+    enabled: false
+    # interval is how often Prometheus scrapes. Empty uses the Prometheus default.
+    interval: 30s
+    # scrapeTimeout must not exceed interval.
+    scrapeTimeout: 10s
+    # path is the exporter's metrics path.
+    path: /metrics
+    # labels are added to the ServiceMonitor. Most Prometheus Operator installs select
+    # ServiceMonitors by label, so set whatever yours requires (e.g. release: kube-prometheus-stack).
+    labels: {}
+    annotations: {}
+    # honorLabels keeps metric labels when they collide with the ones Prometheus adds.
+    honorLabels: false
+    # relabelings and metricRelabelings are passed through verbatim.
+    relabelings: []
+    metricRelabelings: []
+    # namespaceSelector defaults to the release namespace. Set matchNames to look elsewhere.
+    namespaceSelector: {}
   # env sets additional environment variables on the Datanode container as a
   # simple key/value map.
   env: {}

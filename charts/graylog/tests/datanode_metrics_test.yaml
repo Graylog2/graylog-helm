@@ -1,0 +1,123 @@
+suite: Datanode metrics exporter sidecar
+templates:
+  - workload/statefulsets/datanode.yaml
+  - config/datanode.yaml
+  - config/secret/secrets.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders no exporter sidecar by default
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers
+          content:
+            name: opensearch-exporter
+
+  - it: renders the exporter sidecar when enabled
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.metrics.enabled: true
+      datanode.metrics.adminDN: "CN=metrics-exporter"
+      datanode.metrics.existingSecretName: datanode-metrics-cert
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: opensearch-exporter
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "quay.io/prometheuscommunity/elasticsearch-exporter:v1.9.0"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --es.uri=https://localhost:9200
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --es.ca=/etc/datanode-metrics-certs/ca.crt
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --es.client-cert=/etc/datanode-metrics-certs/tls.crt
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --es.client-private-key=/etc/datanode-metrics-certs/tls.key
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --web.listen-address=:9114
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: datanode-metrics-certs
+            mountPath: /etc/datanode-metrics-certs
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: datanode-metrics-certs
+            secret:
+              secretName: datanode-metrics-cert
+
+  - it: honors a custom data/metrics port and custom cert secret keys
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.metrics.enabled: true
+      datanode.metrics.adminDN: "CN=metrics-exporter"
+      datanode.metrics.existingSecretName: datanode-metrics-cert
+      datanode.service.ports.data: 19200
+      datanode.service.ports.metrics: 19114
+      datanode.metrics.certSecretKeys.cert: client.crt
+      datanode.metrics.certSecretKeys.key: client.key
+      datanode.metrics.certSecretKeys.ca: bundle.crt
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --es.uri=https://localhost:19200
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --es.ca=/etc/datanode-metrics-certs/bundle.crt
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --es.client-cert=/etc/datanode-metrics-certs/client.crt
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --es.client-private-key=/etc/datanode-metrics-certs/client.key
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: --web.listen-address=:19114
+
+  - it: passes through admin_dn to the Datanode config
+    template: config/datanode.yaml
+    set:
+      datanode.metrics.enabled: true
+      datanode.metrics.adminDN: "CN=metrics-exporter"
+      datanode.metrics.existingSecretName: datanode-metrics-cert
+    asserts:
+      - equal:
+          path: data['opensearch.plugins.security.authcz.admin_dn']
+          value: "CN=metrics-exporter"
+
+  - it: sets no admin_dn when the exporter is off
+    template: config/datanode.yaml
+    asserts:
+      - notExists:
+          path: data['opensearch.plugins.security.authcz.admin_dn']
+
+  # --- guardrails ---
+  # NOTE: helm-unittest matches errorPattern against the LAST line of a multi-line
+  # `fail` message only, so these assert on the closing remediation line.
+  - it: fails when the exporter is enabled without an adminDN
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.metrics.enabled: true
+      datanode.metrics.existingSecretName: datanode-metrics-cert
+    asserts:
+      - failedTemplate:
+          errorPattern: 'authcz.admin_dn'
+
+  - it: fails when the exporter is enabled without an existingSecretName
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.metrics.enabled: true
+      datanode.metrics.adminDN: "CN=metrics-exporter"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'Client Certificate'

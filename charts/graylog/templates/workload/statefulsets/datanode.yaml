@@ -205,6 +205,32 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- if .metrics.enabled }}
+        - name: opensearch-exporter
+          image: "{{ .metrics.image.repository }}:{{ .metrics.image.tag }}"
+          imagePullPolicy: {{ .metrics.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - --es.uri=https://localhost:{{ .service.ports.data | default 9200 | int }}
+            - --es.ca=/etc/datanode-metrics-certs/{{ .metrics.certSecretKeys.ca | default "ca.crt" }}
+            - --es.client-cert=/etc/datanode-metrics-certs/{{ .metrics.certSecretKeys.cert | default "tls.crt" }}
+            - --es.client-private-key=/etc/datanode-metrics-certs/{{ .metrics.certSecretKeys.key | default "tls.key" }}
+            - --web.listen-address=:{{ .service.ports.metrics | default 9114 | int }}
+            {{- with .metrics.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: {{ .service.ports.metrics | default 9114 | int }}
+              protocol: TCP
+          volumeMounts:
+            - name: datanode-metrics-certs
+              mountPath: /etc/datanode-metrics-certs
+              readOnly: true
+          {{- with .metrics.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
         {{- with .extraContainers }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -232,7 +258,7 @@ spec:
                         - graylog-datanode
                 topologyKey: kubernetes.io/hostname
       {{- end }}
-      {{- if or (not (and .persistence.data.enabled .persistence.nativeLibs.enabled)) .extraVolumes }}
+      {{- if or (not (and .persistence.data.enabled .persistence.nativeLibs.enabled)) .extraVolumes .metrics.enabled }}
       volumes:
         {{- if not .persistence.nativeLibs.enabled }}
         - name: native-libs
@@ -241,6 +267,11 @@ spec:
         {{- if not .persistence.data.enabled }}
         - name: data
           emptyDir: {}
+        {{- end }}
+        {{- if .metrics.enabled }}
+        - name: datanode-metrics-certs
+          secret:
+            secretName: {{ .metrics.existingSecretName }}
         {{- end }}
         {{- with .extraVolumes }}
         {{- toYaml . | nindent 8 }}
