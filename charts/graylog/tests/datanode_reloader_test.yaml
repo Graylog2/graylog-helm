@@ -1,0 +1,37 @@
+suite: Datanode Reloader annotations
+templates:
+  - config/datanode.yaml
+  - config/secret/datanode.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: ConfigMap opts out of Reloader by default
+    template: config/datanode.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["reloader.stakater.com/auto"]
+          value: "false"
+
+  - it: Secret opts out of Reloader by default
+    template: config/secret/datanode.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["reloader.stakater.com/auto"]
+          value: "false"
+
+  - it: ConfigMap does not set the annotation when autoReload is true
+    template: config/datanode.yaml
+    set:
+      datanode.reloader.autoReload: true
+    asserts:
+      - notExists:
+          path: metadata.annotations["reloader.stakater.com/auto"]
+
+  - it: Secret does not set the annotation when autoReload is true
+    template: config/secret/datanode.yaml
+    set:
+      datanode.reloader.autoReload: true
+    asserts:
+      - notExists:
+          path: metadata.annotations["reloader.stakater.com/auto"]

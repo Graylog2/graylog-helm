@@ -70,6 +70,19 @@ tests:
           path: spec.minAvailable
           value: 2
 
+  - it: uses maxUnavailable instead of minAvailable when set
+    template: policy/pdb/graylog.yaml
+    set:
+      graylog.podDisruptionBudget.enabled: true
+      graylog.replicas: 3
+      graylog.podDisruptionBudget.maxUnavailable: "25%"
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: "25%"
+      - notExists:
+          path: spec.minAvailable
+
   - it: is not rendered when graylog.enabled is false
     template: policy/pdb/graylog.yaml
     set:
@@ -143,3 +156,84 @@ tests:
       - equal:
           path: spec.minAvailable
           value: 1
+
+  - it: uses maxUnavailable instead of minAvailable when set
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.enabled: true
+      datanode.podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - notExists:
+          path: spec.minAvailable
+
+  # --- Datanode PDB: consolidated across node groups ---
+  - it: renders one PDB per group by default when extraNodeGroups is set
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+          replicas: 2
+    asserts:
+      - hasDocuments:
+          count: 2
+      - matchRegex:
+          path: spec.selector.matchLabels.graylog-datanode-group
+          pattern: ^(default|search)$
+
+  - it: renders a single PDB spanning all groups when consolidated is true
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.consolidated: true
+      datanode.extraNodeGroups:
+        search:
+          roles: [search]
+          replicas: 2
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: graylog-pdb-datanode
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: graylog-datanode
+      - notExists:
+          path: spec.selector.matchLabels.graylog-datanode-group
+      - equal:
+          path: spec.minAvailable
+          value: 2
+
+  - it: consolidated PDB uses maxUnavailable instead of minAvailable when set
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.consolidated: true
+      datanode.podDisruptionBudget.maxUnavailable: "10%"
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: "10%"
+      - notExists:
+          path: spec.minAvailable
+
+  - it: consolidated PDB honors its own minAvailable
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.consolidated: true
+      datanode.podDisruptionBudget.minAvailable: 5
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 5
+
+  - it: consolidated PDB is not rendered when total replicas across groups is 0
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.consolidated: true
+      datanode.replicas: 0
+    asserts:
+      - hasDocuments:
+          count: 0

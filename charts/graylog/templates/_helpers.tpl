@@ -538,6 +538,20 @@ Graylog data PVC/volume name
 {{- end }}
 
 {{/*
+Renders the minAvailable/maxUnavailable field for a PodDisruptionBudget spec.
+Kubernetes only allows one of the two on a given PDB; when .pdb.maxUnavailable is
+set (non-empty), it wins and minAvailable is omitted entirely.
+Usage: {{- include "graylog.pdb.availability" (dict "pdb" .Values.graylog.podDisruptionBudget "default" 1) }}
+*/}}
+{{- define "graylog.pdb.availability" -}}
+{{- if .pdb.maxUnavailable -}}
+maxUnavailable: {{ .pdb.maxUnavailable }}
+{{- else -}}
+minAvailable: {{ .pdb.minAvailable | default .default | int }}
+{{- end -}}
+{{- end }}
+
+{{/*
 Normalized Datanode node-group list, returned as a YAML array.
 Parse with: include "graylog.datanode.groups" . | fromYamlArray
 

@@ -30,6 +30,13 @@ when a snapshot repository is configured).
   StatefulSet (`<release>-datanode-<name>`), ConfigMap and PodDisruptionBudget, and
   **inherits every `datanode.*` value**, overriding only what it declares.
 
+By default each group gets its own PDB, scoped to that group's pods only. Set
+`datanode.podDisruptionBudget.consolidated=true` to render a single PDB spanning the
+primary group and every extra group instead — useful when `minAvailable` should protect
+the Data Node fleet as a whole rather than per role/tier. That one PDB uses the top-level
+`datanode.podDisruptionBudget.minAvailable`/`annotations`/`labels`; per-group overrides
+are ignored while it's on.
+
 > [!IMPORTANT]
 > A group name becomes part of those object names, so it must be a **DNS-1123 label**:
 > lowercase alphanumerics and `-`, starting and ending alphanumeric. Role names are not
@@ -39,6 +46,20 @@ when a snapshot repository is configured).
 
 All groups share one headless Service for discovery, and the OpenSearch discovery seed hosts
 span every group, so they form a single cluster.
+
+> [!WARNING]
+> If [Stakater Reloader](https://github.com/stakater/Reloader) is running in your cluster,
+> it watches each group's ConfigMap/Secret and restarts that group's StatefulSet
+> independently the moment they change — with no coordination between groups. That can roll
+> a pod in two different node groups (e.g. the primary group and a `data` group) at the same
+> time, which no PodDisruptionBudget here prevents: a PDB only governs the Eviction API (node
+> drains, autoscaler/Karpenter consolidation, `kubectl drain`), not a StatefulSet controller
+> replacing its own pod after Reloader patches the pod template. The chart sets
+> `reloader.stakater.com/auto: "false"` on every Data Node ConfigMap/Secret by default
+> (`datanode.reloader.autoReload: false`) so config changes land but don't auto-restart
+> anything; trigger the rollout yourself (a `helm upgrade`, or a script that steps through
+> groups one at a time) so only one group rolls at once. Set
+> `datanode.reloader.autoReload: true` (globally or per group) to opt back in.
 
 ### Example: hot tier + dedicated search/warm tier
 

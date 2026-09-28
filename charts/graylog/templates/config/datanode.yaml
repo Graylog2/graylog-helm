@@ -38,7 +38,8 @@ kind: ConfigMap
 metadata:
   name: {{ .configmapName }}
   {{- include "graylog.metadata.labels" (dict "context" $ "labels" .labels "fixed" $fixed "indent" 2) }}
-  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .annotations "indent" 2) }}
+  {{- $reloaderFixed := .reloader.autoReload | ternary dict (dict "reloader.stakater.com/auto" "false") }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .annotations "fixed" $reloaderFixed "indent" 2) }}
 data:
   JAVA_OPTS: {{ .config.javaOpts | quote }}
   GRAYLOG_DATANODE_NODE_ID_FILE: {{ .config.nodeIdFile | default "/var/lib/graylog-datanode/node-id" | quote }}
