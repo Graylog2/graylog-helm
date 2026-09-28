@@ -1,11 +1,14 @@
 {{- if .Values.datanode.enabled }}
 {{- $c := .Values.datanode.config }}
-{{- $sk := $c.s3ClientDefaultSecretKey }}
-{{- $ak := $c.s3ClientDefaultAccessKey }}
 {{- $endpoint := $c.s3ClientDefaultEndpoint }}
+{{- include "graylog.s3.validate" $ }}
+{{- $creds := include "graylog.s3.credentials" (dict "context" $ "component" "datanode") | fromYaml }}
+{{- $existing := $creds.existingSecret }}
+{{- $ak := $creds.accessKey }}
+{{- $sk := $creds.secretKey }}
 {{- /*
-All three or none. This mirrors the Data Node, which refuses to start on a
-partial config with:
+Credentials and endpoint together, or neither. This mirrors the Data Node, which
+refuses to start on a partial config with:
 
   S3 Client not configured properly, all s3_client_default_access_key,
   s3_client_default_secret_key and s3_client_default_endpoint have to be
@@ -14,11 +17,15 @@ partial config with:
 The endpoint is required even for AWS S3, where the SDK could resolve it from
 the region. Graylog's configuration reference lists it as optional; the running
 code does not agree, and the code is what you get.
+
+The endpoint stays in values even when the credentials come from a Secret, so an
+existing Secret still needs it set here.
 */ -}}
-{{- $anySet := or $ak $sk $endpoint }}
-{{- $allSet := and $ak $sk $endpoint }}
+{{- $credsSet := or $existing (and $ak $sk) }}
+{{- $anySet := or $ak $sk $endpoint $existing }}
+{{- $allSet := and $credsSet $endpoint }}
 {{- if and $anySet (not $allSet) }}
-  {{ fail "datanode: s3ClientDefaultEndpoint, s3ClientDefaultAccessKey and s3ClientDefaultSecretKey must all be set together. The Data Node rejects a partial S3 client configuration at startup. For AWS S3 the endpoint is https://s3.<region>.amazonaws.com." }}
+  {{ fail "datanode: the S3 client needs an endpoint and both credentials. Set s3ClientDefaultEndpoint together with either s3ClientDefaultAccessKey and s3ClientDefaultSecretKey, or s3ClientDefaultExistingSecret naming a Secret that holds them. The Data Node rejects a partial S3 client configuration at startup. For AWS S3 the endpoint is https://s3.<region>.amazonaws.com." }}
 {{- end }}
 {{- range include "graylog.datanode.groups" $ | fromYamlArray }}
 {{- $fixed := dict "app.kubernetes.io/component" "datanode" "app" "graylog-datanode" }}

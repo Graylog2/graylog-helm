@@ -256,3 +256,59 @@ tests:
       - notExists:
           path: spec.template.spec.serviceAccountName
         template: workload/statefulsets/graylog.yaml
+
+  # Archiving authenticates through the AWS SDK's default credential chain. The chart
+  # only chooses what the pod carries, and does so only when asked.
+  - it: adds no AWS credentials to the Graylog container by default
+    template: workload/statefulsets/graylog.yaml
+    set:
+      global.s3.existingSecret: shared-s3
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: shared-s3
+                key: AWS_ACCESS_KEY_ID
+
+  - it: puts the global S3 Secret on the Graylog container when archiving asks for it
+    template: workload/statefulsets/graylog.yaml
+    set:
+      global.s3.existingSecret: shared-s3
+      graylog.config.archive.useGlobalS3Credentials: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: shared-s3
+                key: AWS_ACCESS_KEY_ID
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: shared-s3
+                key: AWS_SECRET_ACCESS_KEY
+
+  - it: honors custom key names in the global S3 Secret
+    template: workload/statefulsets/graylog.yaml
+    set:
+      global.s3.existingSecret: shared-s3
+      global.s3.accessKeyKey: access_key
+      global.s3.secretKeyKey: secret_key
+      graylog.config.archive.useGlobalS3Credentials: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: shared-s3
+                key: access_key
