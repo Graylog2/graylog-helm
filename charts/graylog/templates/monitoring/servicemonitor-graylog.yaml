@@ -1,0 +1,49 @@
+{{- if and .Values.graylog.enabled .Values.graylog.serviceMonitor.enabled }}
+{{- $sm := .Values.graylog.serviceMonitor }}
+{{- if not .Values.graylog.service.metrics.enabled }}
+{{- fail "graylog.serviceMonitor.enabled=true requires graylog.service.metrics.enabled=true.\n  The ServiceMonitor scrapes Graylog's Prometheus exporter, which that value turns on (GRAYLOG_PROMETHEUS_EXPORTER_ENABLED)." }}
+{{- end }}
+{{- if not .Values.graylog.service.metrics.expose }}
+{{- fail "graylog.serviceMonitor.enabled=true requires graylog.service.metrics.expose=true.\n  Graylog binds its exporter to 127.0.0.1 by default, so without `expose` the metrics port is not published on the Service and every scrape would be refused.\n  Note the exporter is unauthenticated once exposed - restrict access with a NetworkPolicy." }}
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "graylog.fullname" . }}-servicemonitor
+  namespace: {{ .Release.Namespace }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $sm.labels "fixed" (dict "app.kubernetes.io/component" "server") "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $sm.annotations "indent" 2) }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: server
+      {{- include "graylog.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    {{- if $sm.namespaceSelector }}
+    {{- toYaml $sm.namespaceSelector | nindent 4 }}
+    {{- else }}
+    matchNames:
+      - {{ .Release.Namespace }}
+    {{- end }}
+  endpoints:
+    - port: metrics
+      path: {{ $sm.path | default "/metrics" }}
+      scheme: http
+      {{- with $sm.interval }}
+      interval: {{ . }}
+      {{- end }}
+      {{- with $sm.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+      {{- if $sm.honorLabels }}
+      honorLabels: true
+      {{- end }}
+      {{- with $sm.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $sm.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

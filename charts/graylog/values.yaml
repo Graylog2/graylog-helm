@@ -92,8 +92,40 @@ graylog:
       # metrics is the port serving Prometheus metrics.
       metrics: 9833
     metrics:
-      # enabled exposes the Prometheus metrics port on the Service.
+      # enabled turns on Graylog's Prometheus exporter. It binds to localhost only
+      # unless `expose` is set. graylog.lifecycle.preStopDrain requires this: it reads
+      # journal depth from the exporter over 127.0.0.1.
       enabled: true
+      # expose binds the exporter to 0.0.0.0 instead of 127.0.0.1 and publishes the
+      # metrics port on the Service, so Prometheus can scrape it from outside the pod.
+      #
+      # Graylog's exporter is UNAUTHENTICATED - anything that can reach the pod can read
+      # it. Leave this off unless you are actually scraping, and restrict access with a
+      # NetworkPolicy when you turn it on.
+      expose: false
+  # serviceMonitor creates a Prometheus Operator ServiceMonitor for the Graylog
+  # exporter. Requires graylog.service.metrics.expose (the exporter must be reachable
+  # from outside the pod) and a cluster running the Prometheus Operator CRDs.
+  serviceMonitor:
+    enabled: false
+    # interval is how often Prometheus scrapes. Empty uses the Prometheus default.
+    interval: 30s
+    # scrapeTimeout must not exceed interval.
+    scrapeTimeout: 10s
+    # path is the exporter's metrics path.
+    path: /metrics
+    # labels are added to the ServiceMonitor. Most Prometheus Operator installs select
+    # ServiceMonitors by label, so set whatever yours requires (e.g. release: kube-prometheus-stack).
+    labels: {}
+    annotations: {}
+    # honorLabels keeps metric labels when they collide with the ones Prometheus adds.
+    honorLabels: false
+    # relabelings and metricRelabelings are passed through verbatim.
+    relabelings: []
+    metricRelabelings: []
+    # namespaceSelector defaults to the release namespace. Set matchNames to look elsewhere.
+    namespaceSelector: {}
+
   # inputs declares Graylog inputs to expose as Service/container ports.
   # Each entry needs a name, port, and protocol; targetPort defaults to port.
   inputs:
