@@ -25,6 +25,27 @@ global:
   existingSecretName: ""
   # storageClass is the default StorageClass for all persistent volumes.
   storageClass: ""
+  # s3 holds one S3 credential for the components that need one: the Data Node's
+  # snapshot repository, and Graylog's archive backend when
+  # graylog.config.archive.useGlobalS3Credentials is on.
+  #
+  # Credentials only. Endpoints and regions differ per component and stay with
+  # the component. A component that names a credential of its own takes that
+  # block whole and ignores this one, so a Secret here never pairs with an
+  # inline key there.
+  s3:
+    # existingSecret names a Secret holding both credentials. The pods read it
+    # directly, so the credentials never pass through a chart-managed Secret.
+    # See examples/graylog-s3-secret.yaml.
+    existingSecret: ""
+    # Key names inside that Secret.
+    accessKeyKey: "AWS_ACCESS_KEY_ID"
+    secretKeyKey: "AWS_SECRET_ACCESS_KEY"
+    # OR set the credentials inline, which stores them in a chart-managed
+    # Secret. Cannot be combined with existingSecret, and needs chart-managed
+    # secrets (no global.existingSecretName).
+    accessKey: ""
+    secretKey: ""
   # commonLabels/commonAnnotations are added to every object the chart renders.
   # Per-object labels/annotations and the chart's own identity labels take
   # precedence. commonLabels never reach a workload's selector, so they are
@@ -220,6 +241,20 @@ graylog:
     plugins:
       # enabled turns on plugin installation via init containers.
       enabled: false
+    # archive configures Graylog Enterprise archiving. The backend itself is not
+    # a chart value. It lives in MongoDB as cluster config, created through the
+    # archive plugin API. The chart only sets how the pod authenticates to S3.
+    archive:
+      # useGlobalS3Credentials exports global.s3 to the Graylog container as
+      # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. A backend created without
+      # aws_access_key_id/aws_secret_access_key then picks them up from the AWS
+      # SDK's default credential chain, which keeps static keys out of MongoDB.
+      #
+      # Leave it off when using IRSA. The SDK resolves environment variables
+      # before the web identity token, so turning this on overrides the role on
+      # the service account. Archiving authenticates as the wrong principal and
+      # logs nothing about it.
+      useGlobalS3Credentials: false
     # geolocation configures GeoIP databases for the Graylog geolocation
     # processor.
     geolocation:
@@ -649,6 +684,24 @@ datanode:
     # AWS credentials (node instance profile, IRSA) do NOT satisfy that check,
     # however the bucket is granted, because the check reads configuration
     # rather than testing access.
+    #
+    # Set these only to give the Data Node a different credential from the rest
+    # of the release. Leave them empty and it uses global.s3, provided
+    # s3ClientDefaultEndpoint is set. Naming any one of them takes this block
+    # whole and ignores global.s3 rather than merging the two.
+    #
+    # s3ClientDefaultExistingSecret names a Secret the pods read directly, so
+    # the credentials never pass through a chart-managed Secret. The endpoint
+    # and the other s3ClientDefault* settings stay here either way, since they
+    # are not sensitive. See examples/graylog-s3-secret.yaml.
+    s3ClientDefaultExistingSecret: ""
+    # Key names inside that Secret. Override them when it already has names of
+    # its own, as an ExternalSecret usually does.
+    s3ClientDefaultAccessKeyKey: "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY"
+    s3ClientDefaultSecretKeyKey: "GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY"
+    # OR set the credentials inline, which stores them in a chart-managed
+    # Secret. Cannot be combined with s3ClientDefaultExistingSecret, and needs
+    # chart-managed secrets (no global.existingSecretName).
     s3ClientDefaultSecretKey: ""
     s3ClientDefaultAccessKey: ""
     s3ClientDefaultEndpoint: ""

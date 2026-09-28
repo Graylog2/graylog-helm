@@ -1035,6 +1035,95 @@ datanode:
       replicas: 2
 ```
 
+### S3 credentials
+
+Two parts of a release can need S3: the Data Node's snapshot repository, and Graylog's archive
+backend. Put one credential in `global.s3` and both read it.
+
+```yaml
+global:
+  s3:
+    existingSecret: graylog-s3
+    # Override when the Secret already has key names of its own, as an
+    # ExternalSecret usually does.
+    accessKeyKey: access_key
+    secretKeyKey: secret_key
+
+datanode:
+  config:
+    # The endpoint opts the Data Node in. Without one it has no snapshot
+    # repository and ignores global.s3.
+    s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+```
+
+Only the credentials belong in `global.s3`. Endpoints and regions differ per component and stay with
+the component. The endpoint is required, including on AWS.
+
+To give one component a different credential, set it on that component instead:
+
+```yaml
+datanode:
+  config:
+    s3ClientDefaultExistingSecret: datanode-s3
+    s3ClientDefaultAccessKeyKey: access_key
+    s3ClientDefaultSecretKeyKey: secret_key
+```
+
+A component that names any credential of its own takes that block whole and ignores `global.s3`,
+instead of merging the two field by field. A Secret in one place therefore never pairs with an
+inline key from the other. Naming both an existing Secret and an inline key in the same block fails
+the render.
+
+`examples/graylog-s3-secret.yaml` holds the Secret itself.
+
+The two consumers read different environment variables from the same credential, which is the work
+`global.s3` does:
+
+| Consumer | Environment | IRSA |
+| --- | --- | --- |
+| Data Node snapshot repository | `GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY` / `_SECRET_KEY` | Not supported |
+| Graylog archive backend | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Supported, and preferred |
+
+> [!IMPORTANT]
+> Rotating the Secret restarts nothing. The pods read these as environment variables at startup, and
+> the chart's config checksum does not cover a Secret it does not own. Roll them yourself:
+> `kubectl rollout restart statefulset -l app=graylog-datanode`.
+
+### Archiving to S3
+
+The archive backend is not a chart value. It lives in MongoDB as cluster config, created through the
+archive plugin API, and carries its own `aws_access_key_id` and `aws_secret_access_key`. Leave those
+two fields out and it authenticates through the AWS SDK's default credential chain instead.
+
+Use IRSA. Annotate the service account, and leave the key fields out of the backend:
+
+```yaml
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/graylog-archive
+```
+
+Where IRSA is not available, `graylog.config.archive.useGlobalS3Credentials` exports `global.s3` to
+the Graylog container as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, which the same chain picks
+up. Static keys then stay out of MongoDB:
+
+```yaml
+global:
+  s3:
+    existingSecret: graylog-s3
+
+graylog:
+  config:
+    archive:
+      useGlobalS3Credentials: true
+```
+
+> [!WARNING]
+> Do not combine this with IRSA. The AWS SDK resolves environment variables before the web identity
+> token, so these credentials override the role on the service account. Archiving then authenticates
+> as the wrong principal and logs nothing about it. Hence the default of `false`.
+
 Static keys are not the only way. The Data Node also accepts a filesystem repository, which needs
 no credentials at all but does need storage every Data Node can mount, such as EFS on EKS:
 
@@ -1251,6 +1340,11 @@ These values affect Graylog, DataNode, and MongoDB.
 | `global.storageClass`       | Storage class to use for PVCs.              | `""`    |
 | `global.commonLabels`       | Labels added to every object deployed by this chart.      | `{}` |
 | `global.commonAnnotations`  | Annotations added to every object deployed by this chart. | `{}` |
+| `global.s3.existingSecret`  | Secret holding the S3 credentials shared by the Data Node snapshot repository and Graylog archiving. Mutually exclusive with the inline pair below. | `""` |
+| `global.s3.accessKeyKey`    | Key in that Secret holding the access key.  | `"AWS_ACCESS_KEY_ID"` |
+| `global.s3.secretKeyKey`    | Key in that Secret holding the secret key.  | `"AWS_SECRET_ACCESS_KEY"` |
+| `global.s3.accessKey`       | Inline S3 access key. Dev/test only.        | `""`    |
+| `global.s3.secretKey`       | Inline S3 secret key. Dev/test only.        | `""`    |
 
 > [!NOTE]
 > `global.commonLabels` and `global.commonAnnotations` are applied to *every*
@@ -1334,6 +1428,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.email.useTls`                                         | Use TLS for SMTP.                                           | `"true"`                        |
 | `graylog.config.email.webInterfaceUrl`                                | Web interface URL for email links.                          | `"https://graylog.example.com"` |
 | `graylog.config.plugins.enabled`                                      | Enable Graylog plugin system.                               | `false`                         |
+| `graylog.config.archive.useGlobalS3Credentials`                       | Put `global.s3` on the Graylog container as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` for archiving. Leave off when using IRSA: the AWS SDK reads environment variables before the web identity token, so this overrides the role. | `false` |
 | `graylog.config.geolocation.enabled`                                  | Enable the Geolocation Processor.                           | `false`                         |
 | `graylog.config.geolocation.maxmindGeoIp.enabled`                     | Wire MaxMind credentials into the chart-managed Secret.     | `true`                          |
 | `graylog.config.geolocation.maxmindGeoIp.existingSecret`              | Secret with the MaxMind credentials, read by the sidecar.    | `""`                            |
@@ -1495,6 +1590,9 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.config.nodeSearchCacheSize`                  | Size of search cache.                           | `"10gb"`          |
 | `datanode.config.s3ClientDefaultSecretKey`             | Default S3 client secret key.                   | `""`              |
 | `datanode.config.s3ClientDefaultAccessKey`             | Default S3 client access key.                   | `""`              |
+| `datanode.config.s3ClientDefaultExistingSecret`        | Existing Secret holding the S3 access key and secret key. Mutually exclusive with the two inline keys above. | `""` |
+| `datanode.config.s3ClientDefaultAccessKeyKey`          | Key in that Secret holding the access key.      | `"GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY"` |
+| `datanode.config.s3ClientDefaultSecretKeyKey`          | Key in that Secret holding the secret key.      | `"GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_SECRET_KEY"` |
 | `datanode.config.s3ClientDefaultEndpoint`              | Default S3 client endpoint.                     | `""`              |
 | `datanode.config.s3ClientDefaultRegion`                | Default S3 client region.                       | `"us-east-2"`     |
 | `datanode.config.s3ClientDefaultProtocol`              | Default S3 client protocol.                     | `"http"`          |
