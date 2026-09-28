@@ -572,7 +572,7 @@ graylog:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
-    # maxUnavailable is an alternative to minAvailable — a PDB can only use one or
+    # maxUnavailable is an alternative to minAvailable. A PDB can only use one or
     # the other. Set this (an int or a "N%" string) to switch the PDB to
     # maxUnavailable; minAvailable above is then ignored. Leave empty to keep
     # using minAvailable.
@@ -901,7 +901,7 @@ datanode:
   podDisruptionBudget:
     enabled: true
     minAvailable: 2
-    # maxUnavailable is an alternative to minAvailable — a PDB can only use one or
+    # maxUnavailable is an alternative to minAvailable. A PDB can only use one or
     # the other. Set this (an int or a "N%" string) to switch the PDB to
     # maxUnavailable; minAvailable above is then ignored. Leave empty to keep
     # using minAvailable. In non-consolidated mode this also applies per group,

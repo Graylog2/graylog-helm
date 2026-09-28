@@ -486,13 +486,13 @@ clusters and need no configuration for the common case.
   the chart renders one PDB per group by default; set
   `datanode.podDisruptionBudget.consolidated=true` for a single PDB spanning the
   primary group and every extra group instead. Either PDB can use
-  `podDisruptionBudget.maxUnavailable` instead of `minAvailable` — set one or the
+  `podDisruptionBudget.maxUnavailable` instead of `minAvailable`. Set one or the
   other, since Kubernetes rejects a PDB with both.
 - **Reloader opt-out** on every Data Node ConfigMap/Secret
   (`datanode.reloader.autoReload: false`), so [Stakater
   Reloader](https://github.com/stakater/Reloader), if installed cluster-wide, does not
   auto-restart Data Node groups on config changes. With multiple node groups, Reloader
-  restarts each group's StatefulSet independently, which can roll two groups at once — a
+  restarts each group's StatefulSet independently, which can roll two groups at once. A
   PDB does not prevent this, since it only applies to the Eviction API, not a StatefulSet
   controller replacing its own pod. See the [node groups
   guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md).
@@ -1638,7 +1638,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.replicas`                                    | Number of datanode replicas.                    | `3`               |
 | `datanode.roles`                                       | OpenSearch roles for the primary node group; empty = Data Node default. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `[]` |
 | `datanode.extraNodeGroups`                             | Map of additional node groups keyed by name, each inheriting and overriding `datanode.*`. [Guide](https://github.com/Graylog2/graylog-helm/blob/main/docs/datanode-node-roles.md). | `{}` |
-| `datanode.reloader.autoReload`                         | Allow Stakater Reloader to restart this group's pods on its own ConfigMap/Secret change. Off by default — see the node groups guide. | `false` |
+| `datanode.reloader.autoReload`                         | Allow Stakater Reloader to restart this group's pods on its own ConfigMap/Secret change. Off by default. See the node groups guide. | `false` |
 | `datanode.service.annotations`                         | Annotations for the Data Node Service.          | `{}`              |
 | `datanode.service.labels`                              | Labels for the Data Node Service.               | `{}`              |
 | `datanode.service.ports.api`                           | API communication port.                         | `8999`            |
