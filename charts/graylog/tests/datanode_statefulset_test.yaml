@@ -483,3 +483,29 @@ tests:
               secretKeyRef:
                 name: dn-s3
                 key: GRAYLOG_DATANODE_S3_CLIENT_DEFAULT_ACCESS_KEY
+
+  - it: labels pods with the default roles, but not the selector
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels['graylog-datanode-roles']
+          value: cluster_manager.data.ingest.remote_cluster_client
+      - notExists:
+          path: spec.selector.matchLabels['graylog-datanode-roles']
+
+  - it: labels each group's pods with its own roles
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.roles: [cluster_manager]
+      datanode.extraNodeGroups:
+        hot:
+          roles: [data, ingest]
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels['graylog-datanode-roles']
+          value: cluster_manager
+        documentIndex: 0
+      - equal:
+          path: spec.template.metadata.labels['graylog-datanode-roles']
+          value: data.ingest
+        documentIndex: 1

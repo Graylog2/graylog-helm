@@ -598,6 +598,15 @@ have to pass (root, group) dicts around:
 {{- end }}
 
 {{/*
+Pod label value listing a group's OpenSearch roles, joined with "." because label values
+cannot hold commas (e.g. cluster_manager.data). An empty roles list renders the Data Node
+default set. Takes one group from graylog.datanode.groups.
+*/}}
+{{- define "graylog.datanode.rolesLabel" -}}
+{{- .roles | default (list "cluster_manager" "data" "ingest" "remote_cluster_client") | join "." -}}
+{{- end }}
+
+{{/*
 Validate datanode node groups.
 
 Names: every extraNodeGroups key becomes part of a StatefulSet/ConfigMap/PDB name, so it
