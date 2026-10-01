@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.0](https://github.com/Graylog2/graylog-helm/compare/graylog-2.0.0...graylog-2.1.0) (2026-10-01)
+
+
+### Features
+
+* **aws-secrets:** Reworking how source secrets for AWS buckets for graylog and datanode ([#193](https://github.com/Graylog2/graylog-helm/issues/193)) ([29caea2](https://github.com/Graylog2/graylog-helm/commit/29caea2d81e20e1f52557dffa04533fc9c197cee))
+* **datanode:** Adding more Datanode labels for specific roles ([#198](https://github.com/Graylog2/graylog-helm/issues/198)) ([ce3dca8](https://github.com/Graylog2/graylog-helm/commit/ce3dca8d121cacfca2cb1938255bcaa21337ffd5))
+* **datanode:** Adding opensearch role labels to Datanode pods ([#197](https://github.com/Graylog2/graylog-helm/issues/197)) ([8f73a98](https://github.com/Graylog2/graylog-helm/commit/8f73a984719ba908883d35c15f53bb62f24c69ae))
+* **datanode:** Labeling pvcs and configmaps and statefulsets with Datanode roles ([#200](https://github.com/Graylog2/graylog-helm/issues/200)) ([198735d](https://github.com/Graylog2/graylog-helm/commit/198735d7c7a14f191d4b4a1ec804366d3838cdf4))
+* **datanode:** Shared pdb across datanode node groups ([#196](https://github.com/Graylog2/graylog-helm/issues/196)) ([90c745a](https://github.com/Graylog2/graylog-helm/commit/90c745ae6a1bea05312b6ddb1293d62992d8a8cf))
+* **mongodb:** Adding node selector to be passed through to mongo workloads ([#188](https://github.com/Graylog2/graylog-helm/issues/188)) ([6544259](https://github.com/Graylog2/graylog-helm/commit/6544259bf1ed7333fbca07725caadd773c077773))
+
 ## [2.0.0](https://github.com/Graylog2/graylog-helm/compare/graylog-1.0.0...graylog-2.0.0) (2026-08-27)
 
 
