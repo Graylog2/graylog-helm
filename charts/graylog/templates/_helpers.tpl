@@ -603,7 +603,27 @@ cannot hold commas (e.g. cluster_manager.data). An empty roles list renders the 
 default set. Takes one group from graylog.datanode.groups.
 */}}
 {{- define "graylog.datanode.rolesLabel" -}}
-{{- .roles | default (list "cluster_manager" "data" "ingest" "remote_cluster_client") | join "." -}}
+{{- include "graylog.datanode.effectiveRoles" . | fromYamlArray | join "." -}}
+{{- end }}
+
+{{/*
+A group's roles, falling back to the Data Node default set when none are declared.
+*/}}
+{{- define "graylog.datanode.effectiveRoles" -}}
+{{- .roles | default (list "cluster_manager" "data" "ingest" "remote_cluster_client") | toYaml -}}
+{{- end }}
+
+{{/*
+One graylog-datanode-role-<role>: "true" label per role the group carries (underscores
+become dashes), as a YAML map. Absent roles get no label, so a selector can match a role
+without ruling out pods that carry several. Takes one group from graylog.datanode.groups.
+*/}}
+{{- define "graylog.datanode.roleLabels" -}}
+{{- $out := dict -}}
+{{- range include "graylog.datanode.effectiveRoles" . | fromYamlArray -}}
+{{- $_ := set $out (printf "graylog-datanode-role-%s" (replace "_" "-" .)) "true" -}}
+{{- end -}}
+{{- $out | toYaml -}}
 {{- end }}
 
 {{/*

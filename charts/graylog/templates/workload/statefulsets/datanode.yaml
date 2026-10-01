@@ -46,7 +46,7 @@ spec:
   template:
     metadata:
       {{- /* Roles ride on the pod only (never the selector), so dashboards can join on them. */}}
-      {{- $podFixed := merge (dict "graylog-datanode-roles" (include "graylog.datanode.rolesLabel" .)) $fixed }}
+      {{- $podFixed := merge (dict "graylog-datanode-roles" (include "graylog.datanode.rolesLabel" .)) (include "graylog.datanode.roleLabels" . | fromYaml) $fixed }}
       {{- include "graylog.pod.labels" (dict "context" $ "labels" .podLabels "fixed" $podFixed "indent" 6) }}
       {{- $podAnnotations := dict "checksum/config" (include "graylog.datanode.configChecksum" $) "checksum/secret" (include "graylog.secretsChecksum" $) }}
       {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .podAnnotations "fixed" $podAnnotations "indent" 6) }}
