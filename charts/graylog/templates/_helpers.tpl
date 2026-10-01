@@ -614,12 +614,13 @@ A group's roles, falling back to the Data Node default set when none are declare
 {{- end }}
 
 {{/*
-One graylog-datanode-role-<role>: "true" label per role the group carries (underscores
-become dashes), as a YAML map. Absent roles get no label, so a selector can match a role
-without ruling out pods that carry several. Takes one group from graylog.datanode.groups.
+The group's role labels as a YAML map: graylog-datanode-roles (dot-joined) plus one
+graylog-datanode-role-<role>: "true" per role the group carries (underscores become
+dashes). Absent roles get no label, so a selector can match a role without ruling out
+pods that carry several. Takes one group from graylog.datanode.groups.
 */}}
 {{- define "graylog.datanode.roleLabels" -}}
-{{- $out := dict -}}
+{{- $out := dict "graylog-datanode-roles" (include "graylog.datanode.rolesLabel" .) -}}
 {{- range include "graylog.datanode.effectiveRoles" . | fromYamlArray -}}
 {{- $_ := set $out (printf "graylog-datanode-role-%s" (replace "_" "-" .)) "true" -}}
 {{- end -}}

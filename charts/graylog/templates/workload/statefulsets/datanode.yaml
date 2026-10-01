@@ -8,12 +8,18 @@
 {{/* The probe handler defaults read .Values.datanode.service.ports, so hand them
      this group's own values as if they were the datanode block. */}}
 {{- $probeCtx := dict "Values" (dict "datanode" .) }}
+{{/* Role labels go on the StatefulSet and its pods (never the selector), so
+     `kubectl get sts -l` and dashboards can find a group by role. */}}
+{{- $roleFixed := merge (include "graylog.datanode.roleLabels" . | fromYaml) $fixed }}
+{{/* Pods always carry their group, even on a single-group install. Pod template
+     only: the selector must not change, or the StatefulSet would be recreated. */}}
+{{- $podFixed := merge (dict "graylog-datanode-group" (.name | default "default")) $roleFixed }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ .fullname }}
-  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .labels "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .labels "fixed" $roleFixed "indent" 2) }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .annotations "indent" 2) }}
 spec:
   replicas: {{ .replicas | int }}
@@ -45,8 +51,6 @@ spec:
     whenScaled: {{ $dnRet.whenScaled | default "Retain" }}
   template:
     metadata:
-      {{- /* Roles ride on the pod only (never the selector), so dashboards can join on them. */}}
-      {{- $podFixed := merge (dict "graylog-datanode-roles" (include "graylog.datanode.rolesLabel" .)) (include "graylog.datanode.roleLabels" . | fromYaml) $fixed }}
       {{- include "graylog.pod.labels" (dict "context" $ "labels" .podLabels "fixed" $podFixed "indent" 6) }}
       {{- $podAnnotations := dict "checksum/config" (include "graylog.datanode.configChecksum" $) "checksum/secret" (include "graylog.secretsChecksum" $) }}
       {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .podAnnotations "fixed" $podAnnotations "indent" 6) }}
