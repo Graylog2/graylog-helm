@@ -509,3 +509,26 @@ tests:
           path: spec.template.metadata.labels['graylog-datanode-roles']
           value: data.ingest
         documentIndex: 1
+
+  - it: adds one role-<name>=true label per role the group carries
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.roles: [cluster_manager, data]
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels['graylog-datanode-role-cluster-manager']
+          value: "true"
+      - equal:
+          path: spec.template.metadata.labels['graylog-datanode-role-data']
+          value: "true"
+      - notExists:
+          path: spec.template.metadata.labels['graylog-datanode-role-ingest']
+      - notExists:
+          path: spec.selector.matchLabels['graylog-datanode-role-data']
+
+  - it: labels every default role when none are declared
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels['graylog-datanode-role-remote-cluster-client']
+          value: "true"
