@@ -37,7 +37,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .configmapName }}
-  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .labels "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .labels "fixed" (merge (include "graylog.datanode.roleLabels" . | fromYaml) $fixed) "indent" 2) }}
   {{- $reloaderFixed := .reloader.autoReload | ternary dict (dict "reloader.stakater.com/auto" "false") }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .annotations "fixed" $reloaderFixed "indent" 2) }}
 data:
