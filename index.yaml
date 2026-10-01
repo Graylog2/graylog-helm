@@ -4,6 +4,81 @@ entries:
   - annotations:
       artifacthub.io/category: security
       artifacthub.io/changes: |
+        - kind: added
+          description: "aws-secrets: Reworking how source secrets for AWS buckets for graylog and datanode"
+          links:
+            - name: "PR #193"
+              url: "https://github.com/Graylog2/graylog-helm/pull/193"
+        - kind: added
+          description: "datanode: Adding more Datanode labels for specific roles"
+          links:
+            - name: "PR #198"
+              url: "https://github.com/Graylog2/graylog-helm/pull/198"
+        - kind: added
+          description: "datanode: Adding opensearch role labels to Datanode pods"
+          links:
+            - name: "PR #197"
+              url: "https://github.com/Graylog2/graylog-helm/pull/197"
+        - kind: added
+          description: "datanode: Labeling pvcs and configmaps and statefulsets with Datanode roles"
+          links:
+            - name: "PR #200"
+              url: "https://github.com/Graylog2/graylog-helm/pull/200"
+        - kind: added
+          description: "datanode: Shared pdb across datanode node groups"
+          links:
+            - name: "PR #196"
+              url: "https://github.com/Graylog2/graylog-helm/pull/196"
+        - kind: added
+          description: "mongodb: Adding node selector to be passed through to mongo workloads"
+          links:
+            - name: "PR #188"
+              url: "https://github.com/Graylog2/graylog-helm/pull/188"
+      artifacthub.io/containsSecurityUpdates: "true"
+      artifacthub.io/images: |
+        - name: "graylog"
+          image: "graylog/graylog:7.1.8"
+          whitelisted: true
+          platforms:
+            - linux/amd64
+            - linux/arm64
+        - name: "graylog-datanode"
+          image: "graylog/graylog-datanode:7.1.8"
+          whitelisted: true
+          platforms:
+            - linux/amd64
+            - linux/arm64
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 7.1.8
+    created: "2026-10-01T23:34:00.512483347Z"
+    description: Official Graylog Helm chart for Kubernetes
+    digest: cdbda2dbf1839fa4306ba453c9a8639c442852c748156a9fe6f6530e60101cbb
+    home: https://graylog.org
+    icon: https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.1.8/graylog2-web-interface/public/images/favicon.png
+    keywords:
+    - SIEM
+    - API
+    - Triage
+    - Security
+    - Observability
+    - Search
+    - Logs
+    - Monitoring
+    - Troubleshooting
+    - Events
+    - Alerts
+    name: graylog
+    sources:
+    - https://github.com/graylog2
+    type: application
+    urls:
+    - https://github.com/Graylog2/graylog-helm/releases/download/graylog-2.1.0/graylog-2.1.0.tgz
+    version: 2.1.0
+  - annotations:
+      artifacthub.io/category: security
+      artifacthub.io/changes: |
         - kind: changed
           description: "graylog: `appVersion` moves from 7.0 to 7.1.8. `graylog.image.tag` and `datanode.image.tag` default to `appVersion`, so upgrading moves the running Graylog and Data Node images unless you pin both tags"
           links:
@@ -330,4 +405,4 @@ entries:
     urls:
     - https://github.com/Graylog2/graylog-helm/releases/download/graylog-0.1.0/graylog-0.1.0.tgz
     version: 0.1.0
-generated: "2026-08-27T21:51:41.386104255Z"
+generated: "2026-10-01T23:34:00.507203215Z"
