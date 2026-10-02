@@ -532,3 +532,61 @@ tests:
       - equal:
           path: spec.template.metadata.labels['graylog-datanode-role-remote-cluster-client']
           value: "true"
+
+  - it: labels the StatefulSet itself with each role, so it can be selected by role
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.roles: [cluster_manager, data]
+    asserts:
+      - equal:
+          path: metadata.labels['graylog-datanode-role-cluster-manager']
+          value: "true"
+      - equal:
+          path: metadata.labels['graylog-datanode-role-data']
+          value: "true"
+      - equal:
+          path: metadata.labels['graylog-datanode-roles']
+          value: cluster_manager.data
+      - notExists:
+          path: metadata.labels['graylog-datanode-role-ingest']
+
+  - it: labels pods with their group on a single-group install, without touching the selector
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels['graylog-datanode-group']
+          value: default
+      - notExists:
+          path: spec.selector.matchLabels['graylog-datanode-group']
+
+  - it: labels pods with the extra group's name
+    template: workload/statefulsets/datanode.yaml
+    set:
+      datanode.extraNodeGroups:
+        hot: {}
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels['graylog-datanode-group']
+          value: hot
+        documentIndex: 1
+
+  - it: labels the group's ConfigMap with its roles
+    template: config/datanode.yaml
+    set:
+      datanode.roles: [cluster_manager, data]
+    asserts:
+      - equal:
+          path: metadata.labels['graylog-datanode-role-data']
+          value: "true"
+      - notExists:
+          path: metadata.labels['graylog-datanode-role-ingest']
+
+  - it: labels each per-group PDB with that group's roles
+    template: policy/pdb/datanode.yaml
+    set:
+      datanode.podDisruptionBudget.consolidated: false
+      datanode.roles: [cluster_manager]
+    asserts:
+      - equal:
+          path: metadata.labels['graylog-datanode-role-cluster-manager']
+          value: "true"

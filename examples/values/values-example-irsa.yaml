@@ -1,0 +1,33 @@
+# Example: IAM Roles for Service Accounts (IRSA) on EKS.
+#
+# Annotating the ServiceAccount with an IAM role ARN makes EKS inject
+# AWS_ROLE_ARN and a projected web identity token into the pods. The AWS SDK
+# resolves credentials from them, so no access keys appear in the values or in
+# a Secret.
+#
+# Prerequisites:
+#   - The cluster has an IAM OIDC provider.
+#   - The role's trust policy allows
+#       system:serviceaccount:<namespace>:<serviceaccount name>
+#     The ServiceAccount name is <fullname>-sa. Run `helm template` and look
+#     for kind: ServiceAccount to see the exact name for your release.
+#   - The role's policy grants access to the buckets you use.
+#
+# Leave graylog.config.archive.useGlobalS3Credentials off, which is the default.
+# Static keys in the environment win over the web identity token, so turning it
+# on makes archiving authenticate as the wrong principal without logging it.
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/graylog-irsa"
+
+# By default the Data Node pods share the ServiceAccount above, and so share
+# its role. A pod carries one role, so give the Data Node its own account when
+# it needs different permissions than the Graylog server.
+#
+# datanode:
+#   serviceAccount:
+#     create: true
+#     annotations:
+#       eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/graylog-datanode-irsa"

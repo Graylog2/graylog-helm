@@ -438,6 +438,13 @@ it, since shard data rebuilds from replicas.
 helm upgrade graylog graylog/graylog -n graylog --set datanode.replicas=5 --reuse-values
 ```
 
+> [!WARNING]
+> Scaling Data Nodes, up or down, restarts the Data Node pods, because every pod lists all the others in its
+> discovery seed hosts. Scaling down also needs the departing nodes drained first, or their shards go offline.
+> Before you scale or upgrade a production cluster, follow
+> [Safe Datanode Rollouts](../../docs/datanode/datanode-safe-updates.md). It covers the run books for rolling
+> one pod at a time, and it matters most with multiple node groups.
+
 ### Data Node Replicas and Data Redundancy
 
 > [!IMPORTANT]
@@ -1905,7 +1912,7 @@ The listener is configured by attributes **on that input**, not through `server.
 | `ingress.forwarder.configChannel.hosts[0].paths[0].pathType`  | Path matching type.                             | `ImplementationSpecific` |
 | `ingress.forwarder.configChannel.tls`                         | TLS configuration.                              | `[]`                     |
 
-See [`examples/forwarder-ingress.yaml`](../../examples/forwarder-ingress.yaml) for a worked AWS ALB
+See [`examples/values/values-example-forwarder-ingress.yaml`](../../examples/values/values-example-forwarder-ingress.yaml) for a worked AWS ALB
 configuration.
 
 ## MongoDB
