@@ -1,0 +1,51 @@
+# Example: run Graylog, the Data Node and MongoDB on dedicated nodes.
+#
+# A nodeSelector pulls the pods onto labeled nodes. A toleration lets them onto
+# nodes tainted to keep everything else off. Use both to reserve a node pool.
+#
+# On Karpenter, put the labels and taints on the NodePool:
+#
+#   spec:
+#     template:
+#       metadata:
+#         labels:
+#           node-tier: graylog-data
+#       spec:
+#         taints:
+#           - key: dedicated
+#             value: graylog-data
+#             effect: NoSchedule
+#
+# Replace the label key, values and taint with your own.
+
+graylog:
+  nodeSelector:
+    node-tier: graylog-app
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: graylog-app
+      effect: NoSchedule
+
+# Every Data Node group inherits these, so they apply to all groups. A group
+# that sets its own nodeSelector merges key by key, and one that sets its own
+# tolerations replaces the whole list.
+datanode:
+  nodeSelector:
+    node-tier: graylog-data
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: graylog-data
+      effect: NoSchedule
+
+mongodb:
+  communityResource:
+    enabled: true
+  nodeSelector:
+    node-tier: graylog-data
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: graylog-data
+      effect: NoSchedule

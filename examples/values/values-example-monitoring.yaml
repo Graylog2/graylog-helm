@@ -1,0 +1,30 @@
+# Example: scrape Graylog's Prometheus exporter with the Prometheus Operator.
+#
+# Graylog's built-in exporter listens on 127.0.0.1:9833 inside the pod, where
+# nothing can scrape it. `expose` binds it to 0.0.0.0 and publishes the metrics
+# port on the Service. The ServiceMonitor then points Prometheus at it.
+#
+# Prerequisite: the Prometheus Operator CRDs (ServiceMonitor) are installed.
+#
+# This covers the Graylog server, not the Data Node.
+#
+# The exporter has no authentication once exposed. Restrict who can reach port
+# 9833 with a NetworkPolicy. A policy that selects the Graylog pods denies every
+# port it does not list, so allow the web, input and cluster ports as well.
+
+graylog:
+  service:
+    metrics:
+      enabled: true
+      expose: true
+
+  serviceMonitor:
+    # The chart fails the render if this is on without `expose` above.
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    # Most installs select ServiceMonitors by label. Match your Prometheus
+    # (check its serviceMonitorSelector), for example the Helm release name of
+    # kube-prometheus-stack.
+    labels:
+      release: kube-prometheus-stack

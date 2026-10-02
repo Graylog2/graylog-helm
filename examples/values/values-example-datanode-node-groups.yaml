@@ -1,0 +1,82 @@
+# Example: a recommended Data Node layout with dedicated node groups.
+#
+# Three groups, each its own StatefulSet:
+#   primary (cluster_manager)  coordinates the cluster, holds no shards
+#   data                       holds index shards
+#   search                     serves searchable snapshots (warm tier)
+#
+# Set up the layout before the first install. Storage size, storage class,
+# group names and the release name are immutable StatefulSet fields, and
+# changing them later means recreating the StatefulSet. See
+# docs/datanode/datanode-safe-updates.md before you change a running cluster.
+#
+# Needs a Secret with the S3 credentials, see values-example-s3-existing-secret.yaml.
+
+global:
+  s3:
+    existingSecret: graylog-s3-secret
+
+graylog:
+  config:
+    # The default is 0 replicas, so restarting the one node that holds a shard
+    # makes it unavailable. This applies to new index sets only. Raise existing
+    # ones under System / Indices.
+    elasticsearch_replicas: 1
+  # If the cluster goes red, Graylog journals to disk. Keep the volume and
+  # never delete it on scale in.
+  persistence:
+    enabled: true
+    size: 50Gi
+    retentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
+
+datanode:
+  # Primary group. Unset roles would give it every role, including data.
+  replicas: 3
+  roles: [cluster_manager]
+
+  config:
+    # The search role needs a snapshot repository. The endpoint is required
+    # even on AWS, and it is what makes the Data Node use global.s3.
+    s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+    s3ClientDefaultRegion: "us-east-1"
+    s3ClientDefaultProtocol: "https"
+    s3ClientDefaultPathStyleAccess: "false"
+
+  # One PodDisruptionBudget for the whole fleet, so a drain never takes more
+  # than one Data Node pod out at a time, whichever group it belongs to.
+  podDisruptionBudget:
+    enabled: true
+    consolidated: true
+    maxUnavailable: 1
+
+  # Keep false. Reloader restarts each group's StatefulSet on its own, which can
+  # roll two groups at once. Roll groups yourself with helm upgrade.
+  reloader:
+    autoReload: false
+
+  # Do not set updateStrategy.rollingUpdate.partition anywhere in your values.
+  # The run books patch it to freeze and release groups, and Helm resets it if
+  # your values own it.
+
+  extraNodeGroups:
+    data:
+      replicas: 3
+      roles: [data]
+      persistence:
+        data:
+          # A replica doubles the storage an index uses. Size for it, with room
+          # for shards to move during a rollout.
+          size: 100Gi
+
+    search:
+      replicas: 2
+      roles: [search]
+      config:
+        # Allocated on the same volume as shard data, so keep the volume
+        # comfortably larger than this.
+        nodeSearchCacheSize: "20gb"
+      persistence:
+        data:
+          size: 50Gi

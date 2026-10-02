@@ -1,8 +1,8 @@
 # Data Node Roles & Node Groups
 
 By default, every Graylog Data Node carries all OpenSearch roles. In larger clusters
-you may want to dedicate groups of Data Nodes to specific responsibilities. For example,
-a dedicated `search` (warm) tier, or dedicated cluster-manager nodes.
+you may want to dedicate groups of Data Nodes to specific responsibilities, such as
+a dedicated `search` (warm) tier or dedicated cluster-manager nodes.
 
 This chart supports dedicated groups of same-role nodes through **node groups**.
 
@@ -19,7 +19,7 @@ A Data Node's roles map directly to OpenSearch node roles. Valid values:
 | `search`                | Searchable snapshots / warm tier (requires an object store repository). |
 
 If you leave roles unset, the Data Node uses its default set
-(`cluster_manager,data,ingest,remote_cluster_client`, plus `search` is added automatically
+(`cluster_manager,data,ingest,remote_cluster_client`, plus `search`, which is added automatically
 when a snapshot repository is configured).
 
 ## Node Groups: the primary group and extra groups
