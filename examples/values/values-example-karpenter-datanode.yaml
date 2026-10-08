@@ -1,0 +1,36 @@
+# Example: keep Karpenter from disrupting Data Node pods that hold data (EKS).
+#
+# Karpenter consolidates, replaces and expires nodes on its own. It evicts the
+# pods on them without draining OpenSearch shards first, which can turn the
+# cluster yellow or red. The karpenter.sh/do-not-disrupt annotation stops
+# Karpenter from voluntarily disrupting a node while the pod runs.
+#
+# The annotation goes on the node groups that carry the `data` role, not on
+# datanode.podAnnotations. Group values inherit from datanode.*, so a top-level
+# annotation would also land on the cluster manager group.
+#
+# Trade-off: a node with one of these pods is never consolidated or rotated by
+# Karpenter. Replace it yourself with the run books in docs/datanode/.
+
+datanode:
+  # Primary group. Without roles it takes the default set, which includes
+  # `data`, so give it only the cluster manager role here.
+  replicas: 3
+  roles: [cluster_manager]
+
+  extraNodeGroups:
+    data:
+      replicas: 3
+      roles: [data]
+      persistence:
+        data:
+          size: 50Gi
+      podAnnotations:
+        karpenter.sh/do-not-disrupt: "true"
+
+    # Any other group whose roles include `data` needs the same annotation.
+    # data-ingest:
+    #   replicas: 3
+    #   roles: [data, ingest]
+    #   podAnnotations:
+    #     karpenter.sh/do-not-disrupt: "true"

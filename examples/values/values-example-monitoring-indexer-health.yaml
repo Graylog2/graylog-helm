@@ -1,0 +1,168 @@
+# Example: export OpenSearch cluster health as Prometheus metrics.
+#
+# Graylog's exporter has no indexer health metric. The REST API does:
+#
+#   GET /api/system/indexer/cluster/health
+#   {"status":"red","shards":{"active":20,"initializing":0,"relocating":0,"unassigned":8}}
+#
+# This runs prometheus-community/json_exporter against that endpoint and scrapes
+# it with a ServiceMonitor. It runs one replica, not a sidecar, because cluster
+# health is cluster-wide and needs polling once. Everything is in extraObjects,
+# so the chart itself does not change. values-example-extra-objects.yaml has the
+# same objects with a longer explanation of extraObjects and the metrics.
+#
+# Prerequisites:
+#   - The Prometheus Operator CRDs (ServiceMonitor) are installed.
+#   - A Secret holding a Graylog access token. Create it yourself, with `create`
+#     and not `apply`, because apply copies the manifest in cleartext into the
+#     last-applied-configuration annotation. A token authenticates as
+#     username=<token>, password=token.
+#
+#       kubectl -n <namespace> create secret generic graylog-api-token \
+#         --from-literal=username='<graylog access token>' \
+#         --from-literal=password='token'
+#
+# Metrics: graylog_indexer_cluster_health_status, with a `status` label, and
+# graylog_indexer_cluster_health_{active,initializing,relocating,unassigned}_shards.
+
+extraObjects:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: '{{ include "graylog.fullname" . }}-json-exporter'
+    data:
+      config.yml: |
+        modules:
+          graylog_indexer_health:
+            headers:
+              Accept: application/json
+            http_client_config:
+              basic_auth:
+                username_file: /etc/graylog-api/username
+                password_file: /etc/graylog-api/password
+            metrics:
+              - name: graylog_indexer_cluster_health
+                type: object
+                help: "Graylog indexer (OpenSearch) cluster health via /api/system/indexer/cluster/health"
+                path: '{ $ }'
+                labels:
+                  status: '{ .status }'
+                values:
+                  status: 1
+                  active_shards: '{ .shards.active }'
+                  initializing_shards: '{ .shards.initializing }'
+                  relocating_shards: '{ .shards.relocating }'
+                  unassigned_shards: '{ .shards.unassigned }'
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: '{{ include "graylog.fullname" . }}-json-exporter'
+      labels:
+        app.kubernetes.io/component: json-exporter
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: json-exporter
+          app.kubernetes.io/instance: '{{ .Release.Name }}'
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/component: json-exporter
+            app.kubernetes.io/instance: '{{ .Release.Name }}'
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: json-exporter
+              image: quay.io/prometheuscommunity/json-exporter:v0.8.0
+              args:
+                - --config.file=/config/config.yml
+              ports:
+                - name: http
+                  containerPort: 7979
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: graylog-api
+                  mountPath: /etc/graylog-api
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "32Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "96Mi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              livenessProbe:
+                httpGet:
+                  # json_exporter has no /health route. /metrics is cheap.
+                  path: /metrics
+                  port: http
+                periodSeconds: 30
+          volumes:
+            - name: config
+              configMap:
+                name: '{{ include "graylog.fullname" . }}-json-exporter'
+            - name: graylog-api
+              secret:
+                secretName: graylog-api-token
+
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: '{{ include "graylog.fullname" . }}-json-exporter'
+      labels:
+        app.kubernetes.io/component: json-exporter
+    spec:
+      type: ClusterIP
+      selector:
+        app.kubernetes.io/component: json-exporter
+        app.kubernetes.io/instance: '{{ .Release.Name }}'
+      ports:
+        - name: http
+          port: 7979
+          targetPort: http
+          protocol: TCP
+
+  - apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    metadata:
+      name: '{{ include "graylog.fullname" . }}-json-exporter'
+      labels:
+        # Match your Prometheus's serviceMonitorSelector.
+        release: kube-prometheus-stack
+    spec:
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: json-exporter
+      namespaceSelector:
+        matchNames:
+          - '{{ .Release.Namespace }}'
+      endpoints:
+        - port: http
+          # json_exporter proxies: it fetches ?target= and converts the JSON.
+          path: /probe
+          params:
+            module:
+              - graylog_indexer_health
+            target:
+              - 'http://{{ include "graylog.service.name" . }}:{{ include "graylog.service.port.app" . }}/api/system/indexer/cluster/health'
+          interval: 30s
+          scrapeTimeout: 10s
+          relabelings:
+            # Without this every series is labelled with the exporter pod, but
+            # the data describes the Graylog cluster.
+            - targetLabel: instance
+              replacement: '{{ include "graylog.fullname" . }}'

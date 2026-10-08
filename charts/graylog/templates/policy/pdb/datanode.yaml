@@ -28,7 +28,7 @@ kind: PodDisruptionBudget
 metadata:
   name: {{ .pdbName }}
   namespace: {{ $.Release.Namespace }}
-  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .podDisruptionBudget.labels "fixed" $fixed "indent" 2) }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" .podDisruptionBudget.labels "fixed" (merge (include "graylog.datanode.roleLabels" . | fromYaml) $fixed) "indent" 2) }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" .podDisruptionBudget.annotations "indent" 2) }}
 spec:
   {{- include "graylog.pdb.availability" (dict "pdb" .podDisruptionBudget "default" 3) | nindent 2 }}
