@@ -1,8 +1,8 @@
 # Data Node Roles & Node Groups
 
 By default, every Graylog Data Node carries all OpenSearch roles. In larger clusters
-you may want to dedicate groups of Data Nodes to specific responsibilities. For example,
-a dedicated `search` (warm) tier, or dedicated cluster-manager nodes.
+you may want to dedicate groups of Data Nodes to specific responsibilities, such as
+a dedicated `search` (warm) tier or dedicated cluster-manager nodes.
 
 This chart supports dedicated groups of same-role nodes through **node groups**.
 
@@ -19,7 +19,7 @@ A Data Node's roles map directly to OpenSearch node roles. Valid values:
 | `search`                | Searchable snapshots / warm tier (requires an object store repository). |
 
 If you leave roles unset, the Data Node uses its default set
-(`cluster_manager,data,ingest,remote_cluster_client`, plus `search` is added automatically
+(`cluster_manager,data,ingest,remote_cluster_client`, plus `search`, which is added automatically
 when a snapshot repository is configured).
 
 ## Node Groups: the primary group and extra groups
@@ -32,7 +32,7 @@ when a snapshot repository is configured).
 
 By default each group gets its own PDB, scoped to that group's pods only. Set
 `datanode.podDisruptionBudget.consolidated=true` to render a single PDB spanning the
-primary group and every extra group instead — useful when `minAvailable` should protect
+primary group and every extra group instead. Use it when `minAvailable` should protect
 the Data Node fleet as a whole rather than per role/tier. That one PDB uses the top-level
 `datanode.podDisruptionBudget.minAvailable`/`annotations`/`labels`; per-group overrides
 are ignored while it's on.
@@ -50,7 +50,7 @@ span every group, so they form a single cluster.
 > [!WARNING]
 > If [Stakater Reloader](https://github.com/stakater/Reloader) is running in your cluster,
 > it watches each group's ConfigMap/Secret and restarts that group's StatefulSet
-> independently the moment they change — with no coordination between groups. That can roll
+> independently the moment they change, with no coordination between groups. That can roll
 > a pod in two different node groups (e.g. the primary group and a `data` group) at the same
 > time, which no PodDisruptionBudget here prevents: a PDB only governs the Eviction API (node
 > drains, autoscaler/Karpenter consolidation, `kubectl drain`), not a StatefulSet controller
