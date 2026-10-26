@@ -762,6 +762,14 @@ datanode:
     # the render-time guard; the Data Node still applies its own check, so
     # setting this without a real repository produces a crash loop.
     snapshotRepositoryExternal: false
+    # s3ClientDefaultCredentialsExternal lets s3ClientDefaultEndpoint stand
+    # alone, with no keys and no Secret. It is implied when the Data Node
+    # ServiceAccount carries an eks.amazonaws.com/role-arn annotation in values.
+    # Set it for an IRSA account the chart cannot see, such as an existing
+    # ServiceAccount named by nameOverride. It only relaxes the render-time
+    # guard; a Data Node build that still demands static keys will refuse to
+    # start.
+    s3ClientDefaultCredentialsExternal: false
     s3ClientDefaultRegion: "us-east-2"
     s3ClientDefaultProtocol: "http"
     s3ClientDefaultPathStyleAccess: "true"

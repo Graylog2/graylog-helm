@@ -182,6 +182,57 @@ tests:
           errorPattern: "needs an endpoint and both credentials"
         template: workload/statefulsets/datanode.yaml
 
+  - it: accepts an endpoint on its own when credentials are external
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultCredentialsExternal: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: workload/statefulsets/datanode.yaml
+
+  - it: accepts an endpoint on its own when the shared ServiceAccount has an IRSA annotation
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      serviceAccount.annotations:
+        eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/graylog"
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: workload/statefulsets/datanode.yaml
+
+  - it: accepts an endpoint on its own when the Data Node ServiceAccount has an IRSA annotation
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.serviceAccount.create: true
+      datanode.serviceAccount.annotations:
+        eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/graylog-dn"
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: workload/statefulsets/datanode.yaml
+
+  - it: ignores the shared ServiceAccount annotation once the Data Node has its own account
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.serviceAccount.create: true
+      serviceAccount.annotations:
+        eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/graylog"
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs an endpoint and both credentials"
+        template: workload/statefulsets/datanode.yaml
+
+  - it: still rejects a lone access key when credentials are external
+    set:
+      datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"
+      datanode.config.s3ClientDefaultAccessKey: "ak"
+      datanode.config.s3ClientDefaultCredentialsExternal: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs an endpoint and both credentials"
+        template: workload/statefulsets/datanode.yaml
+
   - it: accepts all three S3 client settings together
     set:
       datanode.config.s3ClientDefaultEndpoint: "https://s3.us-east-1.amazonaws.com"

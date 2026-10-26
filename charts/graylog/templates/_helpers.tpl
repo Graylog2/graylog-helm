@@ -174,6 +174,21 @@ MongoDB service account name
 {{- end }}
 
 {{/*
+Renders "true" when the ServiceAccount the Datanode pods run on carries an
+eks.amazonaws.com/role-arn annotation, so IRSA supplies its AWS credentials.
+Follows the same fallback as graylog.datanode.serviceAccountName. An externally
+managed account is only seen if its annotations are also listed in values.
+*/}}
+{{- define "graylog.datanode.irsa" }}
+{{- $sa := .Values.datanode.serviceAccount | default dict }}
+{{- $annotations := .Values.serviceAccount.annotations | default dict }}
+{{- if or $sa.create $sa.nameOverride }}
+{{- $annotations = $sa.annotations | default dict }}
+{{- end }}
+{{- if index $annotations "eks.amazonaws.com/role-arn" }}true{{- end }}
+{{- end }}
+
+{{/*
 Datanode service account name.
 
 Falls back to the shared Graylog service account when datanode.serviceAccount is
