@@ -36,7 +36,9 @@ datanode:
 mongodb:
   replicas: 1
   arbiters: 0
-  version: "8.0.23"
+  # Matches the chart default. 8.0.x refuses to start on Linux kernel 6.19
+  # through 7.0.13 (SERVER-121912), which includes current GitHub runners.
+  version: "7.0.25"
   # The chart defaults are sized for a production replica set (2Gi of headroom
   # for mongod). A single-member CI replica set holds almost no data, so all
   # three blocks are shrunk here. All three are needed: a pod reserves
