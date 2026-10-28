@@ -708,6 +708,10 @@
             "s3ClientDefaultRegion": { "type": "string" },
             "s3ClientDefaultProtocol": { "type": "string" },
             "s3ClientDefaultPathStyleAccess": { "type": "string" },
+            "s3ClientDefaultCredentialsExternal": {
+              "type": "boolean",
+              "description": "Lets s3ClientDefaultEndpoint stand alone. Implied by an eks.amazonaws.com/role-arn annotation on the Data Node ServiceAccount; set it for an IRSA account the chart cannot see. Relaxes the render-time guard only."
+            },
             "snapshotRepositoryExternal": {
               "type": "boolean",
               "description": "Declare that a snapshot repository is configured by a route the chart cannot model, such as GRAYLOG_DATANODE_PATH_REPO via extraEnv. Relaxes the render-time guard only; the Data Node applies its own check at startup."

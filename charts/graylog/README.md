@@ -1675,6 +1675,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | `datanode.config.s3ClientDefaultRegion`                | Default S3 client region.                       | `"us-east-2"`     |
 | `datanode.config.s3ClientDefaultProtocol`              | Default S3 client protocol.                     | `"http"`          |
 | `datanode.config.s3ClientDefaultPathStyleAccess`       | Enable path-style access for S3 client.         | `"true"`          |
+| `datanode.config.s3ClientDefaultCredentialsExternal`   | Lets `s3ClientDefaultEndpoint` stand alone. Implied by an `eks.amazonaws.com/role-arn` annotation on the Data Node ServiceAccount; set it for an IRSA account the chart cannot see. Relaxes the render guard only. | `false` |
 | `datanode.config.snapshotRepositoryExternal`           | Declare that a snapshot repository is configured by a route the chart cannot see, such as `GRAYLOG_DATANODE_PATH_REPO` via `extraEnv`. Relaxes the render guard only; the Data Node still applies its own check. | `false` |
 | `datanode.image.repository`                            | Datanode image repository.                      | `""`              |
 | `datanode.image.tag`                                   | Datanode image tag.                             | `""`              |
@@ -1819,6 +1820,12 @@ datanode:
 > On EKS the IRSA webhook injects `AWS_ROLE_ARN` and the projected token when the pod is **created**.
 > Annotating a service account does nothing to pods that are already running, and there is no
 > warning. Restart the workload afterwards and confirm the variable is present.
+
+With the `eks.amazonaws.com/role-arn` annotation on the Data Node's ServiceAccount (its own
+`datanode.serviceAccount.annotations`, or the top-level `serviceAccount.annotations` when it shares
+that account), the endpoint alone satisfies the guard, with no keys. For an existing ServiceAccount
+whose annotations are not in values, set `s3ClientDefaultCredentialsExternal: true` instead. This only relaxes the render guard; a Data Node build that still requires
+static keys will refuse to start.
 
 > [!WARNING]
 > An IRSA role on the Data Node does **not** reach its snapshot repository. As of Data Node 7.1 with
