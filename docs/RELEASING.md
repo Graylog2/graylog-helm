@@ -96,12 +96,46 @@ enough to avoid it.
 | Field | Meaning | Owner |
 |---|---|---|
 | `version` | The chart version, SemVer | release-please |
-| `appVersion` | The bundled Graylog version | a maintainer, in an ordinary pull request |
+| `appVersion` | The bundled Graylog version | the `Bump Graylog version` workflow for patch releases, a maintainer for anything else |
 
 `graylog.image.tag` and `datanode.image.tag` default to `appVersion`, so changing
 it moves the running images. When you change it, update two more fields in the
 same `Chart.yaml`: the image tags in the `artifacthub.io/images` annotation, and
 the version tag in the `icon:` URL.
+
+### Automatic patch bumps
+
+`.github/workflows/bump-graylog-version.yaml` runs every night at 06:17 UTC and
+can be started by hand. It looks on Docker Hub for the newest `X.Y.Z` tag in the
+current `appVersion` line (7.1.x while `appVersion` is 7.1.8). It proposes a
+version only when `graylog/graylog`, `graylog/graylog-enterprise` and
+`graylog/graylog-datanode` all have it.
+
+When there is one, it opens a pull request on `bot/graylog-<version>` titled
+`deps(graylog): Bump default Graylog version to <version>`. The pull request
+changes `appVersion`, both image tags in the `artifacthub.io/images` annotation
+and the icon URL, and nothing else. The workflow fails instead of opening the
+pull request if any of those four did not change or if more than five lines moved.
+
+`deps` is a visible changelog section in `release-please-config.json`, so merging
+the pull request makes release-please open a patch release pull request. The
+`Dependencies` heading in the changelog lists the bump. This was checked against
+the release-please 17 source, not against a live run, so confirm it on the first
+merged bump.
+
+A few things to know:
+
+- New minor and major lines (7.2.0, 8.0.0) are never picked up. Run the workflow
+  by hand and set `line` to `7.2` to track one, or edit `appVersion` yourself.
+- A closed bump pull request is not reopened. Delete the branch only if you want
+  that version proposed again.
+- Pull requests created with `GITHUB_TOKEN` do not start other workflows. Add a
+  `BUMP_PR_TOKEN` repository secret (a fine-grained token with contents and pull
+  request write access, or a GitHub App token) so `lint-and-test` runs on the
+  bump. Without it, close and reopen the pull request to start CI.
+- Repository settings must allow Actions to create pull requests.
+- Read the release notes for the new version before merging. The workflow does
+  not.
 
 ## Cutting the release
 

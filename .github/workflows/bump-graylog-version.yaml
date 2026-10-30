@@ -1,8 +1,9 @@
 name: Bump Graylog version
 
 # Opens a pull request when a newer Graylog patch release is on Docker Hub.
-# Chart.yaml appVersion is the only place the default version lives, so that is
-# the only line the pull request changes.
+# The pull request edits four places in charts/graylog/Chart.yaml, the ones
+# docs/RELEASING.md lists for an appVersion change: appVersion, both image tags
+# in the artifacthub.io/images annotation, and the version in the icon URL.
 #
 # The pull request uses the deps type, which release-please-config.json lists as
 # a visible changelog section, so each merged bump releases a chart patch.
@@ -106,6 +107,38 @@ jobs:
           branch="bot/graylog-${LATEST}"
           title="deps(graylog): Bump default Graylog version to ${LATEST}"
 
+          # Edits the text rather than going through yq, which would reflow the
+          # folded icon URL. The icon value breaks across two lines in the middle
+          # of the version ("7.1\" then ".8/..."), so it needs its own pattern.
+          bump_chart_version() {
+            local from="$1" to="$2" from_line="${1%.*}" to_line="${2%.*}"
+            sed -i -E \
+              -e "s|^appVersion: \"${from}\"|appVersion: \"${to}\"|" \
+              -e "s|(image: \"graylog/graylog(-datanode)?:)${from}\"|\\1${to}\"|" \
+              "$CHART_FILE"
+            FROM_LINE="$from_line" FROM_PATCH="${from##*.}" \
+            TO_LINE="$to_line" TO_PATCH="${to##*.}" \
+              perl -0pi -e 's|tags/\Q$ENV{FROM_LINE}\E\\\n(\s*)\.\Q$ENV{FROM_PATCH}\E/|tags/$ENV{TO_LINE}\\\n$1.$ENV{TO_PATCH}/|' "$CHART_FILE"
+
+            # Every place the old version lived must now hold the new one.
+            local icon images
+            icon="$(yq e '.icon' "$CHART_FILE")"
+            images="$(yq e '.annotations."artifacthub.io/images"' "$CHART_FILE")"
+            if [[ "$(yq e '.appVersion' "$CHART_FILE")" != "$to" \
+              || "$icon" != *"/tags/${to}/"* \
+              || "$(grep -c "graylog/graylog:${to}\"\|graylog/graylog-datanode:${to}\"" <<<"$images")" != "2" ]]; then
+              echo "::error::could not update every version reference in $CHART_FILE"
+              git diff -- "$CHART_FILE"
+              exit 1
+            fi
+            # Nothing else in the file may have moved.
+            if [[ "$(git diff --numstat -- "$CHART_FILE" | cut -f1)" -gt 5 ]]; then
+              echo "::error::more lines changed in $CHART_FILE than expected"
+              git diff -- "$CHART_FILE"
+              exit 1
+            fi
+          }
+
           # A closed pull request on the same branch means someone declined this
           # version. Do not reopen it every night.
           existing="$(gh pr list --head "$branch" --state all --json number --jq 'length')"
@@ -118,14 +151,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
 
-          yq e -i ".appVersion = \"${LATEST}\"" "$CHART_FILE"
-          # yq can reflow comments and spacing. Fail rather than ship more than
-          # the one line.
-          if [[ "$(git diff --numstat -- "$CHART_FILE" | cut -f1,2)" != $'1\t1' ]]; then
-            echo "::error::expected a one line change in $CHART_FILE"
-            git diff -- "$CHART_FILE"
-            exit 1
-          fi
+          bump_chart_version "$CURRENT" "$LATEST"
 
           git commit -am "$title"
           git push origin "$branch"
@@ -134,8 +160,9 @@ jobs:
           Graylog ${LATEST} is on Docker Hub for \`graylog/graylog\`,
           \`graylog/graylog-enterprise\` and \`graylog/graylog-datanode\`.
 
-          This changes \`appVersion\` in \`charts/graylog/Chart.yaml\` from ${CURRENT} to ${LATEST}.
-          The chart's default image tag follows it.
+          This changes \`appVersion\` in \`charts/graylog/Chart.yaml\` from ${CURRENT} to ${LATEST},
+          along with the image tags in the ArtifactHub annotation and the icon URL.
+          The chart's default image tag follows \`appVersion\`.
 
           Before merging, check the [${LATEST} release notes](https://go2docs.graylog.org/current/downloading_and_installing_graylog/upgrading_graylog.htm)
           for anything that needs a chart change.
