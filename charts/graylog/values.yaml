@@ -980,7 +980,7 @@ datanode:
   # extraNodeGroups declares additional Datanode node groups, keyed by name. Each
   # entry renders its own StatefulSet, ConfigMap and PDB, inherits every datanode.*
   # value above and overrides only what it declares. See
-  # docs/datanode-node-roles.md.
+  # docs/datanode/datanode-node-roles.md.
   extraNodeGroups: {}
   #  search:
   #    roles: [search]

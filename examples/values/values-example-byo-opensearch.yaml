@@ -1,0 +1,45 @@
+# Example: Bring your own OpenSearch.
+#
+# Turns off the bundled Data Node and points Graylog at an OpenSearch cluster
+# you run yourself, here one created by the OpenSearch Kubernetes Operator.
+# See docs/bring-your-own-opensearch.md for the full explanation.
+#
+# Prerequisites:
+#   - The OpenSearch version is in the Graylog compatibility matrix. For Graylog
+#     7.1 that is 2.x up to 2.19.x. OpenSearch 3.0+ is not supported.
+#   - The cluster sets action.auto_create_index: false.
+#   - The credential Secret and the CA Secret exist in the release namespace
+#     before you install or upgrade. The chart reads the credential Secret with
+#     Helm's lookup, so `helm template` and `--dry-run` render the host URIs
+#     without credentials. That is expected.
+#
+# The operator names these Secrets <cluster name>-admin-password and
+# <cluster name>-ca. Replace the Secret names and `<namespace>` below with yours. To check the Secrets:
+#
+#   kubectl -n <namespace> get secret my-opensearch-admin-password my-opensearch-ca
+#
+# MongoDB is still required. This file keeps the chart's MongoDB, which needs
+# the MongoDB operator installed. To bring your own MongoDB as well, see
+# docs/bring-your-own-mongo.md.
+#
+# Install:
+#   helm install graylog graylog/graylog -n <namespace> \
+#     -f examples/values/values-example-byo-opensearch.yaml
+
+datanode:
+  enabled: false
+
+opensearch:
+  enabled: true
+  # REST URIs of the OpenSearch nodes. Leave credentials out, the chart adds them.
+  hosts:
+    - https://my-opensearch.<namespace>.svc.cluster.local:9200
+  auth:
+    existingSecret: my-opensearch-admin-password
+    usernameKey: username
+    passwordKey: password
+  tls:
+    enabled: true
+    # Secret and key holding the CA that signed the OpenSearch HTTP layer.
+    caSecret: my-opensearch-ca
+    caKey: ca.crt

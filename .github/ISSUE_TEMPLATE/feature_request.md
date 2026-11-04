@@ -7,14 +7,14 @@ assignees: ''
 
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+## Problem
+_What are you trying to do that the chart does not support, or makes hard? Example: "I need to set annotations on the Data Node PVCs and can't."_
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+## Proposed solution
+_What you would like the chart to do. If it adds a value, show the `values.yaml` you would write._
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+## Alternatives considered
+_Other approaches you tried or ruled out, including workarounds such as `extraObjects` or post-render patches._
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+## Additional context
+_Anything else that helps, such as logs, links or screenshots._
