@@ -513,6 +513,41 @@
           "minimum": 1,
           "description": "Seconds Kubernetes allows for shutdown before SIGKILL. Covers the preStop hook and the SIGTERM that follows it."
         },
+        "apiToken": {
+          "type": "object",
+          "description": "Create a Graylog service user and API token, stored in a Kubernetes Secret by a post-install/post-upgrade hook Job.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" },
+            "username": { "type": "string" },
+            "roles": { "type": "array", "items": { "type": "string" } },
+            "tokenName": { "type": "string" },
+            "ttl": { "type": "string", "description": "ISO-8601 duration, e.g. P90D" },
+            "bootstrap": {
+              "type": "object",
+              "properties": {
+                "existingSecret": { "type": "string" },
+                "passwordKey": { "type": "string" }
+              }
+            },
+            "insecureSkipVerify": { "type": "boolean" },
+            "waitSeconds": { "type": "integer", "minimum": 1 },
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": { "type": "string" },
+                "tag": { "type": "string" },
+                "imagePullPolicy": { "type": "string" }
+              }
+            },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+            "resources": { "type": "object" },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
+            "secretLabels": { "type": "object" }
+          }
+        },
         "lifecycle": {
           "type": "object",
           "description": "Lifecycle hooks for the graylog-app container. postStart/preStop are user-supplied; preStopDrain is the chart-managed journal drain.",

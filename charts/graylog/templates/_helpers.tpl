@@ -1190,3 +1190,47 @@ Renders the secrets template once and caches the result for consistent checksums
 {{- end -}}
 {{- index $ "__secretsChecksum" -}}
 {{- end -}}
+{{/*
+API token Secret name (graylog.apiToken)
+*/}}
+{{- define "graylog.apiToken.secretName" -}}
+{{- .Values.graylog.apiToken.secretName | default (include "graylog.fullname" . | printf "%s-api-token") }}
+{{- end }}
+
+{{/*
+Where the API token Job reads the root password from, as a secretKeyRef mapping
+(name, key, and "hookSecret" when the chart must render a hook Secret for it).
+
+  1. graylog.apiToken.bootstrap.existingSecret, when set.
+  2. graylog.config.rootPassword, copied into a hook Secret that lives only for
+     the duration of the Job.
+  3. The plaintext the chart keeps in its backup Secret for a password it
+     generated. Only present when the chart generated the password.
+
+The chart stores only a hash of the root password otherwise, so with
+global.existingSecretName and no bootstrap Secret there is nothing to sign in
+with, and the render fails rather than ship a Job that cannot work.
+*/}}
+{{- define "graylog.apiToken.bootstrap" -}}
+{{- $t := .Values.graylog.apiToken }}
+{{- if $t.bootstrap.existingSecret }}
+name: {{ $t.bootstrap.existingSecret }}
+key: {{ $t.bootstrap.passwordKey }}
+{{- else if .Values.graylog.config.rootPassword }}
+name: {{ include "graylog.fullname" . }}-api-token-bootstrap
+key: GRAYLOG_ROOT_PASSWORD
+hookSecret: true
+{{- else if .Values.global.existingSecretName }}
+{{- fail "graylog.apiToken.enabled=true with global.existingSecretName needs a root password to sign in with, and the chart only stores its hash.\n  Either:\n    Set graylog.apiToken.bootstrap.existingSecret to a Secret holding the root password (key graylog.apiToken.bootstrap.passwordKey)\n    Or set graylog.apiToken.enabled=false." }}
+{{- else }}
+name: {{ include "graylog.backupSecretName" . }}
+key: graylog-root-password
+{{- end }}
+{{- end }}
+
+{{/*
+Hook annotations for the API token objects. Takes (dict "weight" "-5").
+*/}}
+{{- define "graylog.apiToken.hooks" -}}
+{{- dict "helm.sh/hook" "post-install,post-upgrade" "helm.sh/hook-weight" .weight "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" | toYaml }}
+{{- end }}

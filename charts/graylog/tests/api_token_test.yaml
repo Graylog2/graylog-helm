@@ -1,0 +1,270 @@
+suite: graylog API token
+templates:
+  - config/api-token.yaml
+set:
+  graylog.apiToken.roles: [Reader]
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when graylog is disabled
+    set:
+      graylog.enabled: false
+      graylog.apiToken.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders SA, Role, RoleBinding and Job, all as post-install/post-upgrade hooks
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Role
+        documentIndex: 1
+      - isKind:
+          of: RoleBinding
+        documentIndex: 2
+      - isKind:
+          of: Job
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "0"
+        documentIndex: 3
+
+  - it: limits the Role to creating secrets and reading/patching only the token Secret
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: ["secrets"]
+              verbs: ["create"]
+            - apiGroups: [""]
+              resources: ["secrets"]
+              resourceNames: ["graylog-api-token"]
+              verbs: ["get", "patch"]
+        documentIndex: 1
+
+  - it: honours secretName in the Role and the Job
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.secretName: my-token
+    asserts:
+      - equal:
+          path: rules[1].resourceNames[0]
+          value: my-token
+        documentIndex: 1
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRET_NAME
+            value: my-token
+        documentIndex: 3
+
+  - it: signs in with the plaintext in the backup Secret by default
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: graylog-backup-secret
+                key: graylog-root-password
+        documentIndex: 3
+
+  - it: copies graylog.config.rootPassword into a hook Secret when it is set
+    set:
+      graylog.apiToken.enabled: true
+      graylog.config.rootPassword: abcdefghijklmnop
+    asserts:
+      - hasDocuments:
+          count: 5
+      - isKind:
+          of: Secret
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+        documentIndex: 3
+      - matchRegex:
+          path: data.GRAYLOG_ROOT_PASSWORD
+          pattern: "^[A-Za-z0-9+/]+={0,2}$"
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: graylog-api-token-bootstrap
+                key: GRAYLOG_ROOT_PASSWORD
+        documentIndex: 4
+
+  - it: prefers bootstrap.existingSecret over everything else
+    set:
+      graylog.apiToken.enabled: true
+      graylog.config.rootPassword: abcdefghijklmnop
+      graylog.apiToken.bootstrap.existingSecret: root-pw
+      graylog.apiToken.bootstrap.passwordKey: pw
+    asserts:
+      - hasDocuments:
+          count: 4
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: root-pw
+                key: pw
+        documentIndex: 3
+
+  - it: fails with global.existingSecretName and no bootstrap Secret
+    set:
+      graylog.apiToken.enabled: true
+      global.existingSecretName: ext
+      mongodb.communityResource.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: Or set graylog.apiToken.enabled=false
+
+  - it: renders with global.existingSecretName when bootstrap.existingSecret is set
+    set:
+      graylog.apiToken.enabled: true
+      global.existingSecretName: ext
+      mongodb.communityResource.enabled: false
+      graylog.apiToken.bootstrap.existingSecret: root-pw
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: passes the service user, roles, name and ttl to the script
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.username: svc
+      graylog.apiToken.roles: [Reader, Auditor]
+      graylog.apiToken.tokenName: ci
+      graylog.apiToken.ttl: P7D
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVICE_USER
+            value: svc
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVICE_ROLES
+            value: '["Reader","Auditor"]'
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_NAME
+            value: ci
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_TTL
+            value: P7D
+        documentIndex: 3
+
+  - it: targets Graylog over https and can skip verification with TLS on
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.insecureSkipVerify: true
+      graylog.config.tls.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_URL
+            value: https://graylog-svc.graylog.svc.cluster.local:9000
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "-k"
+        documentIndex: 3
+
+  - it: runs the Job unprivileged
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+        documentIndex: 3
+
+  - it: applies user labels and annotations to the Job and global labels everywhere
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.labels:
+        team: sre
+      graylog.apiToken.annotations:
+        note: hi
+      graylog.apiToken.secretLabels:
+        secretonly: "yes"
+      global.commonLabels:
+        env: dev
+    asserts:
+      - equal:
+          path: metadata.labels.team
+          value: sre
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations.note
+          value: hi
+        documentIndex: 3
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name == "SECRET_LABELS")].value
+          pattern: secretonly
+        documentIndex: 3
+
+  - it: fails when roles includes Admin
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.roles: [Admin]
+    asserts:
+      - failedTemplate:
+          errorPattern: non-Admin role

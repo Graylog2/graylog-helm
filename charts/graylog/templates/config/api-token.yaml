@@ -1,0 +1,136 @@
+{{- if and .Values.graylog.enabled .Values.graylog.apiToken.enabled }}
+{{- $t := .Values.graylog.apiToken }}
+{{- if has "Admin" $t.roles }}
+{{- fail "graylog.apiToken.roles cannot include Admin: Graylog refuses to assign the Admin role to a service account.\n  Set graylog.apiToken.roles to a non-Admin role that allows the endpoints your consumers call." }}
+{{- end }}
+{{- $name := printf "%s-api-token" (include "graylog.fullname" .) }}
+{{- $secretName := include "graylog.apiToken.secretName" . }}
+{{- $bootstrap := include "graylog.apiToken.bootstrap" . | fromYaml }}
+{{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
+{{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
+{{/* Everything here is a hook, so the Job's ServiceAccount, Role and bootstrap
+     Secret are removed once it succeeds instead of standing as a permanent
+     grant to write Secrets. Helm deletes succeeded hooks only after every hook
+     of the phase has run, so they outlive the Job that needs them. */}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $t.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "-5") | fromYaml) "indent" 2) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $t.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "-5") | fromYaml) "indent" 2) }}
+rules:
+  # create cannot be limited by name; the rest is limited to the one Secret.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $secretName | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $t.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "-5") | fromYaml) "indent" 2) }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ $name }}
+  apiGroup: rbac.authorization.k8s.io
+{{- if $bootstrap.hookSecret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $bootstrap.name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $t.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "-5") | fromYaml) "indent" 2) }}
+type: Opaque
+data:
+  GRAYLOG_ROOT_PASSWORD: {{ .Values.graylog.config.rootPassword | b64enc }}
+{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $t.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "0") | fromYaml) "indent" 2) }}
+spec:
+  backoffLimit: {{ $t.backoffLimit }}
+  activeDeadlineSeconds: {{ $t.activeDeadlineSeconds }}
+  template:
+    metadata:
+      {{- include "graylog.metadata.labels" (dict "context" $ "labels" $t.labels "indent" 6) }}
+      {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "indent" 6) }}
+    spec:
+      serviceAccountName: {{ $name }}
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api-token
+          image: {{ printf "%s:%s" $t.image.repository $t.image.tag }}
+          imagePullPolicy: {{ $t.image.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          {{- with $t.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: GRAYLOG_URL
+              value: {{ $url | quote }}
+            - name: ROOT_USER
+              value: {{ .Values.graylog.config.rootUsername | default "admin" | quote }}
+            - name: ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $bootstrap.name }}
+                  key: {{ $bootstrap.key }}
+            - name: SERVICE_USER
+              value: {{ $t.username | quote }}
+            - name: SERVICE_ROLES
+              value: {{ $t.roles | toJson | quote }}
+            - name: TOKEN_NAME
+              value: {{ $t.tokenName | quote }}
+            - name: TOKEN_TTL
+              value: {{ $t.ttl | quote }}
+            - name: SECRET_NAME
+              value: {{ $secretName | quote }}
+            - name: SECRET_LABELS
+              value: {{ (include "graylog.metadata.labels" (dict "context" $ "labels" $t.secretLabels "fixed" (dict "app" "graylog-app") "indent" 0) | fromYaml).labels | toJson | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: WAIT_SECONDS
+              value: {{ $t.waitSeconds | quote }}
+            {{- if $t.insecureSkipVerify }}
+            - name: CURL_EXTRA
+              value: "-k"
+            {{- end }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              {{- .Files.Get "files/scripts/api-token.sh" | nindent 14 }}
+{{- end }}
