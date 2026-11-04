@@ -68,14 +68,16 @@ until [ "$(gl_curl -s -o /dev/null --max-time 5 -w '%{http_code}' "${API}/system
 done
 
 # 2. Keep the existing token when it still works. Checked as the token itself
-# (Basic auth, token as the username), against the service user's own record so
-# it passes under any role.
+# (Basic auth, token as the username) against the service user's own record.
+# Graylog answers 401 for a token it does not accept and 403 for one it accepts
+# but whose roles may not read that record (Reader, for one). Only 401 means the
+# token is bad, so 200 and 403 both keep it.
 existing="$(k8s GET "${K8S}/${SECRET_NAME}" "application/json")"
 if [ "$(status_of "$existing")" = "200" ]; then
   old_token="$(body_of "$existing" | jstr token | base64 -d 2>/dev/null)"
   if [ -n "$old_token" ]; then
     code="$(gl_curl -s -o /dev/null --max-time 10 -u "${old_token}:token" -w '%{http_code}' "${API}/users/${SERVICE_USER}")"
-    if [ "$code" = "200" ]; then
+    if [ "$code" = "200" ] || [ "$code" = "403" ]; then
       log "Secret ${SECRET_NAME} already holds a working token, nothing to do"
       exit 0
     fi

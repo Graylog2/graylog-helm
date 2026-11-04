@@ -15,8 +15,8 @@ graylog:
       - Reader
 ```
 
-`roles` must be set. Graylog refuses the Admin role for service accounts, so the chart fails the render if
-you list it. Pick a role that allows every endpoint your consumers call.
+`roles` defaults to `Reader`, which is read-only. Graylog refuses the Admin role for service accounts, so the
+chart fails the render if you list it. Pick a role that allows every endpoint your consumers call.
 
 Install or upgrade as usual. Helm waits for the Job, and Helm's default `--timeout` is 5m, so pass a longer
 one on a first install:
@@ -73,7 +73,7 @@ and revokes the old one. To rotate on demand, delete the Secret and run `helm up
 | Value | Default | Purpose |
 | --- | --- | --- |
 | `username` | `helm-automation` | Service user. Created if missing, reused if present. |
-| `roles` | `[Admin]` | Roles for a new user. Must not include Admin. |
+| `roles` | `[Reader]` | Roles for a new user. Must not include Admin. |
 | `tokenName` | `helm` | Name the token carries in Graylog. |
 | `ttl` | `P90D` | ISO-8601 token lifetime. |
 | `waitSeconds` | `240` | How long the Job waits for Graylog. |
