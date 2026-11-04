@@ -828,6 +828,55 @@ datanode:
     # only one group rolls at once. Set to true per-group to opt a group back
     # into Reloader's default behavior.
     autoReload: false
+  # clientCert issues a client certificate for the Data Node's OpenSearch API and
+  # stores it in a Secret (keys ca.crt, tls.crt, tls.key), so tools in the cluster
+  # such as a metrics exporter can authenticate without a password. A post-install
+  # and post-upgrade hook Job creates the OpenSearch role and its mapping, then
+  # asks Graylog for the certificate with the token from graylog.apiToken.
+  # Requires graylog.apiToken.enabled=true, and the API token's user needs the
+  # ca_clientcert:create permission (set graylog.apiToken.permissions).
+  # The key is stored decrypted, so treat the Secret as a credential for the role.
+  clientCert:
+    enabled: false
+    # secretName of the Secret that receives the certificate.
+    secretName: ""
+    # principal is the certificate's CN, the OpenSearch user name.
+    principal: graylog-client
+    # role is the OpenSearch role (and role mapping) the certificate is added to.
+    # The Job creates it from roleDefinition when it does not exist, and never
+    # overwrites an existing one.
+    role: graylog_metrics_reader
+    # roleDefinition is the OpenSearch role the Job creates. The default reads
+    # cluster and index stats and nothing else. indices:admin/aliases/get is
+    # needed by the Prometheus elasticsearch-exporter for its per-index series.
+    roleDefinition:
+      cluster_permissions:
+        - cluster_monitor
+      index_permissions:
+        - index_patterns: ["*"]
+          allowed_actions:
+            - indices_monitor
+            - indices:admin/aliases/get
+    # lifetime is the certificate's ISO-8601 lifetime.
+    lifetime: P30D
+    # renewBeforeDays is how many days before expiry a helm upgrade reissues it.
+    renewBeforeDays: 10
+    # waitSeconds is how long the Job waits for Graylog and the Data Node.
+    waitSeconds: 240
+    # image runs the Job. It needs sh, curl, openssl, sed, grep and base64, so it
+    # defaults to the Graylog image. Leave empty for that.
+    image:
+      repository: ""
+      tag: ""
+      imagePullPolicy: IfNotPresent
+    backoffLimit: 3
+    activeDeadlineSeconds: 290
+    resources: {}
+    # annotations and labels are added to the Job, its pod and its RBAC objects.
+    # secretLabels are added to the certificate Secret, which the Job creates.
+    annotations: {}
+    labels: {}
+    secretLabels: {}
   service:
     annotations: {}
     labels: {}

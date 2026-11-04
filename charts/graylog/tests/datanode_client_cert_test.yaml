@@ -1,0 +1,234 @@
+suite: datanode client certificate
+templates:
+  - config/datanode-client-cert.yaml
+set:
+  graylog.apiToken.enabled: true
+  graylog.apiToken.roles: [Reader]
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders nothing by default
+    set:
+      datanode.clientCert.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when the Data Node is disabled
+    set:
+      datanode.clientCert.enabled: true
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.example.com:9200"]
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails without the API token Job
+    set:
+      datanode.clientCert.enabled: true
+      graylog.apiToken.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: ca_clientcert:create
+
+  - it: renders SA, Role, RoleBinding and Job as hooks ordered after the API token Job
+    set:
+      datanode.clientCert.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Job
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "5"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "10"
+        documentIndex: 3
+
+  - it: limits the Role to creating secrets and reading/patching only the certificate Secret
+    set:
+      datanode.clientCert.enabled: true
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: ["secrets"]
+              verbs: ["create"]
+            - apiGroups: [""]
+              resources: ["secrets"]
+              resourceNames: ["graylog-datanode-client-cert"]
+              verbs: ["get", "patch"]
+        documentIndex: 1
+
+  - it: points at the first pod of the Data Node StatefulSet over https
+    set:
+      datanode.clientCert.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATANODE_URL
+            value: https://graylog-datanode-0.graylog-datanode-svc.graylog.svc.cluster.local:9200
+        documentIndex: 3
+
+  - it: reads the API token and the password secret from Secrets
+    set:
+      datanode.clientCert.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: graylog-api-token
+                key: token
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_PASSWORD_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: graylog-secrets
+                key: GRAYLOG_PASSWORD_SECRET
+        documentIndex: 3
+
+  - it: honours graylog.apiToken.secretName and global.existingSecretName
+    set:
+      datanode.clientCert.enabled: true
+      graylog.apiToken.secretName: my-token
+      global.existingSecretName: my-secrets
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: my-token
+                key: token
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_PASSWORD_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: my-secrets
+                key: GRAYLOG_PASSWORD_SECRET
+        documentIndex: 3
+
+  - it: converts renewBeforeDays to seconds and passes the lifetime
+    set:
+      datanode.clientCert.enabled: true
+      datanode.clientCert.renewBeforeDays: 2
+      datanode.clientCert.lifetime: P7D
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RENEW_BEFORE_SECONDS
+            value: "172800"
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LIFETIME
+            value: P7D
+        documentIndex: 3
+
+  - it: ships the default read-only role definition as JSON
+    set:
+      datanode.clientCert.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name=="ROLE_DEFINITION")].value
+          pattern: cluster_monitor
+        documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name=="ROLE_DEFINITION")].value
+          pattern: indices:admin/aliases/get
+        documentIndex: 3
+
+  - it: runs the Graylog image by default and a custom image when set
+    set:
+      datanode.clientCert.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: graylog/graylog-enterprise:7.1.8
+        documentIndex: 3
+  - it: uses image.repository with the Graylog tag when only the repository is set
+    set:
+      datanode.clientCert.enabled: true
+      datanode.clientCert.image.repository: registry.example.com/graylog
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/graylog:7.1.8
+        documentIndex: 3
+
+  - it: runs locked down with a writable tmp
+    set:
+      datanode.clientCert.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: tmp
+        documentIndex: 3
+
+  - it: skips certificate verification toward Graylog only when apiToken.insecureSkipVerify is set
+    set:
+      datanode.clientCert.enabled: true
+      graylog.apiToken.insecureSkipVerify: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "-k"
+        documentIndex: 3
+
+  - it: adds labels and annotations to every object
+    set:
+      datanode.clientCert.enabled: true
+      datanode.clientCert.labels:
+        team: obs
+      datanode.clientCert.annotations:
+        note: hi
+    asserts:
+      - equal:
+          path: metadata.labels.team
+          value: obs
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations.note
+          value: hi
+        documentIndex: 1
+      - equal:
+          path: spec.template.metadata.labels.team
+          value: obs
+        documentIndex: 3

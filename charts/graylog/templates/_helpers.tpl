@@ -1374,3 +1374,10 @@ volumeMounts:
     readOnly: true
   {{- end }}
 {{- end }}
+
+{{/*
+Data Node client certificate Secret name (datanode.clientCert)
+*/}}
+{{- define "graylog.datanode.clientCert.secretName" -}}
+{{- .Values.datanode.clientCert.secretName | default (include "graylog.fullname" . | printf "%s-datanode-client-cert") }}
+{{- end }}
