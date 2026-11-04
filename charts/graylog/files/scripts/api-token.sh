@@ -11,7 +11,7 @@
 # old one deleted.
 #
 # Environment: GRAYLOG_URL, ROOT_USER, ROOT_PASSWORD, SERVICE_USER, SERVICE_ROLES
-# (JSON array), TOKEN_NAME, TOKEN_TTL, SECRET_NAME, SECRET_LABELS (JSON object),
+# (JSON array), SERVICE_PERMISSIONS (JSON array, optional), TOKEN_NAME, TOKEN_TTL, SECRET_NAME, SECRET_LABELS (JSON object),
 # NAMESPACE, WAIT_SECONDS, and optionally CURL_EXTRA (extra curl flags for calls to
 # Graylog; "-k" when the in-cluster certificate cannot be verified). Authored for the curlimages/curl image: POSIX sh, curl,
 # sed and grep only, so JSON is picked apart with sed rather than jq.
@@ -91,7 +91,7 @@ case "$(status_of "$resp")" in
     # The password is required by the API but never used: a service account cannot
     # sign in, and nothing keeps this value.
     pw="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40)"
-    payload="{\"username\":\"${SERVICE_USER}\",\"password\":\"${pw}\",\"email\":\"${SERVICE_USER}@graylog-helm.invalid\",\"first_name\":\"Helm\",\"last_name\":\"Automation\",\"permissions\":[],\"roles\":${SERVICE_ROLES},\"service_account\":true}"
+    payload="{\"username\":\"${SERVICE_USER}\",\"password\":\"${pw}\",\"email\":\"${SERVICE_USER}@graylog-helm.invalid\",\"first_name\":\"Helm\",\"last_name\":\"Automation\",\"permissions\":${SERVICE_PERMISSIONS:-[]},\"roles\":${SERVICE_ROLES},\"service_account\":true}"
     resp="$(root_api POST "/users" "$payload")"
     [ "$(status_of "$resp")" = "201" ] || die "creating user ${SERVICE_USER} failed (HTTP $(status_of "$resp")): $(body_of "$resp")"
     log "created service user ${SERVICE_USER}"

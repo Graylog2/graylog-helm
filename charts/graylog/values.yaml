@@ -682,6 +682,10 @@ graylog:
     # allow every endpoint your consumers call.
     roles:
       - Admin
+    # permissions are extra Graylog permissions granted to a user the Job
+    # creates, for example "ca_clientcert:create" for datanode.clientCert.
+    # An existing user is left as it is, so grant it yourself in that case.
+    permissions: []
     # tokenName is the name the token carries in Graylog.
     tokenName: helm
     # ttl is an ISO-8601 duration. Graylog's own default is P30D.

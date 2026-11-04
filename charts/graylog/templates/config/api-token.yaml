@@ -112,6 +112,8 @@ spec:
               value: {{ $t.username | quote }}
             - name: SERVICE_ROLES
               value: {{ $t.roles | toJson | quote }}
+            - name: SERVICE_PERMISSIONS
+              value: {{ $t.permissions | default list | toJson | quote }}
             - name: TOKEN_NAME
               value: {{ $t.tokenName | quote }}
             - name: TOKEN_TTL
