@@ -49,6 +49,40 @@ tests:
           value: "0"
         documentIndex: 3
 
+  - it: deletes every hook object when the Job fails as well as when it succeeds
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded,hook-failed
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded,hook-failed
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded,hook-failed
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded,hook-failed
+        documentIndex: 3
+
+  - it: deletes the bootstrap Secret with the plaintext root password on failure too
+    set:
+      graylog.apiToken.enabled: true
+      graylog.config.rootPassword: s3cret-pass
+    asserts:
+      - isKind:
+          of: Secret
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded,hook-failed
+        documentIndex: 3
+
   - it: limits the Role to creating secrets and reading/patching only the token Secret
     set:
       graylog.apiToken.enabled: true

@@ -25,7 +25,7 @@ cat > "${WORK}/curl" <<'STUB'
 for a in "$@"; do url="$a"; done
 case "$url" in
   */system/lbstatus) printf '200' ;;
-  */secrets/*) printf '{"data":{"token":"dGs="}}\n200' ;;
+  */secrets/*) printf '{\n  "kind": "Secret",\n  "data": {\n    "token": "dGs=",\n    "username": "aGVsbQ=="\n  }\n}\n200' ;;
   */users/helm-automation) printf '%s' "${STUB_USER_CODE}" ;;
   *) printf '\n500' ;;
 esac

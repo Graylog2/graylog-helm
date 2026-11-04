@@ -28,8 +28,10 @@ SA="/var/run/secrets/kubernetes.io/serviceaccount"
 log() { echo "api-token: $*"; }
 die() { log "error: $*"; exit 1; }
 
-# Pull the first string value for a key out of a JSON document on stdin.
-jstr() { grep -o "\"$1\":\"[^\"]*\"" | head -n 1 | sed "s/^\"$1\":\"//; s/\"\$//"; }
+# Pull the first string value for a key out of a JSON document on stdin. The
+# Kubernetes API pretty-prints for curl ("token": "x"), Graylog does not
+# ("token":"x"), so allow whitespace around the colon.
+jstr() { grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -n 1 | sed "s/^\"$1\"[[:space:]]*:[[:space:]]*\"//; s/\"\$//"; }
 
 # Graylog request as the root user. Prints the body, then the status on its own line.
 root_api() {

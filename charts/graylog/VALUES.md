@@ -226,6 +226,33 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.extraInitContainers`                                         | Additional init containers.                                 | `[]`                            |
 | `graylog.extraContainers`                                             | Additional sidecar containers.                              | `[]`                            |
 
+### Graylog API token
+
+A hook Job creates a service user and an API token and stores the token in a Secret. See the [API token guide](../../docs/graylog/api-token.md).
+
+| Key Path                                  | Description                                                                                   | Default                |
+|-------------------------------------------|-----------------------------------------------------------------------------------------------|------------------------|
+| `graylog.apiToken.enabled`                | Create the service user, token and Secret.                                                    | `false`                |
+| `graylog.apiToken.secretName`             | Secret that receives the token. Keys are `token` and `username`. Empty uses `<fullname>-api-token`. | `""`             |
+| `graylog.apiToken.username`               | Service user. Created if missing, reused if present.                                          | `helm-automation`      |
+| `graylog.apiToken.roles`                  | Roles for a user the Job creates. `Admin` fails the render.                                   | `[Reader]`             |
+| `graylog.apiToken.permissions`            | Extra Graylog permissions for a user the Job creates.                                         | `[]`                   |
+| `graylog.apiToken.tokenName`              | Name the token carries in Graylog.                                                            | `helm`                 |
+| `graylog.apiToken.ttl`                    | ISO-8601 token lifetime.                                                                      | `P90D`                 |
+| `graylog.apiToken.bootstrap.existingSecret` | Secret holding the root password the Job signs in with. Needed with `global.existingSecretName`. | `""`               |
+| `graylog.apiToken.bootstrap.passwordKey`  | Key in that Secret.                                                                           | `GRAYLOG_ROOT_PASSWORD` |
+| `graylog.apiToken.insecureSkipVerify`     | Skip certificate checks on the Job's calls to Graylog. Only matters with native TLS.          | `false`                |
+| `graylog.apiToken.waitSeconds`            | How long the Job waits for Graylog to answer.                                                 | `720`                  |
+| `graylog.apiToken.image.repository`       | Job image. Needs a shell, curl, sed, grep and base64.                                         | `curlimages/curl`      |
+| `graylog.apiToken.image.tag`              | Job image tag.                                                                                | `8.17.0`               |
+| `graylog.apiToken.image.imagePullPolicy`  | Job image pull policy.                                                                        | `IfNotPresent`         |
+| `graylog.apiToken.backoffLimit`           | Job retries.                                                                                  | `3`                    |
+| `graylog.apiToken.activeDeadlineSeconds`  | Hard time limit for the Job.                                                                  | `780`                  |
+| `graylog.apiToken.resources`              | Job container resources.                                                                      | `{}`                   |
+| `graylog.apiToken.annotations`            | Annotations for the Job, its pod and its RBAC objects.                                        | `{}`                   |
+| `graylog.apiToken.labels`                 | Labels for the Job, its pod and its RBAC objects.                                             | `{}`                   |
+| `graylog.apiToken.secretLabels`           | Labels for the token Secret.                                                                  | `{}`                   |
+
 
 ### Graylog inputs
 

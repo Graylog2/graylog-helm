@@ -1230,7 +1230,11 @@ key: graylog-root-password
 
 {{/*
 Hook annotations for the API token objects. Takes (dict "weight" "-5").
+hook-failed removes the objects after a failed run too, so the Role that can
+create Secrets, and the bootstrap Secret holding the root password, never outlive
+a failure. The cost is that the failed Job's logs go with it. Helm's error names
+the failed hook, and rerunning with a Job kept is a debugging step for the user.
 */}}
 {{- define "graylog.apiToken.hooks" -}}
-{{- dict "helm.sh/hook" "post-install,post-upgrade" "helm.sh/hook-weight" .weight "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded" | toYaml }}
+{{- dict "helm.sh/hook" "post-install,post-upgrade" "helm.sh/hook-weight" .weight "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded,hook-failed" | toYaml }}
 {{- end }}

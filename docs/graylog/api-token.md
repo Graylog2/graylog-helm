@@ -18,11 +18,12 @@ graylog:
 `roles` defaults to `Reader`, which is read-only. Graylog refuses the Admin role for service accounts, so the
 chart fails the render if you list it. Pick a role that allows every endpoint your consumers call.
 
-Install or upgrade as usual. Helm waits for the Job, and Helm's default `--timeout` is 5m, so pass a longer
-one on a first install:
+Install or upgrade as usual. Helm waits for the Job. A cold install can take 5 to 10 minutes before Graylog
+answers, because Graylog waits on the Data Nodes, and Helm's default `--timeout` is 5m. Pass a longer one on a
+first install:
 
 ```sh
-helm upgrade --install graylog charts/graylog -n graylog -f values.yaml --timeout 10m
+helm upgrade --install graylog charts/graylog -n graylog -f values.yaml --timeout 15m
 ```
 
 ## How it works
@@ -68,18 +69,36 @@ curl -u "$TOKEN:token" -H "Accept: application/json" https://graylog.example.com
 Tokens expire after `ttl` (default `P90D`). The next `helm upgrade` finds the expired token, mints a new one
 and revokes the old one. To rotate on demand, delete the Secret and run `helm upgrade`.
 
+## Monitoring example
+
+`examples/values/values-example-monitoring-indexer-health.yaml` runs a json_exporter that reads cluster health
+with this token. It turns on `graylog.apiToken` and mounts the `<release fullname>-api-token` Secret, with the
+`token` key as the Basic auth username and the literal password `token`. Nothing needs to exist before the
+install.
+
 ## Values
+
+All keys sit under `graylog.apiToken`.
 
 | Value | Default | Purpose |
 | --- | --- | --- |
+| `enabled` | `false` | Create the service user, token and Secret. |
+| `secretName` | `""` | Secret that receives the token. Empty uses `<release fullname>-api-token`. |
 | `username` | `helm-automation` | Service user. Created if missing, reused if present. |
 | `roles` | `[Reader]` | Roles for a new user. Must not include Admin. |
+| `permissions` | `[]` | Extra permissions for a new user, such as `ca_clientcert:create`. An existing user is not changed. |
 | `tokenName` | `helm` | Name the token carries in Graylog. |
 | `ttl` | `P90D` | ISO-8601 token lifetime. |
-| `waitSeconds` | `240` | How long the Job waits for Graylog. |
-| `activeDeadlineSeconds` | `290` | Hard limit for the Job. |
+| `bootstrap.existingSecret` | `""` | Secret holding the root password. Required with `global.existingSecretName`. |
+| `bootstrap.passwordKey` | `GRAYLOG_ROOT_PASSWORD` | Key in that Secret. |
 | `insecureSkipVerify` | `false` | Skip certificate checks. Needed with `graylog.config.tls.enabled` when the certificate does not cover the Service name. |
-| `labels`, `annotations`, `secretLabels` | `{}` | Added to the Job objects, or to the token Secret. |
+| `waitSeconds` | `720` | How long the Job waits for Graylog. |
+| `activeDeadlineSeconds` | `780` | Hard limit for the Job. |
+| `backoffLimit` | `3` | Job retries. |
+| `image.repository`, `image.tag`, `image.imagePullPolicy` | `curlimages/curl`, `8.17.0`, `IfNotPresent` | Job image. Pull secrets come from `global.imagePullSecrets`. |
+| `resources` | `{}` | Job container resources. |
+| `labels`, `annotations` | `{}` | Added to the Job, its pod and its RBAC objects. |
+| `secretLabels` | `{}` | Added to the token Secret. |
 
 Keep `waitSeconds` and `activeDeadlineSeconds` under your Helm `--timeout`.
 
@@ -87,5 +106,8 @@ Keep `waitSeconds` and `activeDeadlineSeconds` under your Helm `--timeout`.
 
 - Needs Graylog 6.3.12, 7.0.7, 7.1.2 or newer. Older releases let any user revoke other users' tokens
   (CVE-2026-55867).
+- A failed run removes the Job, ServiceAccount, Role, RoleBinding and any bootstrap Secret, and the Job's logs go
+  with them. Helm's error names the failed hook. To read the logs, follow them while the Job runs with
+  `kubectl logs -f job/<release>-api-token`.
 - The Secret and service user are not removed on uninstall. Delete them yourself if you want them gone.
 - The Job image needs a shell, curl, sed, grep and base64. The default is `curlimages/curl`.

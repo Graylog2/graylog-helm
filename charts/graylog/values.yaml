@@ -662,7 +662,8 @@ graylog:
   # the service user, mints the token and writes the Secret. Root stays a
   # bootstrap credential and the token keeps working if the root password later
   # changes. The Job's ServiceAccount and Role are hooks too and are removed once
-  # it succeeds.
+  # it succeeds or fails. A failed Job's logs are removed with it, so read them
+  # while it runs: kubectl logs -f job/<release>-api-token.
   #
   # Graylog picks the token value and shows it once, so the Secret is written by
   # the Job and is not owned by Helm: it survives uninstall, and so does the
@@ -705,16 +706,18 @@ graylog:
     # your public hostname usually does not cover.
     insecureSkipVerify: false
     # waitSeconds is how long the Job waits for Graylog to answer before failing.
-    # Helm blocks on this Job and times out after 5m unless you pass --timeout,
-    # so keep waitSeconds and activeDeadlineSeconds under it or raise both.
-    waitSeconds: 240
+    # A cold install can take 5 to 10 minutes to reach Graylog: the Data Nodes
+    # start first and Graylog waits on them. Helm blocks on this Job and times
+    # out after 5m unless you pass --timeout, so install with --timeout 15m and
+    # keep waitSeconds and activeDeadlineSeconds under it.
+    waitSeconds: 720
     # image runs the Job. It needs a shell, curl, sed, grep and base64.
     image:
       repository: curlimages/curl
       tag: 8.17.0
       imagePullPolicy: IfNotPresent
     backoffLimit: 3
-    activeDeadlineSeconds: 290
+    activeDeadlineSeconds: 780
     resources: {}
     # annotations and labels are added to the Job, its pod and its RBAC objects.
     # secretLabels are added to the token Secret, which the Job creates.

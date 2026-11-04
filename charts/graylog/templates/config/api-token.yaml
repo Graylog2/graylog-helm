@@ -15,7 +15,7 @@
 {{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
 {{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
 {{/* Everything here is a hook, so the Job's ServiceAccount, Role and bootstrap
-     Secret are removed once it succeeds instead of standing as a permanent
+     Secret are removed once it succeeds or fails instead of standing as a permanent
      grant to write Secrets. Helm deletes succeeded hooks only after every hook
      of the phase has run, so they outlive the Job that needs them. */}}
 apiVersion: v1
