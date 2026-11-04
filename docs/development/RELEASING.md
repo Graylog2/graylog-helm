@@ -183,6 +183,6 @@ guard that should fail before pushing in that case, so treat it as a bug.
 ## Additional resources
 
 - [TESTING.md](TESTING.md), the pre-release testing procedure
-- [UPGRADING.md](../charts/graylog/UPGRADING.md), what users have to do between versions
-- [CONTRIBUTING.md](../CONTRIBUTING.md), development setup and commit rules
+- [UPGRADING.md](../../charts/graylog/UPGRADING.md), what users have to do between versions
+- [CONTRIBUTING.md](../../CONTRIBUTING.md), development setup and commit rules
 - [release-please](https://github.com/googleapis/release-please), the release automation

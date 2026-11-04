@@ -1,8 +1,8 @@
-# Graylog Secrets
+# Graylog secrets
 
-This guide explains how to configure the Kubernetes secrets required by the Graylog Helm chart. Graylog requires a Kubernetes Secret object containing credentials for authentication and backend service access. You can either let the Helm chart create this secret for you or manage it externally and reference it in your values file.
+Graylog needs a Kubernetes Secret with its MongoDB connection string, password pepper and admin password hash. Let the chart create it, or manage it yourself and reference it in your values file.
 
-## Required Keys
+## Required keys
 `GRAYLOG_MONGODB_URI`: The full MongoDB URI, including the user, password, address, port, and database name for Graylog to use.
 
 Example: `mongodb://admin:some-password@mongodb-1-svc.graylog-helm-1.svc.cluster.local:27017/graylog_helm_1?authSource=admin`
@@ -29,7 +29,7 @@ Expected output: one 64-character lowercase hexadecimal digest.
 6fa2288c361becce3e30ba4c41be7d8ba01e3580566f7acc76a7f99994474c46
 ```
 
-## Optional Keys
+## Optional keys
 
 `GRAYLOG_ROOT_USERNAME`: The name of the initial admin user. Graylog uses `admin` when you do not
 supply it.
@@ -55,17 +55,17 @@ supply it.
 > absent from the GeoIP Secret. See
 > [examples/graylog-geoip-secret.yaml](../examples/graylog-geoip-secret.yaml).
 
-## Secret Example
+## Secret example
 
-The following is an example of a Kubernetes Secret managed externally from the Graylog Helm chart.
-The example uses `stringData`, so you supply plain text and Kubernetes encodes it for you.
+This example is a Secret you manage outside the chart.
+It uses `stringData`, so you supply plain text and Kubernetes encodes it for you.
 
 > [!CAUTION]
 > Replace every `<...>` value before you apply this file. Keep or change `admin` as you prefer.
 > Never commit real credentials.
 
 > [!IMPORTANT]
-> Because this is `stringData`, do not base64 encode the values yourself — a base64 string here is
+> Because this is `stringData`, do not base64 encode the values yourself. A base64 string here is
 > encoded a second time, and Graylog then reads the base64 text itself as the username, pepper or
 > hash. Avoid trailing newlines for the same reason, which is why the commands above use
 > `printf %s` rather than `echo`.
@@ -85,10 +85,10 @@ stringData:
   GRAYLOG_ROOT_PASSWORD_SHA2: "<64-character-sha256-hex-digest>"
 ```
 
-That is the whole Secret. S3 and MaxMind credentials are deliberately absent — see the two notes
-above for where each of those belongs.
+That is the whole Secret. S3 and MaxMind credentials are deliberately absent. The two notes
+above say where each one belongs.
 
-## Setting Your Secret
+## Set your Secret
 
 > [!IMPORTANT]
 > An external Secret requires an external MongoDB. The chart refuses to render
@@ -106,9 +106,7 @@ mongodb:
     enabled: false
 ```
 
-**OR** 
-
-Alternatively, set the secret name via the Helm CLI:
+Or set the Secret name with the Helm CLI:
 
 ```bash
 helm upgrade --install some-graylog charts/graylog/ \
@@ -118,3 +116,13 @@ helm upgrade --install some-graylog charts/graylog/ \
 
 For a complete worked example, see
 [examples/values-existing-secret-external-mongodb.yaml](../examples/values-existing-secret-external-mongodb.yaml).
+
+## Values the chart ignores
+
+Setting `global.existingSecretName` tells the chart that you manage every Graylog and MongoDB secret. The chart then ignores these values:
+
+- `graylog.config.rootPassword`
+- `graylog.config.rootUsername`
+- `graylog.config.customSecretPepper`
+- `graylog.config.tls.keyPassword`
+

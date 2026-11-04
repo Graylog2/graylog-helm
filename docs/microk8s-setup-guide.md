@@ -1,10 +1,8 @@
-# Setting up a MicroK8s cluster
+# Set up a MicroK8s cluster
 
-This Helm chart should ideally work on any Kubernetes cluster.
-For local development and iterative testing, we recommend using MicroK8s.
-This setup enables a rapid development workflow without the need to manage complex infrastructure.
+The chart should work on any Kubernetes cluster. We use MicroK8s for local development and testing.
 
-### Back up your existing Kubernetes configuration
+## Back up your existing Kubernetes configuration
 
 ```bash
 [ -d $HOME/.kube ] && mv $HOME/.kube $HOME/.kube.old
@@ -15,14 +13,15 @@ This setup enables a rapid development workflow without the need to manage compl
 ```bash
 microk8s install --cpu 8 --mem 24 --disk 200 --channel latest/stable
 ```
-### Configure access to your new MicroK8s Kubernetes cluster
+
+## Configure access to your new MicroK8s Kubernetes cluster
 
 ```bash
 mkdir $HOME/.kube && microk8s config -o yaml > $HOME/.kube/config
 chmod 600 $HOME/.kube/config
 ```
 
-## Enable [DNS](https://microk8s.io/docs/addon-dns) and [local storage](https://microk8s.io/docs/addon-hostpath-storage) addons
+## Enable the [DNS](https://microk8s.io/docs/addon-dns) and [local storage](https://microk8s.io/docs/addon-hostpath-storage) addons
 
 ```bash
 microk8s enable dns
@@ -33,11 +32,10 @@ microk8s enable hostpath-storage
 
 You will need a valid IP address range on your network that MetalLB can use for LoadBalancer services.
 
-### Getting your CIDR
+### Get your CIDR
 
 Depending on your OS, you might be running MicroK8s directly on Linux or inside a virtual machine on macOS.
 Below are example commands for each setup:
-
 
   <details>
     <summary>Get CIDR on Linux using the <code>eth0</code> interface</summary>
@@ -55,18 +53,18 @@ You can verify that the CIDR was captured correctly with:
 echo $CIDR
 ```
 
-### Enable MetalLB addon
+### Enable the MetalLB addon
 
-Once you have your CIDR, you can enable metallb
+With the CIDR set, enable MetalLB:
 
 ```bash
 microk8s enable metallb:$CIDR
 ```
 
-> [!IMPORTANT]
-> If you are running **MicroK8s on macOS**, you will need to increase the memory map areas per VM process
+## Raise vm.max_map_count on macOS
+
+On macOS, MicroK8s runs in a Multipass VM. Raise the VM's `vm.max_map_count` so OpenSearch can start:
 
 ```bash
-# only if running microk8s on macOS
 multipass exec microk8s-vm -- sudo sysctl -w vm.max_map_count=262144
 ```
