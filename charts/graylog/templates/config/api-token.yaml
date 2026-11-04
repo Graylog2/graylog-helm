@@ -1,5 +1,11 @@
-{{- if and .Values.graylog.enabled .Values.graylog.apiToken.enabled }}
-{{- $t := .Values.graylog.apiToken }}
+{{- $t := .Values.graylog.apiToken | default dict }}
+{{- if and .Values.graylog.enabled $t.enabled }}
+{{- /* helm upgrade --reuse-values skips the chart defaults for keys the stored
+       release does not have. Without apiToken in the stored values, enabling it
+       leaves everything but "enabled" unset, so fail with the fix. */ -}}
+{{- if not (and (kindIs "map" $t.image) (kindIs "map" $t.bootstrap)) }}
+{{- fail "graylog.apiToken is missing its defaults. This happens with helm upgrade --reuse-values on a release installed before graylog.apiToken existed.\n  Use --reset-then-reuse-values instead of --reuse-values, or pass your values with -f." }}
+{{- end }}
 {{- if has "Admin" $t.roles }}
 {{- fail "graylog.apiToken.roles cannot include Admin: Graylog refuses to assign the Admin role to a service account.\n  Set graylog.apiToken.roles to a non-Admin role that allows the endpoints your consumers call." }}
 {{- end }}

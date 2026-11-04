@@ -1,8 +1,6 @@
 suite: graylog API token
 templates:
   - config/api-token.yaml
-set:
-  graylog.apiToken.roles: [Reader]
 release:
   name: graylog
   namespace: graylog
@@ -260,6 +258,35 @@ tests:
           path: spec.template.spec.containers[0].env[?(@.name == "SECRET_LABELS")].value
           pattern: secretonly
         documentIndex: 3
+
+  - it: renders with the default roles and no other values
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 4
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVICE_ROLES
+            value: '["Reader"]'
+        documentIndex: 3
+
+  - it: renders nothing when graylog.apiToken is missing from the values (helm upgrade --reuse-values)
+    set:
+      graylog.apiToken: null
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails with the fix when enabled on values that lack the chart defaults (helm upgrade --reuse-values)
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.image: null
+      graylog.apiToken.bootstrap: null
+    asserts:
+      - failedTemplate:
+          errorPattern: reset-then-reuse-values
 
   - it: fails when roles includes Admin
     set:

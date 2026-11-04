@@ -678,10 +678,10 @@ graylog:
     # username of the service user. Created if missing, reused if present.
     username: helm-automation
     # roles assigned to a user the Job creates. Graylog refuses the Admin role
-    # for service accounts and the render fails if it is listed. The role must
-    # allow every endpoint your consumers call.
+    # for service accounts and the render fails if it is listed. Reader is
+    # read-only. Pick a role that allows every endpoint your consumers call.
     roles:
-      - Admin
+      - Reader
     # permissions are extra Graylog permissions granted to a user the Job
     # creates, for example "ca_clientcert:create" for datanode.clientCert.
     # An existing user is left as it is, so grant it yourself in that case.
