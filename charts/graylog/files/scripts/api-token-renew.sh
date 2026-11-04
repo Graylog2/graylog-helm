@@ -3,15 +3,15 @@
 # Runs as a CronJob. Unlike api-token.sh it never sees the root password: the
 # service user mints its replacement with the token it already has.
 #
-# Steps: read the token from the Secret, look up its own expiry, and when less
+# Steps: read the token and user id from the Secret, look up the token's expiry, and when less
 # than RENEW_BEFORE_SECONDS remain, mint a new token, store it in the Secret and
 # only then delete the old one. A token that is already expired or revoked cannot
 # renew itself. The next helm upgrade fixes that, because the hook Job signs in
 # as root.
 #
-# The service user needs users:read, users:tokenlist, users:tokencreate and
-# users:tokenremove on itself. The chart grants them in one comma form string:
-# Graylog strips the plain per-permission self strings from a service account.
+# The service user needs users:tokenlist, users:tokencreate and users:tokenremove
+# on itself. The chart grants them in one comma form string: Graylog strips the
+# plain per-permission self strings from a service account.
 #
 # Environment: GRAYLOG_URL, SERVICE_USER, TOKEN_NAME, TOKEN_TTL, SECRET_NAME,
 # NAMESPACE, RENEW_BEFORE_SECONDS, and optionally CURL_EXTRA (extra curl flags for
@@ -44,6 +44,13 @@ epoch() {
   echo $(( (era * 146097 + doe - 719468) * 86400 + $4 * 3600 + $5 * 60 + $6 ))
 }
 
+# 90000 -> 1d1h, 5415 -> 1h30m, 250 -> 4m10s. Short test lifetimes need the minutes.
+fmt() {
+  if [ "$1" -ge 86400 ]; then echo "$(($1 / 86400))d$(($1 % 86400 / 3600))h"
+  elif [ "$1" -ge 3600 ]; then echo "$(($1 / 3600))h$(($1 % 3600 / 60))m"
+  else echo "$(($1 / 60))m$(($1 % 60))s"; fi
+}
+
 k8s() {
   method="$1"; url="$2"; ctype="$3"; body="${4:-}"
   if [ -n "$body" ]; then
@@ -70,7 +77,7 @@ token_api() {
   fi
 }
 
-PERMISSION_HINT="the service user needs users:read,tokencreate,tokenlist,tokenremove:${SERVICE_USER}. The chart grants it when it creates the user. Add it to an existing user by hand, then see docs/graylog/api-token.md"
+PERMISSION_HINT="the service user needs users:tokencreate,tokenlist,tokenremove:${SERVICE_USER}. The chart grants it when it creates the user. Add it to an existing user by hand, then see docs/graylog/api-token.md"
 
 # 1. The current token.
 existing="$(k8s GET "${K8S}/${SECRET_NAME}" "application/json")"
@@ -87,21 +94,17 @@ TOKEN="$(body_of "$existing" | jstr token | base64 -d 2>/dev/null)"
 [ -n "$TOKEN" ] || die "Secret ${SECRET_NAME} has no token. Run helm upgrade to create it"
 
 # 2. The service user's id, which the token endpoints take instead of the name.
-resp="$(token_api GET "/users/${SERVICE_USER}")"
-case "$(status_of "$resp")" in
-  200) ;;
-  401) die "the token in ${SECRET_NAME} no longer authenticates. Run helm upgrade: the hook Job signs in as root and mints a new one" ;;
-  403) die "reading user ${SERVICE_USER} was refused: ${PERMISSION_HINT}" ;;
-  *) die "looking up user ${SERVICE_USER} failed (HTTP $(status_of "$resp")): $(body_of "$resp")" ;;
-esac
-user_id="$(body_of "$resp" | jstr id)"
-[ -n "$user_id" ] || die "could not read the id of user ${SERVICE_USER}"
+# The hook stores it in the Secret. Looking it up by name needs users:edit on
+# itself, which would let the user change its own roles, so it is not granted.
+user_id="$(body_of "$existing" | jstr userid | base64 -d 2>/dev/null)"
+[ -n "$user_id" ] || die "Secret ${SECRET_NAME} has no userid key. Run helm upgrade, which adds it"
 
 # 3. How long the token has left. Several tokens can share the name; the one that
 # lives longest is the one the Secret holds.
 resp="$(token_api GET "/users/${user_id}/tokens")"
 case "$(status_of "$resp")" in
   200) ;;
+  401) die "the token in ${SECRET_NAME} no longer authenticates. Run helm upgrade: the hook Job signs in as root and mints a new one" ;;
   403) die "listing tokens was refused: ${PERMISSION_HINT}" ;;
   *) die "listing tokens failed (HTTP $(status_of "$resp")): $(body_of "$resp")" ;;
 esac
@@ -120,10 +123,10 @@ fi
 now="${NOW_EPOCH:-$(date +%s)}"
 left=$((newest - now))
 if [ "$left" -gt "$RENEW_BEFORE_SECONDS" ]; then
-  log "token expires in $((left / 3600))h, more than the $((RENEW_BEFORE_SECONDS / 3600))h renewal window, nothing to do"
+  log "token expires in $(fmt "$left"), more than the $(fmt "$RENEW_BEFORE_SECONDS") renewal window, nothing to do"
   exit 0
 fi
-log "token expires in $((left / 3600))h, inside the $((RENEW_BEFORE_SECONDS / 3600))h renewal window, renewing"
+log "token expires in $(fmt "$left"), inside the $(fmt "$RENEW_BEFORE_SECONDS") renewal window, renewing"
 
 # 4. Mint the replacement with the old token.
 resp="$(token_api POST "/users/${user_id}/tokens/${TOKEN_NAME}" "{\"token_ttl\":\"${TOKEN_TTL}\"}")"

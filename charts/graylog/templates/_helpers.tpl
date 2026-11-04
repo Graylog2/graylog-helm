@@ -1263,7 +1263,7 @@ mint a token but not to see its expiry or delete the old one.
 {{- $t := .Values.graylog.apiToken -}}
 {{- $perms := $t.permissions | default list -}}
 {{- if and $t.renew $t.renew.enabled -}}
-{{- $perms = append $perms (printf "users:read,tokencreate,tokenlist,tokenremove:%s" $t.username) -}}
+{{- $perms = append $perms (printf "users:tokencreate,tokenlist,tokenremove:%s" $t.username) -}}
 {{- end -}}
 {{- $perms | uniq | toJson -}}
 {{- end }}

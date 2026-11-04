@@ -672,7 +672,8 @@ graylog:
   # (CVE-2026-55867 lets any user revoke other users' tokens on older releases).
   apiToken:
     enabled: false
-    # secretName of the Secret that receives the token. Keys: token, username.
+    # secretName of the Secret that receives the token. Keys: token, username,
+    # userid (the renewal CronJob reads it).
     # Use it as Basic auth with the token as the username and "token" as the
     # password.
     secretName: ""
@@ -729,7 +730,7 @@ graylog:
     # mints the replacement with the token it already holds, so no root password
     # is stored. The chart grants the user the permission to do that when it
     # creates it. An existing user needs
-    # "users:read,tokencreate,tokenlist,tokenremove:<username>" added by hand.
+    # "users:tokencreate,tokenlist,tokenremove:<username>" added by hand.
     # A token that has already expired cannot renew itself: helm upgrade mints a
     # new one.
     renew:

@@ -12,7 +12,7 @@
 # 2026-11-04T00:00:00Z. Every call is appended to ${WORK}/calls so a scenario can
 # assert which requests were made, for instance that the old token is deleted only
 # after the Secret write and the new token is deleted when the write fails.
-# STUB_SECRET, STUB_USERS, STUB_LIST, STUB_MINT and STUB_PATCH override the status code of that
+# STUB_SECRET, STUB_NO_USERID, STUB_LIST, STUB_MINT and STUB_PATCH override the status code of that
 # call, and STUB_MINT_BODY the body of the mint response.
 
 set -u
@@ -34,9 +34,9 @@ code() { printf '\n%s' "$1"; }
 case "$method $url" in
   "GET "*/system/lbstatus) printf '200' ;;
   "GET "*/secrets/*) [ "${STUB_SECRET:-200}" = 200 ] || { printf '{}'; code "$STUB_SECRET"; exit 0; }
-    printf '{\n  "data": {\n    "token": "b2xkLXRva2Vu",\n    "username": "aGVsbQ=="\n  }\n}\n200' ;;
+    [ -z "${STUB_NO_USERID:-}" ] || { printf '{\n  "data": {\n    "token": "b2xkLXRva2Vu"\n  }\n}\n200'; exit 0; }
+    printf '{\n  "data": {\n    "token": "b2xkLXRva2Vu",\n    "username": "aGVsbQ==",\n    "userid": "dWlkMQ=="\n  }\n}\n200' ;;
   "PATCH "*/secrets/*) printf '{}'; code "${STUB_PATCH:-200}" ;;
-  "GET "*/users/helm-automation) printf '{"id":"uid1","username":"helm-automation"}'; code "${STUB_USERS:-200}" ;;
   "GET "*/users/uid1/tokens)
     if [ -z "${STUB_EXPIRES:-}" ]; then
       printf '{"tokens":[{"id":"tid-old","name":"helm","expires_at":null}]}'
@@ -80,7 +80,11 @@ expect_not_called "  and leaves other tokens alone" "DELETE .*tokens/tid-other"
 expect_not_called "  and does not delete the new token" "DELETE .*tokens/tid-new"
 
 export STUB_EXPIRES=2026-11-05T12:00:00.000Z
-run "reads a fractional-second timestamp and a non-zero hour" "expires in 36h"
+run "reads a fractional-second timestamp and a non-zero hour" "expires in 1d12h"
+export STUB_EXPIRES=2026-11-04T00:04:10.000Z
+run "shows minutes and seconds for a short-lived token" "expires in 4m10s, inside the 14d0h renewal window"
+export STUB_EXPIRES=2026-11-04T01:30:00.000Z
+run "shows hours and minutes in between" "expires in 1h30m"
 
 # The CronJob exists before the install hook has minted the first token.
 export STUB_SECRET=404
@@ -101,16 +105,18 @@ export STUB_EXPIRES=""
 run "leaves a token with no expiry alone" "has no expiry"
 export STUB_EXPIRES=2026-11-07T00:00:00.000Z
 
-export STUB_USERS=401
+export STUB_LIST=401
 run "points at helm upgrade when the token is rejected" "no longer authenticates"
-unset STUB_USERS
+expect_not_called "  and mints nothing" "POST .*tokens/helm"
+unset STUB_LIST
 
-export STUB_USERS=403
-run "names the permission when reading the user is refused" "users:read,tokencreate,tokenlist,tokenremove:helm-automation"
-unset STUB_USERS
+export STUB_NO_USERID=1
+run "points at helm upgrade when the Secret has no user id" "has no userid key"
+expect_not_called "  and calls nothing in Graylog" "users/"
+unset STUB_NO_USERID
 
 export STUB_LIST=403
-run "names the permission when listing tokens is refused" "listing tokens was refused"
+run "names the permission when listing tokens is refused" "users:tokencreate,tokenlist,tokenremove:helm-automation"
 unset STUB_LIST
 
 export STUB_MINT=403

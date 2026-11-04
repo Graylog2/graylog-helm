@@ -40,7 +40,8 @@ Graylog shows a token once, so the Job writes the Secret itself. Helm does not o
 service user both survive `helm uninstall`.
 
 The Job's ServiceAccount, Role and RoleBinding are hooks too and are deleted when it succeeds. The Role can
-create Secrets and read or patch only the token Secret.
+create Secrets and read or patch only the token Secret. The renewal CronJob and its own ServiceAccount and
+Role are not hooks. That Role can only read and patch the token Secret.
 
 ## Where the Job gets the root password
 
@@ -56,18 +57,72 @@ fails.
 
 ## Use the token
 
-The Secret is named `<release fullname>-api-token` unless you set `graylog.apiToken.secretName`. It has two
-keys, `token` and `username`. Send the token as the Basic auth username, with `token` as the password.
+The Secret is named `<release fullname>-api-token` unless you set `graylog.apiToken.secretName`. It has three
+keys, `token`, `username` and `userid`. Send the token as the Basic auth username, with `token` as the password.
+The renewal CronJob reads `userid`, because a service user cannot look up its own id.
 
 ```sh
 TOKEN=$(kubectl -n graylog get secret graylog-api-token -o jsonpath='{.data.token}' | base64 -d)
 curl -u "$TOKEN:token" -H "Accept: application/json" https://graylog.example.com/api/system
 ```
 
-## Expiry and rotation
+## Expiry and renewal
 
-Tokens expire after `ttl` (default `P90D`). The next `helm upgrade` finds the expired token, mints a new one
-and revokes the old one. To rotate on demand, delete the Secret and run `helm upgrade`.
+Tokens expire after `ttl` (default `P90D`). A CronJob renews the token before that happens, so a cluster that
+nobody upgrades for months keeps a working token. It is on by default and runs daily at 03:17.
+
+Each run does this. During the first minutes of an install the Secret does not exist yet, because the hook Job is
+still waiting for Graylog. Runs in that window log it and exit without failing.
+
+1. Reads the token from the Secret and signs in with it. There is no root password involved.
+2. Lists the service user's tokens and reads the expiry of the one named `tokenName`.
+3. Exits if more than `renew.before` (default `P14D`) remains.
+4. Otherwise mints a new token with the old one and writes it to the Secret.
+5. Deletes the old token only after the Secret write succeeds. If the write fails, it deletes the new token
+   instead, so nothing is left orphaned.
+
+Consumers that read the Secret on every request pick up the new token on their own. A pod that took the token
+from an environment variable keeps the old one until it restarts, and the old token stops working the moment
+it is deleted. Mount the Secret as a file, or restart the pod when the Secret changes.
+
+`before` uses the same ISO-8601 durations as `ttl`, and as the token settings in the Graylog UI. Days, hours,
+minutes and seconds work (`P14D`, `PT36H`, `P1DT12H`). It must be shorter than `ttl`, and the schedule must fire
+more often than `before`. The render fails when `ttl` is also in days, hours, minutes or seconds and `before` is
+not smaller.
+
+### What the user needs
+
+Renewal needs the service user to list, create and remove its own tokens. Graylog gives a normal user those
+rights, but not a service account, so the chart grants them when it creates the user:
+
+```
+users:tokencreate,tokenlist,tokenremove:<username>
+```
+
+Keep that comma form if you grant it yourself. Graylog removes the plain `users:tokenlist:<name>` and
+`users:tokenremove:<name>` strings from a service account when it saves them, so granting the three separately
+lets the user mint a token but not see its expiry or delete the old one.
+
+A user created before renewal existed, or one you created yourself, does not have the permission. Add it in
+_System > Users and Teams_ or through the API. Until then the CronJob fails with a message that names the
+permission.
+
+A token that holds this permission can mint further tokens for its own user, which is how renewal works.
+Someone who steals the token can do the same until you delete the user's tokens. Keep the Secret's access
+narrow, and delete the user to cut it off.
+
+### When renewal cannot help
+
+A token that has already expired, or was revoked, cannot mint its own replacement. The CronJob logs that the
+token no longer authenticates and fails. Run `helm upgrade`. The hook Job signs in as root and mints a new
+token. To rotate on demand, delete the Secret and run `helm upgrade`.
+
+Turn renewal off with `graylog.apiToken.renew.enabled=false`. The token then expires on its `ttl` unless you
+upgrade before it does.
+
+Failed runs show up as failed Jobs. `kubectl logs job/<name>` shows why, and `failedJobsHistoryLimit` (default
+3) controls how many are kept. Alert on failed Jobs with kube-state-metrics if you want to hear about it before
+the token expires.
 
 ## Monitoring example
 
@@ -86,7 +141,7 @@ All keys sit under `graylog.apiToken`.
 | `secretName` | `""` | Secret that receives the token. Empty uses `<release fullname>-api-token`. |
 | `username` | `helm-automation` | Service user. Created if missing, reused if present. |
 | `roles` | `[Reader]` | Roles for a new user. Must not include Admin. |
-| `permissions` | `[]` | Extra permissions for a new user, such as `ca_clientcert:create`. An existing user is not changed. |
+| `permissions` | `[]` | Extra permissions for a new user, such as `ca_clientcert:create`. The renewal grant is added to these. An existing user is not changed. |
 | `tokenName` | `helm` | Name the token carries in Graylog. |
 | `ttl` | `P90D` | ISO-8601 token lifetime. |
 | `bootstrap.existingSecret` | `""` | Secret holding the root password. Required with `global.existingSecretName`. |
@@ -99,6 +154,14 @@ All keys sit under `graylog.apiToken`.
 | `resources` | `{}` | Job container resources. |
 | `labels`, `annotations` | `{}` | Added to the Job, its pod and its RBAC objects. |
 | `secretLabels` | `{}` | Added to the token Secret. |
+| `renew.enabled` | `true` | Run the renewal CronJob. |
+| `renew.schedule` | `17 3 * * *` | Cron expression. |
+| `renew.before` | `P14D` | Renew when this much time or less remains, as an ISO-8601 duration. Must be shorter than `ttl`. |
+| `renew.backoffLimit`, `renew.activeDeadlineSeconds` | `2`, `300` | Retries and time limit for one run. |
+| `renew.startingDeadlineSeconds` | `3600` | How late a missed run may still start. |
+| `renew.successfulJobsHistoryLimit`, `renew.failedJobsHistoryLimit` | `1`, `3` | Finished Jobs kept. |
+| `renew.resources` | `{}` | Renewal container resources. |
+| `renew.labels`, `renew.annotations` | `{}` | Added to the CronJob, its pod and its RBAC objects, on top of the API token ones. |
 
 Keep `waitSeconds` and `activeDeadlineSeconds` under your Helm `--timeout`.
 

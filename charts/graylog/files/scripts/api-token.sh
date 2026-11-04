@@ -80,6 +80,13 @@ if [ "$(status_of "$existing")" = "200" ]; then
   if [ -n "$old_token" ]; then
     code="$(gl_curl -s -o /dev/null --max-time 10 -u "${old_token}:token" -w '%{http_code}' "${API}/users/${SERVICE_USER}")"
     if [ "$code" = "200" ] || [ "$code" = "403" ]; then
+      # The renewal CronJob needs the user id and cannot look it up, so a Secret
+      # from before it was stored there gets it now. Best effort: a failure here
+      # must not fail a run that has nothing else to do.
+      if [ -z "$(body_of "$existing" | jstr userid)" ]; then
+        uid="$(root_api GET "/users/${SERVICE_USER}" | sed '$d' | jstr id)"
+        [ -n "$uid" ] && k8s PATCH "${K8S}/${SECRET_NAME}" "application/merge-patch+json" "{\"data\":{\"userid\":\"$(printf '%s' "$uid" | base64 | tr -d '\n')\"}}" >/dev/null && log "added the user id to Secret ${SECRET_NAME}"
+      fi
       log "Secret ${SECRET_NAME} already holds a working token, nothing to do"
       exit 0
     fi
@@ -120,7 +127,7 @@ new_id="$(body_of "$resp" | jstr id)"
 # 6. Store it. A token that is minted but not stored is unrecoverable, so revoke
 # it again rather than leave it orphaned if the write fails.
 b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
-data="\"token\":\"$(b64 "$new_token")\",\"username\":\"$(b64 "$SERVICE_USER")\""
+data="\"token\":\"$(b64 "$new_token")\",\"username\":\"$(b64 "$SERVICE_USER")\",\"userid\":\"$(b64 "$user_id")\""
 if [ "$(status_of "$existing")" = "200" ]; then
   out="$(k8s PATCH "${K8S}/${SECRET_NAME}" "application/merge-patch+json" "{\"data\":{${data}}}")"
 else

@@ -339,7 +339,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: SERVICE_PERMISSIONS
-            value: '["ca_clientcert:create","users:read,tokencreate,tokenlist,tokenremove:helm-automation"]'
+            value: '["ca_clientcert:create","users:tokencreate,tokenlist,tokenremove:helm-automation"]'
         documentIndex: 3
 
   - it: passes only the extra permissions when renew is off
