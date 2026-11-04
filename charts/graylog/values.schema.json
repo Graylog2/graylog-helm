@@ -546,7 +546,24 @@
             "resources": { "type": "object" },
             "annotations": { "type": "object" },
             "labels": { "type": "object" },
-            "secretLabels": { "type": "object" }
+            "secretLabels": { "type": "object" },
+            "renew": {
+              "type": "object",
+              "description": "CronJob that replaces the API token before it expires.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "schedule": { "type": "string" },
+                "before": { "type": "string", "description": "ISO-8601 duration of days, hours, minutes and seconds, e.g. P14D", "pattern": "^P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+S)?)?$" },
+                "backoffLimit": { "type": "integer", "minimum": 0 },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+                "startingDeadlineSeconds": { "type": "integer", "minimum": 1 },
+                "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+                "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+                "resources": { "type": "object" },
+                "annotations": { "type": "object" },
+                "labels": { "type": "object" }
+              }
+            }
           }
         },
         "lifecycle": {

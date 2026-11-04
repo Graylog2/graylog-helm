@@ -1229,6 +1229,46 @@ key: graylog-root-password
 {{- end }}
 
 {{/*
+Seconds in an ISO-8601 duration made of days, hours, minutes and seconds, such as
+P14D, PT36H or P1DT12H. Prints nothing for anything else (weeks, months, years, a
+malformed string), so callers decide whether that is an error. Graylog's UI and
+API take these durations for token lifetimes.
+*/}}
+{{- define "graylog.duration.seconds" -}}
+{{- $d := . | toString -}}
+{{- if and (regexMatch "^P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+S)?)?$" $d) (ne $d "P") (not (hasSuffix "T" $d)) -}}
+{{- $parts := splitList "T" $d -}}
+{{- $date := index $parts 0 -}}
+{{- $time := "" -}}
+{{- if gt (len $parts) 1 -}}{{- $time = index $parts 1 -}}{{- end -}}
+{{- $days := regexFind "[0-9]+D" $date | trimSuffix "D" | default "0" | int64 -}}
+{{- $hours := regexFind "[0-9]+H" $time | trimSuffix "H" | default "0" | int64 -}}
+{{- $mins := regexFind "[0-9]+M" $time | trimSuffix "M" | default "0" | int64 -}}
+{{- $secs := regexFind "[0-9]+S" $time | trimSuffix "S" | default "0" | int64 -}}
+{{- add (mul $days 86400) (mul $hours 3600) (mul $mins 60) $secs -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Permissions for a service user the API token Job creates, as JSON: graylog.apiToken.permissions
+plus, when graylog.apiToken.renew.enabled, the grant that lets the user renew its
+own token.
+
+The grant is one comma form string on purpose. Graylog strips the plain
+users:tokenlist:<name> and users:tokenremove:<name> self strings from a service
+account when it saves them, so listing those separately leaves the user able to
+mint a token but not to see its expiry or delete the old one.
+*/}}
+{{- define "graylog.apiToken.permissions" -}}
+{{- $t := .Values.graylog.apiToken -}}
+{{- $perms := $t.permissions | default list -}}
+{{- if and $t.renew $t.renew.enabled -}}
+{{- $perms = append $perms (printf "users:read,tokencreate,tokenlist,tokenremove:%s" $t.username) -}}
+{{- end -}}
+{{- $perms | uniq | toJson -}}
+{{- end }}
+
+{{/*
 Hook annotations for the API token objects. Takes (dict "weight" "-5").
 hook-failed removes the objects after a failed run too, so the Role that can
 create Secrets, and the bootstrap Secret holding the root password, never outlive

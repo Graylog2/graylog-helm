@@ -252,6 +252,17 @@ A hook Job creates a service user and an API token and stores the token in a Sec
 | `graylog.apiToken.annotations`            | Annotations for the Job, its pod and its RBAC objects.                                        | `{}`                   |
 | `graylog.apiToken.labels`                 | Labels for the Job, its pod and its RBAC objects.                                             | `{}`                   |
 | `graylog.apiToken.secretLabels`           | Labels for the token Secret.                                                                  | `{}`                   |
+| `graylog.apiToken.renew.enabled`          | Run a CronJob that replaces the token before it expires. The user renews with its own token. | `true`                 |
+| `graylog.apiToken.renew.schedule`         | Cron expression for the renewal CronJob.                                                      | `"17 3 * * *"`         |
+| `graylog.apiToken.renew.before`           | Renew when this much time or less remains, as an ISO-8601 duration such as `P14D`. Must be shorter than `ttl`. | `P14D`        |
+| `graylog.apiToken.renew.backoffLimit`     | Renewal Job retries.                                                                          | `2`                    |
+| `graylog.apiToken.renew.activeDeadlineSeconds` | Hard time limit for one renewal run.                                                     | `300`                  |
+| `graylog.apiToken.renew.startingDeadlineSeconds` | How late a missed run may still start.                                                 | `3600`                 |
+| `graylog.apiToken.renew.successfulJobsHistoryLimit` | Finished renewal Jobs kept.                                                         | `1`                    |
+| `graylog.apiToken.renew.failedJobsHistoryLimit` | Failed renewal Jobs kept.                                                               | `3`                    |
+| `graylog.apiToken.renew.resources`        | Renewal container resources.                                                                  | `{}`                   |
+| `graylog.apiToken.renew.annotations`      | Annotations for the CronJob, its pod and its RBAC objects.                                    | `{}`                   |
+| `graylog.apiToken.renew.labels`           | Labels for the CronJob, its pod and its RBAC objects.                                         | `{}`                   |
 
 
 ### Graylog inputs

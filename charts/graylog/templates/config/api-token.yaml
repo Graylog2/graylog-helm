@@ -3,7 +3,7 @@
 {{- /* helm upgrade --reuse-values skips the chart defaults for keys the stored
        release does not have. Without apiToken in the stored values, enabling it
        leaves everything but "enabled" unset, so fail with the fix. */ -}}
-{{- if not (and (kindIs "map" $t.image) (kindIs "map" $t.bootstrap)) }}
+{{- if not (and (kindIs "map" $t.image) (kindIs "map" $t.bootstrap) (kindIs "map" $t.renew)) }}
 {{- fail "graylog.apiToken is missing its defaults. This happens with helm upgrade --reuse-values on a release installed before graylog.apiToken existed.\n  Use --reset-then-reuse-values instead of --reuse-values, or pass your values with -f." }}
 {{- end }}
 {{- if has "Admin" $t.roles }}
@@ -119,7 +119,7 @@ spec:
             - name: SERVICE_ROLES
               value: {{ $t.roles | toJson | quote }}
             - name: SERVICE_PERMISSIONS
-              value: {{ $t.permissions | default list | toJson | quote }}
+              value: {{ include "graylog.apiToken.permissions" . | quote }}
             - name: TOKEN_NAME
               value: {{ $t.tokenName | quote }}
             - name: TOKEN_TTL

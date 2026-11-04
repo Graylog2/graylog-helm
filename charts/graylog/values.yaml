@@ -724,6 +724,33 @@ graylog:
     annotations: {}
     labels: {}
     secretLabels: {}
+    # renew runs a CronJob that replaces the token before it expires, so a
+    # cluster that is not upgraded for ttl days keeps a working token. The user
+    # mints the replacement with the token it already holds, so no root password
+    # is stored. The chart grants the user the permission to do that when it
+    # creates it. An existing user needs
+    # "users:read,tokencreate,tokenlist,tokenremove:<username>" added by hand.
+    # A token that has already expired cannot renew itself: helm upgrade mints a
+    # new one.
+    renew:
+      enabled: true
+      # schedule is a cron expression. It must fire more often than before.
+      schedule: "17 3 * * *"
+      # before is how long before expiry the token is replaced, as an ISO-8601
+      # duration like ttl. Days, hours, minutes and seconds work (P14D, PT36H).
+      # Must be shorter than ttl.
+      before: P14D
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      # startingDeadlineSeconds is how late a missed run may still start.
+      startingDeadlineSeconds: 3600
+      successfulJobsHistoryLimit: 1
+      failedJobsHistoryLimit: 3
+      resources: {}
+      # annotations and labels are added to the CronJob, its pod and its RBAC
+      # objects.
+      annotations: {}
+      labels: {}
 
 
 # datanode configures the Graylog Data Node (managed OpenSearch).

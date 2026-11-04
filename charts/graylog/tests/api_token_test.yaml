@@ -330,9 +330,22 @@ tests:
       - failedTemplate:
           errorPattern: non-Admin role
 
-  - it: passes extra permissions for a created user to the Job
+  - it: passes extra permissions for a created user to the Job, after the renew grant
     set:
       graylog.apiToken.enabled: true
+      graylog.apiToken.permissions: ["ca_clientcert:create"]
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SERVICE_PERMISSIONS
+            value: '["ca_clientcert:create","users:read,tokencreate,tokenlist,tokenremove:helm-automation"]'
+        documentIndex: 3
+
+  - it: passes only the extra permissions when renew is off
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.renew.enabled: false
       graylog.apiToken.permissions: ["ca_clientcert:create"]
     asserts:
       - contains:
