@@ -38,8 +38,9 @@ b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
 # Pull the first string value for a key out of a JSON document on stdin, turning the
-# \n escapes in a PEM back into newlines.
-jstr() { grep -o "\"$1\":\"[^\"]*\"" | head -n 1 | sed "s/^\"$1\":\"//; s/\"\$//; s/\\\\n/\\
+# \n escapes in a PEM back into newlines. The Kubernetes API pretty-prints when no
+# Accept header is sent ("key": "value"), Graylog does not, so allow both.
+jstr() { grep -o "\"$1\": *\"[^\"]*\"" | head -n 1 | sed "s/^\"$1\": *\"//; s/\"\$//; s/\\\\n/\\
 /g"; }
 
 k8s() {
