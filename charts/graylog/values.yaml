@@ -661,9 +661,11 @@ graylog:
   # A post-install/post-upgrade hook Job signs in as the root user once, creates
   # the service user, mints the token and writes the Secret. Root stays a
   # bootstrap credential and the token keeps working if the root password later
-  # changes. The Job's ServiceAccount and Role are hooks too and are removed once
-  # it succeeds or fails. A failed Job's logs are removed with it, so read them
-  # while it runs: kubectl logs -f job/<release>-api-token.
+  # changes. The Job's ServiceAccount, Role and RoleBinding are hooks too and are
+  # removed once it succeeds. A failed run removes only the Job, with its logs, so
+  # read them while it runs: kubectl logs -f job/<release>-api-token. The other
+  # objects, and the bootstrap Secret when there is one, stay until the next
+  # successful run replaces them. See docs/graylog/api-token.md to delete them.
   #
   # Graylog picks the token value and shows it once, so the Secret is written by
   # the Job and is not owned by Helm: it survives uninstall, and so does the
@@ -690,7 +692,8 @@ graylog:
     permissions: []
     # tokenName is the name the token carries in Graylog.
     tokenName: helm
-    # ttl is an ISO-8601 duration. Graylog's own default is P30D.
+    # ttl is an ISO-8601 duration such as P90D or PT36H. Graylog's own default is
+    # P30D. The schema rejects anything that is not one.
     ttl: P90D
     # bootstrap is where the Job gets the root password to sign in with. The
     # chart only stores a hash of it, so it needs the plaintext from somewhere.
@@ -701,10 +704,23 @@ graylog:
       # existingSecret names a Secret that holds the root password.
       existingSecret: ""
       passwordKey: GRAYLOG_ROOT_PASSWORD
-    # insecureSkipVerify turns off certificate verification for the Job's calls to
-    # Graylog. Only relevant with graylog.config.tls.enabled: the Job reaches
-    # Graylog through its in-cluster Service name, which a certificate issued for
-    # your public hostname usually does not cover.
+    # tls holds the trust settings for the Job's and the renewal CronJob's calls to
+    # Graylog. Only relevant with graylog.config.tls.enabled: they reach Graylog
+    # through its in-cluster Service name, which a certificate issued for your
+    # public hostname usually does not cover.
+    tls:
+      # caSecret names a Secret with the CA that signed Graylog's certificate.
+      # The pods mount it and verify against it. The certificate must cover the
+      # Service name <service>.<namespace>.svc.cluster.local. Empty verifies with
+      # the image's own CA bundle. Setting it with insecureSkipVerify fails the
+      # render.
+      caSecret:
+        name: ""
+        # key is the key in that Secret that holds the CA certificate.
+        key: ca.crt
+    # insecureSkipVerify turns off certificate verification for those calls, and
+    # sends the root password to a server the Job has not authenticated. Prefer
+    # tls.caSecret.
     insecureSkipVerify: false
     # waitSeconds is how long the Job waits for Graylog to answer before failing.
     # A cold install can take 5 to 10 minutes to reach Graylog: the Data Nodes
@@ -717,14 +733,49 @@ graylog:
       repository: curlimages/curl
       tag: 8.17.0
       imagePullPolicy: IfNotPresent
+      # imagePullSecrets overrides global.imagePullSecrets for this image. It
+      # covers the Job and the renewal CronJob.
+      imagePullSecrets: []
     backoffLimit: 3
     activeDeadlineSeconds: 780
+    # resources sets the Job container's requests and limits.
     resources: {}
+    # serviceAccount.automount sets automountServiceAccountToken on the Job's and
+    # the CronJob's ServiceAccounts and pods. Both call the Kubernetes API with
+    # that token to write the Secret, so false breaks them unless something else
+    # in your cluster provides the token.
+    serviceAccount:
+      automount: true
+    # podSecurityContext and containerSecurityContext apply to the Job and the
+    # renewal CronJob. The defaults follow the restricted Pod Security Standard.
+    # UID 100 is the curl user in curlimages/curl. Change it with the image.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 100
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+    # nodeSelector, tolerations, affinity and priorityClassName schedule the Job
+    # and the renewal CronJob. They take the standard Kubernetes syntax.
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    priorityClassName: ""
+    # extraEnv adds environment variables to the Job and the renewal CronJob, in
+    # full EnvVar syntax, for example a proxy setting. They come after the
+    # chart's own variables, so do not reuse a name the scripts read.
+    extraEnv: []
     # annotations and labels are added to the Job, its pod and its RBAC objects.
-    # secretLabels are added to the token Secret, which the Job creates.
+    # secretLabels and secretAnnotations are added to the token Secret when the
+    # Job creates it. An existing Secret keeps what it has.
     annotations: {}
     labels: {}
     secretLabels: {}
+    secretAnnotations: {}
     # renew runs a CronJob that replaces the token before it expires, so a
     # cluster that is not upgraded for ttl days keeps a working token. The user
     # mints the replacement with the token it already holds, so no root password

@@ -11,17 +11,18 @@
 # Alert on red, or on unassigned shards above 0. During a Data Node rollout,
 # wait for relocating and unassigned shards to reach 0.
 #
-# Needs a Graylog access token. The health API requires login, so create a token
-# for a dedicated admin user in the web UI and store it in a Secret before you
-# install, or the exporter pod won't start. Use `create`, not `apply`, so the
-# token isn't copied into an annotation:
-#
-#   kubectl -n <namespace> create secret generic graylog-api-token \
-#     --from-literal=username='<graylog access token>' \
-#     --from-literal=password='token'
+# Needs a Graylog API token. The health API requires login, so this file turns on
+# graylog.apiToken. The chart creates a service user with the Reader role and stores its
+# token in the Secret <release>-api-token, and the exporter mounts that Secret.
+# The Secret appears when the post-install hook finishes, so the exporter pod
+# waits in ContainerCreating until then. See docs/graylog/api-token.md.
 #
 # Also needs the Prometheus Operator CRDs. The ServiceMonitor `release` label
 # must match your Prometheus's serviceMonitorSelector.
+
+graylog:
+  apiToken:
+    enabled: true
 
 extraObjects:
   - apiVersion: v1
@@ -36,8 +37,8 @@ extraObjects:
               Accept: application/json
             http_client_config:
               basic_auth:
-                username_file: /etc/graylog-api/username
-                password_file: /etc/graylog-api/password
+                username_file: /etc/graylog-api/token
+                password: token
             metrics:
               - name: graylog_indexer_cluster_health
                 type: object
@@ -115,7 +116,7 @@ extraObjects:
                 name: '{{ include "graylog.fullname" . }}-json-exporter'
             - name: graylog-api
               secret:
-                secretName: graylog-api-token
+                secretName: '{{ include "graylog.fullname" . }}-api-token'
 
   - apiVersion: v1
     kind: Service

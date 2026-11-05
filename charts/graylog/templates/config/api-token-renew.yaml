@@ -1,7 +1,8 @@
 {{- $t := .Values.graylog.apiToken | default dict }}
 {{- if and .Values.graylog.enabled $t.enabled (kindIs "map" $t.renew) $t.renew.enabled }}
 {{- $r := $t.renew }}
-{{- $name := printf "%s-api-token-renew" (include "graylog.fullname" .) }}
+{{- $name := printf "%s-renew" (include "graylog.apiToken.name" .) }}
+{{- $curlExtra := include "graylog.apiToken.curlExtra" . }}
 {{- $secretName := include "graylog.apiToken.secretName" . }}
 {{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
 {{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
@@ -21,6 +22,7 @@ metadata:
   name: {{ $name }}
   {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $t.labels) "indent" 2) }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $t.annotations) "indent" 2) }}
+automountServiceAccountToken: {{ $t.serviceAccount.automount }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -72,23 +74,10 @@ spec:
         spec:
           serviceAccountName: {{ $name }}
           restartPolicy: Never
-          {{- with .Values.global.imagePullSecrets }}
-          imagePullSecrets: {{ toYaml . | nindent 12 }}
-          {{- end }}
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 100
-            seccompProfile:
-              type: RuntimeDefault
+          {{- include "graylog.apiToken.pod" . | nindent 10 }}
           containers:
             - name: api-token-renew
-              image: {{ printf "%s:%s" $t.image.repository $t.image.tag }}
-              imagePullPolicy: {{ $t.image.imagePullPolicy }}
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                capabilities:
-                  drop: ["ALL"]
+              {{- include "graylog.apiToken.container" . | nindent 14 }}
               {{- with $r.resources }}
               resources: {{ toYaml . | nindent 16 }}
               {{- end }}
@@ -107,9 +96,12 @@ spec:
                   value: {{ .Release.Namespace | quote }}
                 - name: RENEW_BEFORE_SECONDS
                   value: {{ $beforeSeconds | quote }}
-                {{- if $t.insecureSkipVerify }}
+                {{- if $curlExtra }}
                 - name: CURL_EXTRA
-                  value: "-k"
+                  value: {{ $curlExtra | quote }}
+                {{- end }}
+                {{- with $t.extraEnv }}
+                {{- toYaml . | nindent 16 }}
                 {{- end }}
               command:
                 - /bin/sh

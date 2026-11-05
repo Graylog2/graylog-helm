@@ -26,6 +26,10 @@ first install:
 helm upgrade --install graylog charts/graylog -n graylog -f values.yaml --timeout 15m
 ```
 
+Upgrading a release that was installed before `graylog.apiToken` existed with `--reuse-values` fails when you enable
+the token. Helm reuses the old values, which lack the chart's defaults for this block, and the render stops with a
+message saying so. Use `--reset-then-reuse-values`, or pass your values with `-f`.
+
 ## How it works
 
 A post-install and post-upgrade hook Job runs these steps.
@@ -39,8 +43,12 @@ A post-install and post-upgrade hook Job runs these steps.
 Graylog shows a token once, so the Job writes the Secret itself. Helm does not own it. The Secret and the
 service user both survive `helm uninstall`.
 
+Passwords and tokens never appear on a command line. The scripts hand curl its credentials in a config file under a
+private directory in `/tmp`, an in-memory volume, and send request bodies through stdin.
+
 The Job's ServiceAccount, Role and RoleBinding are hooks too and are deleted when it succeeds. The Role can
-create Secrets and read or patch only the token Secret. The renewal CronJob and its own ServiceAccount and
+create Secrets and read or patch only the token Secret. A failed run does not delete them, see
+[After a failed run](#after-a-failed-run). The renewal CronJob and its own ServiceAccount and
 Role are not hooks. That Role can only read and patch the token Secret.
 
 ## Where the Job gets the root password
@@ -124,10 +132,26 @@ Failed runs show up as failed Jobs. `kubectl logs job/<name>` shows why, and `fa
 3) controls how many are kept. Alert on failed Jobs with kube-state-metrics if you want to hear about it before
 the token expires.
 
+## After a failed run
+
+Helm deletes the failed Job and its logs. It does not delete the Job's ServiceAccount, Role and RoleBinding, or the
+bootstrap Secret that holds the root password when you set `graylog.config.rootPassword`. Helm applies
+`hook-failed` to the hook that failed and runs `hook-succeeded` for the others only after the whole phase finishes.
+The next successful `helm upgrade` replaces them. To remove them sooner, or after you uninstall, run this with your
+release's fullname:
+
+```sh
+kubectl -n graylog delete serviceaccount,role,rolebinding graylog-api-token
+kubectl -n graylog delete secret graylog-api-token-bootstrap --ignore-not-found
+```
+
+Fullnames longer than 36 characters are cut to 36 in these names, so `kubectl -n graylog get role` shows the real one.
+The bootstrap Secret exists only when you set `graylog.config.rootPassword`.
+
 ## Monitoring example
 
 `examples/values/values-example-monitoring-indexer-health.yaml` runs a json_exporter that reads cluster health
-with this token. It turns on `graylog.apiToken` and mounts the `<release fullname>-api-token` Secret, with the
+with this token. It turns on `graylog.apiToken`, with the default `Reader` role, and mounts the `<release fullname>-api-token` Secret, with the
 `token` key as the Basic auth username and the literal password `token`. Nothing needs to exist before the
 install.
 
@@ -143,17 +167,25 @@ All keys sit under `graylog.apiToken`.
 | `roles` | `[Reader]` | Roles for a new user. Must not include Admin. |
 | `permissions` | `[]` | Extra permissions for a new user, such as `ca_clientcert:create`. The renewal grant is added to these. An existing user is not changed. |
 | `tokenName` | `helm` | Name the token carries in Graylog. |
-| `ttl` | `P90D` | ISO-8601 token lifetime. |
+| `ttl` | `P90D` | ISO-8601 token lifetime. The schema rejects anything else. |
 | `bootstrap.existingSecret` | `""` | Secret holding the root password. Required with `global.existingSecretName`. |
 | `bootstrap.passwordKey` | `GRAYLOG_ROOT_PASSWORD` | Key in that Secret. |
-| `insecureSkipVerify` | `false` | Skip certificate checks. Needed with `graylog.config.tls.enabled` when the certificate does not cover the Service name. |
+| `tls.caSecret.name` | `""` | Secret holding the CA that signed Graylog's certificate, for `graylog.config.tls.enabled`. The Job and the CronJob mount it and verify against it. The certificate has to cover `<service>.<namespace>.svc.cluster.local`. |
+| `tls.caSecret.key` | `ca.crt` | Key in that Secret that holds the CA certificate. |
+| `insecureSkipVerify` | `false` | Skip certificate checks. Prefer `tls.caSecret`. Setting both fails the render. |
 | `waitSeconds` | `720` | How long the Job waits for Graylog. |
 | `activeDeadlineSeconds` | `780` | Hard limit for the Job. |
 | `backoffLimit` | `3` | Job retries. |
-| `image.repository`, `image.tag`, `image.imagePullPolicy` | `curlimages/curl`, `8.17.0`, `IfNotPresent` | Job image. Pull secrets come from `global.imagePullSecrets`. |
+| `image.repository`, `image.tag`, `image.imagePullPolicy` | `curlimages/curl`, `8.17.0`, `IfNotPresent` | Image for the Job and the CronJob. |
+| `image.imagePullSecrets` | `[]` | Overrides `global.imagePullSecrets` for this image. |
 | `resources` | `{}` | Job container resources. |
+| `serviceAccount.automount` | `true` | `automountServiceAccountToken` for both ServiceAccounts and pods. Both call the Kubernetes API with that token, so `false` breaks them unless your cluster provides one another way. |
+| `podSecurityContext` | non-root, UID 100, `RuntimeDefault` seccomp | Pod security context for the Job and the CronJob. Keys merge over the defaults. |
+| `containerSecurityContext` | no escalation, read-only root, drop `ALL` | Container security context for both. |
+| `nodeSelector`, `tolerations`, `affinity`, `priorityClassName` | empty | Scheduling for both. |
+| `extraEnv` | `[]` | Extra environment variables for both, in full `EnvVar` syntax. |
 | `labels`, `annotations` | `{}` | Added to the Job, its pod and its RBAC objects. |
-| `secretLabels` | `{}` | Added to the token Secret. |
+| `secretLabels`, `secretAnnotations` | `{}` | Added to the token Secret when the Job creates it. An existing Secret keeps what it has. |
 | `renew.enabled` | `true` | Run the renewal CronJob. |
 | `renew.schedule` | `17 3 * * *` | Cron expression. |
 | `renew.before` | `P14D` | Renew when this much time or less remains, as an ISO-8601 duration. Must be shorter than `ttl`. |
@@ -169,8 +201,8 @@ Keep `waitSeconds` and `activeDeadlineSeconds` under your Helm `--timeout`.
 
 - Needs Graylog 6.3.12, 7.0.7, 7.1.2 or newer. Older releases let any user revoke other users' tokens
   (CVE-2026-55867).
-- A failed run removes the Job, ServiceAccount, Role, RoleBinding and any bootstrap Secret, and the Job's logs go
-  with them. Helm's error names the failed hook. To read the logs, follow them while the Job runs with
-  `kubectl logs -f job/<release>-api-token`.
+- A failed run removes only the Job, and its logs go with it. Helm's error names the failed hook. To read the logs,
+  follow them while the Job runs with `kubectl logs -f job/<release>-api-token`. The other objects stay, see
+  [After a failed run](#after-a-failed-run).
 - The Secret and service user are not removed on uninstall. Delete them yourself if you want them gone.
 - The Job image needs a shell, curl, sed, grep and base64. The default is `curlimages/curl`.

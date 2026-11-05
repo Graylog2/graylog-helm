@@ -30,6 +30,7 @@ for a in "$@"; do
   prev="$a"; url="$a"
 done
 echo "$method $url" >> "${WORK}/calls"
+echo "$*" >> "${WORK}/args"
 code() { printf '\n%s' "$1"; }
 case "$method $url" in
   "GET "*/system/lbstatus) printf '200' ;;
@@ -53,7 +54,7 @@ chmod +x "${WORK}/curl"
 
 fail=0
 run() { # name, expected log fragment; the scenario's STUB_* are exported by the caller
-  : > "${WORK}/calls"
+  : > "${WORK}/calls"; : > "${WORK}/args"
   out=$(WORK="$WORK" PATH="${WORK}:${PATH}" NOW_EPOCH=$((20761 * 86400)) GRAYLOG_URL=http://g:9000 \
     SERVICE_USER=helm-automation TOKEN_NAME=helm TOKEN_TTL=P90D SECRET_NAME=s NAMESPACE=n \
     RENEW_BEFORE_SECONDS=1209600 sh "$SCRIPT" 2>&1)
@@ -138,5 +139,13 @@ run "refuses an unreadable mint response" "creating the token failed"
 expect_not_called "  and does not touch the Secret" "PATCH"
 expect_not_called "  and keeps the old token" "DELETE"
 unset STUB_MINT
+
+# Tokens stay off the command line, where ps would show them.
+export STUB_EXPIRES=2026-11-07T00:00:00.000Z
+run "renews once more to inspect the curl arguments" "stored the new token"
+for secret in old-token new-token; do
+  if grep -q "$secret" "${WORK}/args"; then echo "FAIL  $secret reached a curl argument"; fail=1
+  else echo "ok   $secret is not a curl argument"; fi
+done
 
 exit "$fail"

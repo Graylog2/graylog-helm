@@ -12,14 +12,30 @@
 #
 # Environment: GRAYLOG_URL, ROOT_USER, ROOT_PASSWORD, SERVICE_USER, SERVICE_ROLES
 # (JSON array), SERVICE_PERMISSIONS (JSON array, optional), TOKEN_NAME, TOKEN_TTL, SECRET_NAME, SECRET_LABELS (JSON object),
-# NAMESPACE, WAIT_SECONDS, and optionally CURL_EXTRA (extra curl flags for calls to
-# Graylog; "-k" when the in-cluster certificate cannot be verified). Authored for the curlimages/curl image: POSIX sh, curl,
-# sed and grep only, so JSON is picked apart with sed rather than jq.
+# NAMESPACE, WAIT_SECONDS, and optionally SECRET_ANNOTATIONS (JSON object) and
+# CURL_EXTRA (extra curl flags for calls to Graylog, "-k" or "--cacert <file>").
+# Authored for the curlimages/curl image: POSIX sh, curl, sed and grep only, so
+# JSON is picked apart with sed rather than jq.
+#
+# Passwords, tokens and request bodies never reach a command line, where ps would
+# show them. Credentials go to curl in config files under a private temp
+# directory (-K), and bodies go through stdin (--data-binary @-). printf is a
+# shell builtin, so it does not start a process either.
 set -u
+umask 077
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 
 # The Kubernetes API calls below are curl too, so the flags are applied per call
 # through gl_curl rather than by wrapping curl itself.
 gl_curl() { command curl ${CURL_EXTRA:-} "$@"; }
+
+# Escape a value for a double-quoted curl config string.
+cfg_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+printf 'user = "%s:%s"\n' "$(cfg_escape "$ROOT_USER")" "$(cfg_escape "$ROOT_PASSWORD")" > "${TMP}/root"
+printf 'header = "Authorization: Bearer %s"\n' "$(cat "/var/run/secrets/kubernetes.io/serviceaccount/token" 2>/dev/null)" > "${TMP}/k8s"
+SECRET_ANNOTATIONS="${SECRET_ANNOTATIONS:-}"
+[ -n "$SECRET_ANNOTATIONS" ] || SECRET_ANNOTATIONS='{}'
 
 API="${GRAYLOG_URL}/api"
 K8S="https://kubernetes.default.svc/api/v1/namespaces/${NAMESPACE}/secrets"
@@ -37,11 +53,11 @@ jstr() { grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -n 1 | sed "
 root_api() {
   method="$1"; path="$2"; body="${3:-}"
   if [ -n "$body" ]; then
-    gl_curl -sS --max-time 30 -X "$method" -u "${ROOT_USER}:${ROOT_PASSWORD}" \
+    printf '%s' "$body" | gl_curl -sS --max-time 30 -X "$method" -K "${TMP}/root" \
       -H "X-Requested-By: graylog-helm" -H "Content-Type: application/json" \
-      -H "Accept: application/json" -d "$body" -w '\n%{http_code}' "${API}${path}"
+      -H "Accept: application/json" --data-binary @- -w '\n%{http_code}' "${API}${path}"
   else
-    gl_curl -sS --max-time 30 -X "$method" -u "${ROOT_USER}:${ROOT_PASSWORD}" \
+    gl_curl -sS --max-time 30 -X "$method" -K "${TMP}/root" \
       -H "X-Requested-By: graylog-helm" -H "Accept: application/json" \
       -w '\n%{http_code}' "${API}${path}"
   fi
@@ -52,12 +68,11 @@ body_of() { printf '%s' "$1" | sed '$d'; }
 k8s() {
   method="$1"; url="$2"; ctype="$3"; body="${4:-}"
   if [ -n "$body" ]; then
-    curl -sS --max-time 30 -X "$method" --cacert "${SA}/ca.crt" \
-      -H "Authorization: Bearer $(cat ${SA}/token)" -H "Content-Type: ${ctype}" \
-      -d "$body" -w '\n%{http_code}' "$url"
+    printf '%s' "$body" | curl -sS --max-time 30 -X "$method" --cacert "${SA}/ca.crt" -K "${TMP}/k8s" \
+      -H "Content-Type: ${ctype}" --data-binary @- -w '\n%{http_code}' "$url"
   else
-    curl -sS --max-time 30 -X "$method" --cacert "${SA}/ca.crt" \
-      -H "Authorization: Bearer $(cat ${SA}/token)" -w '\n%{http_code}' "$url"
+    curl -sS --max-time 30 -X "$method" --cacert "${SA}/ca.crt" -K "${TMP}/k8s" \
+      -w '\n%{http_code}' "$url"
   fi
 }
 
@@ -78,7 +93,8 @@ existing="$(k8s GET "${K8S}/${SECRET_NAME}" "application/json")"
 if [ "$(status_of "$existing")" = "200" ]; then
   old_token="$(body_of "$existing" | jstr token | base64 -d 2>/dev/null)"
   if [ -n "$old_token" ]; then
-    code="$(gl_curl -s -o /dev/null --max-time 10 -u "${old_token}:token" -w '%{http_code}' "${API}/users/${SERVICE_USER}")"
+    printf 'user = "%s:token"\n' "$(cfg_escape "$old_token")" > "${TMP}/old"
+    code="$(gl_curl -s -o /dev/null --max-time 10 -K "${TMP}/old" -w '%{http_code}' "${API}/users/${SERVICE_USER}")"
     if [ "$code" = "200" ] || [ "$code" = "403" ]; then
       # The renewal CronJob needs the user id and cannot look it up, so a Secret
       # from before it was stored there gets it now. Best effort: a failure here
@@ -131,7 +147,7 @@ data="\"token\":\"$(b64 "$new_token")\",\"username\":\"$(b64 "$SERVICE_USER")\",
 if [ "$(status_of "$existing")" = "200" ]; then
   out="$(k8s PATCH "${K8S}/${SECRET_NAME}" "application/merge-patch+json" "{\"data\":{${data}}}")"
 else
-  out="$(k8s POST "${K8S}" "application/json" "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"${SECRET_NAME}\",\"labels\":${SECRET_LABELS}},\"type\":\"Opaque\",\"data\":{${data}}}")"
+  out="$(k8s POST "${K8S}" "application/json" "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"${SECRET_NAME}\",\"labels\":${SECRET_LABELS},\"annotations\":${SECRET_ANNOTATIONS}},\"type\":\"Opaque\",\"data\":{${data}}}")"
 fi
 case "$(status_of "$out")" in
   200|201) log "stored the token in Secret ${SECRET_NAME}" ;;

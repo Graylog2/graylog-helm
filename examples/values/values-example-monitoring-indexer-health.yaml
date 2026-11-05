@@ -13,17 +13,19 @@
 #
 # Prerequisites:
 #   - The Prometheus Operator CRDs (ServiceMonitor) are installed.
-#   - A Secret holding a Graylog access token. Create it yourself, with `create`
-#     and not `apply`, because apply copies the manifest in cleartext into the
-#     last-applied-configuration annotation. A token authenticates as
-#     username=<token>, password=token.
-#
-#       kubectl -n <namespace> create secret generic graylog-api-token \
-#         --from-literal=username='<graylog access token>' \
-#         --from-literal=password='token'
+#   - Graylog 6.3.12, 7.0.7, 7.1.2 or newer. This file turns on graylog.apiToken,
+#     which creates a service user with the Reader role and stores its token in the Secret
+#     <release>-api-token. The exporter mounts that Secret and sends the token as
+#     the Basic auth username with the password `token`. The Secret appears when
+#     the post-install hook finishes, so the exporter pod waits in
+#     ContainerCreating until then. See docs/graylog/api-token.md.
 #
 # Metrics: graylog_indexer_cluster_health_status, with a `status` label, and
 # graylog_indexer_cluster_health_{active,initializing,relocating,unassigned}_shards.
+
+graylog:
+  apiToken:
+    enabled: true
 
 extraObjects:
   - apiVersion: v1
@@ -38,8 +40,8 @@ extraObjects:
               Accept: application/json
             http_client_config:
               basic_auth:
-                username_file: /etc/graylog-api/username
-                password_file: /etc/graylog-api/password
+                username_file: /etc/graylog-api/token
+                password: token
             metrics:
               - name: graylog_indexer_cluster_health
                 type: object
@@ -117,7 +119,7 @@ extraObjects:
                 name: '{{ include "graylog.fullname" . }}-json-exporter'
             - name: graylog-api
               secret:
-                secretName: graylog-api-token
+                secretName: '{{ include "graylog.fullname" . }}-api-token'
 
   - apiVersion: v1
     kind: Service

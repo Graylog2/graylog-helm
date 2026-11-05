@@ -17,9 +17,20 @@
 # NAMESPACE, RENEW_BEFORE_SECONDS, and optionally CURL_EXTRA (extra curl flags for
 # calls to Graylog) and NOW_EPOCH (current time, for tests). Authored for the
 # curlimages/curl image: POSIX sh, curl, sed, grep and base64 only.
+#
+# The token and the Kubernetes bearer token never reach a command line, where ps
+# would show them. Credentials go to curl in config files under a private temp
+# directory (-K), and bodies go through stdin (--data-binary @-).
 set -u
+umask 077
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 
 gl_curl() { command curl ${CURL_EXTRA:-} "$@"; }
+
+# Escape a value for a double-quoted curl config string.
+cfg_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+printf 'header = "Authorization: Bearer %s"\n' "$(cat "/var/run/secrets/kubernetes.io/serviceaccount/token" 2>/dev/null)" > "${TMP}/k8s"
 
 API="${GRAYLOG_URL}/api"
 K8S="https://kubernetes.default.svc/api/v1/namespaces/${NAMESPACE}/secrets"
@@ -54,24 +65,24 @@ fmt() {
 k8s() {
   method="$1"; url="$2"; ctype="$3"; body="${4:-}"
   if [ -n "$body" ]; then
-    curl -sS --max-time 30 -X "$method" --cacert "${SA}/ca.crt" \
-      -H "Authorization: Bearer $(cat ${SA}/token)" -H "Content-Type: ${ctype}" \
-      -d "$body" -w '\n%{http_code}' "$url"
+    printf '%s' "$body" | curl -sS --max-time 30 -X "$method" --cacert "${SA}/ca.crt" -K "${TMP}/k8s" \
+      -H "Content-Type: ${ctype}" --data-binary @- -w '\n%{http_code}' "$url"
   else
-    curl -sS --max-time 30 -X "$method" --cacert "${SA}/ca.crt" \
-      -H "Authorization: Bearer $(cat ${SA}/token)" -w '\n%{http_code}' "$url"
+    curl -sS --max-time 30 -X "$method" --cacert "${SA}/ca.crt" -K "${TMP}/k8s" \
+      -w '\n%{http_code}' "$url"
   fi
 }
 
 # Graylog request as the service user, authenticating with the token.
 token_api() {
   method="$1"; path="$2"; body="${3:-}"
+  printf 'user = "%s:token"\n' "$(cfg_escape "$TOKEN")" > "${TMP}/tok"
   if [ -n "$body" ]; then
-    gl_curl -sS --max-time 30 -X "$method" -u "${TOKEN}:token" \
+    printf '%s' "$body" | gl_curl -sS --max-time 30 -X "$method" -K "${TMP}/tok" \
       -H "X-Requested-By: graylog-helm" -H "Content-Type: application/json" \
-      -H "Accept: application/json" -d "$body" -w '\n%{http_code}' "${API}${path}"
+      -H "Accept: application/json" --data-binary @- -w '\n%{http_code}' "${API}${path}"
   else
-    gl_curl -sS --max-time 30 -X "$method" -u "${TOKEN}:token" \
+    gl_curl -sS --max-time 30 -X "$method" -K "${TMP}/tok" \
       -H "X-Requested-By: graylog-helm" -H "Accept: application/json" \
       -w '\n%{http_code}' "${API}${path}"
   fi

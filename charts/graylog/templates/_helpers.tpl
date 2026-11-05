@@ -1217,7 +1217,7 @@ with, and the render fails rather than ship a Job that cannot work.
 name: {{ $t.bootstrap.existingSecret }}
 key: {{ $t.bootstrap.passwordKey }}
 {{- else if .Values.graylog.config.rootPassword }}
-name: {{ include "graylog.fullname" . }}-api-token-bootstrap
+name: {{ include "graylog.apiToken.name" . }}-bootstrap
 key: GRAYLOG_ROOT_PASSWORD
 hookSecret: true
 {{- else if .Values.global.existingSecretName }}
@@ -1269,12 +1269,108 @@ mint a token but not to see its expiry or delete the old one.
 {{- end }}
 
 {{/*
-Hook annotations for the API token objects. Takes (dict "weight" "-5").
-hook-failed removes the objects after a failed run too, so the Role that can
-create Secrets, and the bootstrap Secret holding the root password, never outlive
-a failure. The cost is that the failed Job's logs go with it. Helm's error names
-the failed hook, and rerunning with a Job kept is a debugging step for the user.
+Base name for the API token objects: the Job, its ServiceAccount, Role,
+RoleBinding and bootstrap Secret, and the renewal CronJob with "-renew" added.
+The fullname is cut to 36 characters because Kubernetes caps CronJob names at 52
+and "-api-token-renew" adds 16. Fullnames of 36 characters or less are unchanged.
+*/}}
+{{- define "graylog.apiToken.name" -}}
+{{- include "graylog.fullname" . | trunc 36 | trimSuffix "-" }}-api-token
+{{- end }}
+
+{{/*
+Hook annotations for the API token objects. Takes (dict "weight" "-5") and, for
+the Job, "failed" true.
+
+Only the Job gets hook-failed. Helm applies hook-failed to the hook that failed
+and nothing else, and it applies hook-succeeded to the earlier hooks only after
+the whole phase has finished, which a failed Job prevents. So after a failed run
+the ServiceAccount, Role, RoleBinding and any bootstrap Secret stay until the
+next successful run replaces them (before-hook-creation) or the user deletes
+them. docs/graylog/api-token.md lists the commands.
 */}}
 {{- define "graylog.apiToken.hooks" -}}
-{{- dict "helm.sh/hook" "post-install,post-upgrade" "helm.sh/hook-weight" .weight "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded,hook-failed" | toYaml }}
+{{- $policy := "before-hook-creation,hook-succeeded" -}}
+{{- if .failed }}{{- $policy = "before-hook-creation,hook-succeeded,hook-failed" }}{{- end -}}
+{{- dict "helm.sh/hook" "post-install,post-upgrade" "helm.sh/hook-weight" .weight "helm.sh/hook-delete-policy" $policy | toYaml }}
+{{- end }}
+
+{{/*
+curl flags for the calls to Graylog, as one string. Empty by default.
+insecureSkipVerify gives -k. tls.caSecret.name gives --cacert for the CA the pod
+mounts from that Secret. Setting both fails the render, because trusting a CA
+and skipping verification contradict each other.
+*/}}
+{{- define "graylog.apiToken.curlExtra" -}}
+{{- $t := .Values.graylog.apiToken -}}
+{{- if and $t.insecureSkipVerify $t.tls.caSecret.name -}}
+{{- fail "graylog.apiToken.insecureSkipVerify and graylog.apiToken.tls.caSecret.name are both set.\n  Set only graylog.apiToken.tls.caSecret.name to verify Graylog's certificate against your CA, or only insecureSkipVerify." -}}
+{{- end -}}
+{{- if $t.insecureSkipVerify -}}
+-k
+{{- else if $t.tls.caSecret.name -}}
+--cacert /etc/graylog-api-ca/{{ $t.tls.caSecret.key }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Pod spec fields shared by the API token Job and the renewal CronJob: the
+ServiceAccount token mount, pull secrets, pod security context, scheduling and
+volumes. Render it with nindent at the pod spec's indent. The scripts write
+curl's credential file to /tmp, so the root filesystem can stay read only.
+*/}}
+{{- define "graylog.apiToken.pod" -}}
+{{- $t := .Values.graylog.apiToken -}}
+{{- $pull := ($t.image.imagePullSecrets | default .Values.global.imagePullSecrets) | default list -}}
+automountServiceAccountToken: {{ $t.serviceAccount.automount }}
+{{- with $pull }}
+imagePullSecrets: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $t.podSecurityContext }}
+securityContext: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $t.priorityClassName }}
+priorityClassName: {{ . | quote }}
+{{- end }}
+{{- with $t.nodeSelector }}
+nodeSelector: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $t.tolerations }}
+tolerations: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $t.affinity }}
+affinity: {{ toYaml . | nindent 2 }}
+{{- end }}
+volumes:
+  - name: tmp
+    emptyDir:
+      medium: Memory
+      sizeLimit: 1Mi
+  {{- if $t.tls.caSecret.name }}
+  - name: graylog-ca
+    secret:
+      secretName: {{ $t.tls.caSecret.name | quote }}
+  {{- end }}
+{{- end }}
+
+{{/*
+Container fields shared by the API token Job and the renewal CronJob: image, pull
+policy, container security context and volume mounts. Render it with nindent at
+the container's indent.
+*/}}
+{{- define "graylog.apiToken.container" -}}
+{{- $t := .Values.graylog.apiToken -}}
+image: {{ printf "%s:%s" $t.image.repository $t.image.tag }}
+imagePullPolicy: {{ $t.image.imagePullPolicy }}
+{{- with $t.containerSecurityContext }}
+securityContext: {{ toYaml . | nindent 2 }}
+{{- end }}
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  {{- if $t.tls.caSecret.name }}
+  - name: graylog-ca
+    mountPath: /etc/graylog-api-ca
+    readOnly: true
+  {{- end }}
 {{- end }}

@@ -49,38 +49,43 @@ tests:
           value: "0"
         documentIndex: 3
 
-  - it: deletes every hook object when the Job fails as well as when it succeeds
+  # Helm applies hook-failed to the hook that failed and to nothing else, and runs
+  # hook-succeeded for the earlier hooks only after the whole phase finishes, which a
+  # failed Job prevents. So only the Job carries hook-failed. Round 2 review, live:
+  # after a failed run the ServiceAccount, Role and RoleBinding stay until the next
+  # successful run. The docs say so and list the delete commands.
+  - it: removes the Job on failure and the supporting objects only after success
     set:
       graylog.apiToken.enabled: true
     asserts:
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: before-hook-creation,hook-succeeded,hook-failed
+          value: before-hook-creation,hook-succeeded
         documentIndex: 0
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: before-hook-creation,hook-succeeded,hook-failed
+          value: before-hook-creation,hook-succeeded
         documentIndex: 1
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: before-hook-creation,hook-succeeded,hook-failed
+          value: before-hook-creation,hook-succeeded
         documentIndex: 2
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
           value: before-hook-creation,hook-succeeded,hook-failed
         documentIndex: 3
 
-  - it: deletes the bootstrap Secret with the plaintext root password on failure too
+  - it: gives the bootstrap Secret the same policy as the other supporting objects
     set:
       graylog.apiToken.enabled: true
-      graylog.config.rootPassword: s3cret-pass
+      graylog.config.rootPassword: placeholder
     asserts:
       - isKind:
           of: Secret
         documentIndex: 3
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: before-hook-creation,hook-succeeded,hook-failed
+          value: before-hook-creation,hook-succeeded
         documentIndex: 3
 
   - it: limits the Role to creating secrets and reading/patching only the token Secret
@@ -132,7 +137,7 @@ tests:
   - it: copies graylog.config.rootPassword into a hook Secret when it is set
     set:
       graylog.apiToken.enabled: true
-      graylog.config.rootPassword: abcdefghijklmnop
+      graylog.config.rootPassword: placeholder
     asserts:
       - hasDocuments:
           count: 5
@@ -160,7 +165,7 @@ tests:
   - it: prefers bootstrap.existingSecret over everything else
     set:
       graylog.apiToken.enabled: true
-      graylog.config.rootPassword: abcdefghijklmnop
+      graylog.config.rootPassword: placeholder
       graylog.apiToken.bootstrap.existingSecret: root-pw
       graylog.apiToken.bootstrap.passwordKey: pw
     asserts:
@@ -354,3 +359,282 @@ tests:
             name: SERVICE_PERMISSIONS
             value: '["ca_clientcert:create"]'
         documentIndex: 3
+
+  # Kubernetes caps CronJob names at 52 characters and the renewal CronJob adds 16 to
+  # the base name. Round 2 review, live: a 44 character release name was rejected.
+  - it: keeps every object name within the Kubernetes limits for a long release name
+    release:
+      name: graylog-production-us-east-1-cluster-blue-01
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^.{1,52}$
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: graylog-production-us-east-1-cluster-api-token
+        documentIndex: 3
+      - equal:
+          path: subjects[0].name
+          value: graylog-production-us-east-1-cluster-api-token
+        documentIndex: 2
+
+  - it: leaves the object names alone when the fullname fits
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: graylog-api-token
+        documentIndex: 3
+
+  - it: lets the pod security contexts be overridden key by key
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 1234
+        fsGroup: 1234
+      graylog.apiToken.containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1234
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1234
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: false
+        documentIndex: 3
+
+  - it: mounts the ServiceAccount token by default and honours false
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: true
+        documentIndex: 3
+      - equal:
+          path: automountServiceAccountToken
+          value: true
+        documentIndex: 0
+
+  - it: sets automountServiceAccountToken false on the account and the pod when asked
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.serviceAccount.automount: false
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+        documentIndex: 3
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+        documentIndex: 0
+
+  - it: prefers image.imagePullSecrets over the global ones
+    set:
+      graylog.apiToken.enabled: true
+      global.imagePullSecrets: [{name: global-reg}]
+      graylog.apiToken.image.imagePullSecrets: [{name: job-reg}]
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value: [{name: job-reg}]
+        documentIndex: 3
+
+  - it: falls back to the global pull secrets
+    set:
+      graylog.apiToken.enabled: true
+      global.imagePullSecrets: [{name: global-reg}]
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value: [{name: global-reg}]
+        documentIndex: 3
+
+  - it: schedules the Job with nodeSelector, tolerations, affinity and priorityClassName
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.nodeSelector: {disk: ssd}
+      graylog.apiToken.tolerations: [{key: dedicated, operator: Exists}]
+      graylog.apiToken.affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: zone, operator: In, values: [a]}
+      graylog.apiToken.priorityClassName: low
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: {disk: ssd}
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: dedicated
+        documentIndex: 3
+      - exists:
+          path: spec.template.spec.affinity.nodeAffinity
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: low
+        documentIndex: 3
+
+  - it: renders no scheduling fields by default
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - notExists:
+          path: spec.template.spec.nodeSelector
+        documentIndex: 3
+      - notExists:
+          path: spec.template.spec.priorityClassName
+        documentIndex: 3
+
+  - it: appends extraEnv after the chart's variables
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.extraEnv:
+        - name: HTTPS_PROXY
+          value: http://proxy:3128
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HTTPS_PROXY
+            value: http://proxy:3128
+        documentIndex: 3
+
+  - it: passes secretAnnotations, with the common ones, to the script
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.secretAnnotations: {owner: sre}
+      global.commonAnnotations: {team: platform}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name == "SECRET_ANNOTATIONS")].value
+          value: '{"owner":"sre","team":"platform"}'
+        documentIndex: 3
+
+  - it: passes an empty object when there are no secret annotations
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name == "SECRET_ANNOTATIONS")].value
+          value: '{}'
+        documentIndex: 3
+
+  - it: verifies Graylog's certificate against tls.caSecret
+    set:
+      graylog.apiToken.enabled: true
+      graylog.config.tls.enabled: true
+      graylog.apiToken.tls.caSecret.name: graylog-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "--cacert /etc/graylog-api-ca/ca.crt"
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: graylog-ca
+            secret:
+              secretName: graylog-ca
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: graylog-ca
+            mountPath: /etc/graylog-api-ca
+            readOnly: true
+        documentIndex: 3
+
+  - it: honours tls.caSecret.key
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.tls.caSecret.name: graylog-ca
+      graylog.apiToken.tls.caSecret.key: ca.pem
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "--cacert /etc/graylog-api-ca/ca.pem"
+        documentIndex: 3
+
+  - it: fails when both insecureSkipVerify and tls.caSecret are set
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.insecureSkipVerify: true
+      graylog.apiToken.tls.caSecret.name: graylog-ca
+    asserts:
+      - failedTemplate:
+          errorPattern: or only insecureSkipVerify
+
+  - it: gives curl a writable /tmp on a read only root filesystem
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: tmp
+            emptyDir:
+              medium: Memory
+              sizeLimit: 1Mi
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: tmp
+            mountPath: /tmp
+        documentIndex: 3
+
+  - it: honours backoffLimit 0
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.backoffLimit: 0
+    asserts:
+      - equal:
+          path: spec.backoffLimit
+          value: 0
+        documentIndex: 3
+
+  - it: passes waitSeconds and activeDeadlineSeconds through
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.waitSeconds: 60
+      graylog.apiToken.activeDeadlineSeconds: 120
+    asserts:
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 120
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name == "WAIT_SECONDS")].value
+          value: "60"
+        documentIndex: 3
+
+  - it: fails with the fix when enabled on values from before the pod settings existed (helm upgrade --reuse-values)
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.podSecurityContext: null
+      graylog.apiToken.tls: null
+      graylog.apiToken.serviceAccount: null
+    asserts:
+      - failedTemplate:
+          errorPattern: reset-then-reuse-values

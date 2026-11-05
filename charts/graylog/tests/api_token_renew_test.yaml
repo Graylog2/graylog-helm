@@ -116,7 +116,7 @@ tests:
   - it: never receives the root password
     set:
       graylog.apiToken.enabled: true
-      graylog.config.rootPassword: abcdefghijklmnop
+      graylog.config.rootPassword: placeholder
     asserts:
       - notContains:
           path: spec.jobTemplate.spec.template.spec.containers[0].env
@@ -304,4 +304,90 @@ tests:
       - equal:
           path: spec.jobTemplate.spec.template.spec.imagePullSecrets[0].name
           value: regcred
+        documentIndex: 3
+
+  - it: shares the pod settings with the Job
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.podSecurityContext: {runAsNonRoot: true, runAsUser: 1234}
+      graylog.apiToken.image.imagePullSecrets: [{name: job-reg}]
+      graylog.apiToken.nodeSelector: {disk: ssd}
+      graylog.apiToken.priorityClassName: low
+      graylog.apiToken.extraEnv: [{name: HTTPS_PROXY, value: "http://proxy:3128"}]
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser
+          value: 1234
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets
+          value: [{name: job-reg}]
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.nodeSelector
+          value: {disk: ssd}
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.priorityClassName
+          value: low
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: HTTPS_PROXY
+            value: "http://proxy:3128"
+        documentIndex: 3
+
+  - it: sets automountServiceAccountToken on the account and the pod, and honours false
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.serviceAccount.automount: false
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+        documentIndex: 0
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.automountServiceAccountToken
+          value: false
+        documentIndex: 3
+
+  - it: trusts the CA from tls.caSecret
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.tls.caSecret.name: graylog-ca
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "--cacert /etc/graylog-api-ca/ca.crt"
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content:
+            name: graylog-ca
+            secret:
+              secretName: graylog-ca
+        documentIndex: 3
+
+  # Kubernetes caps CronJob names at 52 characters. Round 2 review, live: a 44
+  # character release name was rejected by the API server.
+  - it: keeps the CronJob name within 52 characters for a long release name
+    release:
+      name: graylog-production-us-east-1-cluster-blue-01
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^.{1,52}$
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: graylog-production-us-east-1-cluster-api-token-renew
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.serviceAccountName
+          value: graylog-production-us-east-1-cluster-api-token-renew
         documentIndex: 3

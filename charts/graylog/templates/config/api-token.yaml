@@ -3,27 +3,31 @@
 {{- /* helm upgrade --reuse-values skips the chart defaults for keys the stored
        release does not have. Without apiToken in the stored values, enabling it
        leaves everything but "enabled" unset, so fail with the fix. */ -}}
-{{- if not (and (kindIs "map" $t.image) (kindIs "map" $t.bootstrap) (kindIs "map" $t.renew)) }}
+{{- if not (and (kindIs "map" $t.image) (kindIs "map" $t.bootstrap) (kindIs "map" $t.renew) (kindIs "map" $t.serviceAccount) (kindIs "map" $t.tls) (kindIs "map" $t.podSecurityContext) (kindIs "map" $t.containerSecurityContext)) }}
 {{- fail "graylog.apiToken is missing its defaults. This happens with helm upgrade --reuse-values on a release installed before graylog.apiToken existed.\n  Use --reset-then-reuse-values instead of --reuse-values, or pass your values with -f." }}
 {{- end }}
 {{- if has "Admin" $t.roles }}
 {{- fail "graylog.apiToken.roles cannot include Admin: Graylog refuses to assign the Admin role to a service account.\n  Set graylog.apiToken.roles to a non-Admin role that allows the endpoints your consumers call." }}
 {{- end }}
-{{- $name := printf "%s-api-token" (include "graylog.fullname" .) }}
+{{- $name := include "graylog.apiToken.name" . }}
 {{- $secretName := include "graylog.apiToken.secretName" . }}
 {{- $bootstrap := include "graylog.apiToken.bootstrap" . | fromYaml }}
+{{- $curlExtra := include "graylog.apiToken.curlExtra" . }}
 {{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
 {{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
 {{/* Everything here is a hook, so the Job's ServiceAccount, Role and bootstrap
-     Secret are removed once it succeeds or fails instead of standing as a permanent
+     Secret are removed once the Job succeeds instead of standing as a permanent
      grant to write Secrets. Helm deletes succeeded hooks only after every hook
-     of the phase has run, so they outlive the Job that needs them. */}}
+     of the phase has run, so they outlive the Job that needs them. After a
+     failed Job they stay until the next successful run, see
+     graylog.apiToken.hooks. */}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ $name }}
   {{- include "graylog.metadata.labels" (dict "context" $ "labels" $t.labels "indent" 2) }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "-5") | fromYaml) "indent" 2) }}
+automountServiceAccountToken: {{ $t.serviceAccount.automount }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -73,7 +77,7 @@ kind: Job
 metadata:
   name: {{ $name }}
   {{- include "graylog.metadata.labels" (dict "context" $ "labels" $t.labels "indent" 2) }}
-  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "0") | fromYaml) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "0" "failed" true) | fromYaml) "indent" 2) }}
 spec:
   backoffLimit: {{ $t.backoffLimit }}
   activeDeadlineSeconds: {{ $t.activeDeadlineSeconds }}
@@ -84,23 +88,10 @@ spec:
     spec:
       serviceAccountName: {{ $name }}
       restartPolicy: Never
-      {{- with .Values.global.imagePullSecrets }}
-      imagePullSecrets: {{ toYaml . | nindent 8 }}
-      {{- end }}
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 100
-        seccompProfile:
-          type: RuntimeDefault
+      {{- include "graylog.apiToken.pod" . | nindent 6 }}
       containers:
         - name: api-token
-          image: {{ printf "%s:%s" $t.image.repository $t.image.tag }}
-          imagePullPolicy: {{ $t.image.imagePullPolicy }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
+          {{- include "graylog.apiToken.container" . | nindent 10 }}
           {{- with $t.resources }}
           resources: {{ toYaml . | nindent 12 }}
           {{- end }}
@@ -128,13 +119,18 @@ spec:
               value: {{ $secretName | quote }}
             - name: SECRET_LABELS
               value: {{ (include "graylog.metadata.labels" (dict "context" $ "labels" $t.secretLabels "fixed" (dict "app" "graylog-app") "indent" 0) | fromYaml).labels | toJson | quote }}
+            - name: SECRET_ANNOTATIONS
+              value: {{ ((include "graylog.metadata.annotations" (dict "context" $ "annotations" $t.secretAnnotations "indent" 0) | fromYaml).annotations | default dict) | toJson | quote }}
             - name: NAMESPACE
               value: {{ .Release.Namespace | quote }}
             - name: WAIT_SECONDS
               value: {{ $t.waitSeconds | quote }}
-            {{- if $t.insecureSkipVerify }}
+            {{- if $curlExtra }}
             - name: CURL_EXTRA
-              value: "-k"
+              value: {{ $curlExtra | quote }}
+            {{- end }}
+            {{- with $t.extraEnv }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           command:
             - /bin/sh
