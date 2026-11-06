@@ -35,7 +35,7 @@ Follow this guide when reviewing PRs or validating internal modifications.
 
 ### Cluster Setup
 
-For local development, we recommend MicroK8s. See [Setting up a MicroK8s cluster](microk8s-setup-guide.md) for detailed setup instructions.
+For local development, we recommend MicroK8s. See [Setting up a MicroK8s cluster](../microk8s-setup-guide.md) for detailed setup instructions.
 
 **Minimum cluster resources:**
 - CPU: 8 cores
@@ -612,6 +612,6 @@ helm test graylog -n graylog
 
 ## Additional Resources
 
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Development setup and workflow
-- [README.md](../charts/graylog/README.md) - Chart usage and configuration reference
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) - Development setup and workflow
+- [README.md](../../charts/graylog/README.md) - Chart usage and configuration reference
 - [Helm Testing Documentation](https://helm.sh/docs/topics/chart_tests/)

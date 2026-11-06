@@ -1190,3 +1190,279 @@ Renders the secrets template once and caches the result for consistent checksums
 {{- end -}}
 {{- index $ "__secretsChecksum" -}}
 {{- end -}}
+{{/*
+API token Secret name (graylog.apiToken)
+*/}}
+{{- define "graylog.apiToken.secretName" -}}
+{{- .Values.graylog.apiToken.secretName | default (include "graylog.fullname" . | printf "%s-api-token") }}
+{{- end }}
+
+{{/*
+Where the API token Job reads the root password from, as a secretKeyRef mapping
+(name, key, and "hookSecret" when the chart must render a hook Secret for it).
+
+  1. graylog.apiToken.bootstrap.existingSecret, when set.
+  2. graylog.config.rootPassword, copied into a hook Secret that lives only for
+     the duration of the Job.
+  3. The plaintext the chart keeps in its backup Secret for a password it
+     generated. Only present when the chart generated the password.
+
+The chart stores only a hash of the root password otherwise, so with
+global.existingSecretName and no bootstrap Secret there is nothing to sign in
+with, and the render fails rather than ship a Job that cannot work.
+*/}}
+{{- define "graylog.apiToken.bootstrap" -}}
+{{- $t := .Values.graylog.apiToken }}
+{{- if $t.bootstrap.existingSecret }}
+name: {{ $t.bootstrap.existingSecret }}
+key: {{ $t.bootstrap.passwordKey }}
+{{- else if .Values.graylog.config.rootPassword }}
+name: {{ include "graylog.apiToken.name" . }}-bootstrap
+key: GRAYLOG_ROOT_PASSWORD
+hookSecret: true
+{{- else if .Values.global.existingSecretName }}
+{{- fail "graylog.apiToken.enabled=true with global.existingSecretName needs a root password to sign in with, and the chart only stores its hash.\n  Either:\n    Set graylog.apiToken.bootstrap.existingSecret to a Secret holding the root password (key graylog.apiToken.bootstrap.passwordKey)\n    Or set graylog.apiToken.enabled=false." }}
+{{- else }}
+name: {{ include "graylog.backupSecretName" . }}
+key: graylog-root-password
+{{- end }}
+{{- end }}
+
+{{/*
+Seconds in an ISO-8601 duration made of days, hours, minutes and seconds, such as
+P14D, PT36H or P1DT12H. Prints nothing for anything else (weeks, months, years, a
+malformed string), so callers decide whether that is an error. Graylog's UI and
+API take these durations for token lifetimes.
+*/}}
+{{- define "graylog.duration.seconds" -}}
+{{- $d := . | toString -}}
+{{- if and (regexMatch "^P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+S)?)?$" $d) (ne $d "P") (not (hasSuffix "T" $d)) -}}
+{{- $parts := splitList "T" $d -}}
+{{- $date := index $parts 0 -}}
+{{- $time := "" -}}
+{{- if gt (len $parts) 1 -}}{{- $time = index $parts 1 -}}{{- end -}}
+{{- $days := regexFind "[0-9]+D" $date | trimSuffix "D" | default "0" | int64 -}}
+{{- $hours := regexFind "[0-9]+H" $time | trimSuffix "H" | default "0" | int64 -}}
+{{- $mins := regexFind "[0-9]+M" $time | trimSuffix "M" | default "0" | int64 -}}
+{{- $secs := regexFind "[0-9]+S" $time | trimSuffix "S" | default "0" | int64 -}}
+{{- add (mul $days 86400) (mul $hours 3600) (mul $mins 60) $secs -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Permissions for a service user the API token Job creates, as JSON: graylog.apiToken.permissions
+plus, when graylog.apiToken.renew.enabled, the grant that lets the user renew its
+own token.
+
+The grant is one comma form string on purpose. Graylog strips the plain
+users:tokenlist:<name> and users:tokenremove:<name> self strings from a service
+account when it saves them, so listing those separately leaves the user able to
+mint a token but not to see its expiry or delete the old one.
+*/}}
+{{- define "graylog.apiToken.permissions" -}}
+{{- $t := .Values.graylog.apiToken -}}
+{{- $perms := $t.permissions | default list -}}
+{{- if and $t.renew $t.renew.enabled -}}
+{{- $perms = append $perms (printf "users:tokencreate,tokenlist,tokenremove:%s" $t.username) -}}
+{{- end -}}
+{{- $perms | uniq | toJson -}}
+{{- end }}
+
+{{/*
+Base name for the API token objects: the Job, its ServiceAccount, Role,
+RoleBinding and bootstrap Secret, and the renewal CronJob with "-renew" added.
+The fullname is cut to 36 characters because Kubernetes caps CronJob names at 52
+and "-api-token-renew" adds 16. Fullnames of 36 characters or less are unchanged.
+*/}}
+{{- define "graylog.apiToken.name" -}}
+{{- include "graylog.fullname" . | trunc 36 | trimSuffix "-" }}-api-token
+{{- end }}
+
+{{/*
+Hook annotations for the API token objects. Takes (dict "weight" "-5") and, for
+the Job, "failed" true.
+
+Only the Job gets hook-failed. Helm applies hook-failed to the hook that failed
+and nothing else, and it applies hook-succeeded to the earlier hooks only after
+the whole phase has finished, which a failed Job prevents. So after a failed run
+the ServiceAccount, Role, RoleBinding and any bootstrap Secret stay until the
+next successful run replaces them (before-hook-creation) or the user deletes
+them. docs/graylog/api-token.md lists the commands.
+*/}}
+{{- define "graylog.apiToken.hooks" -}}
+{{- $policy := "before-hook-creation,hook-succeeded" -}}
+{{- if .failed }}{{- $policy = "before-hook-creation,hook-succeeded,hook-failed" }}{{- end -}}
+{{- dict "helm.sh/hook" "post-install,post-upgrade" "helm.sh/hook-weight" .weight "helm.sh/hook-delete-policy" $policy | toYaml }}
+{{- end }}
+
+{{/*
+curl flags for the calls to Graylog, as one string. Empty by default.
+insecureSkipVerify gives -k. tls.caSecret.name gives --cacert for the CA the pod
+mounts from that Secret. Setting both fails the render, because trusting a CA
+and skipping verification contradict each other.
+*/}}
+{{- define "graylog.apiToken.curlExtra" -}}
+{{- $t := .Values.graylog.apiToken -}}
+{{- if and $t.insecureSkipVerify $t.tls.caSecret.name -}}
+{{- fail "graylog.apiToken.insecureSkipVerify and graylog.apiToken.tls.caSecret.name are both set.\n  Set only graylog.apiToken.tls.caSecret.name to verify Graylog's certificate against your CA, or only insecureSkipVerify." -}}
+{{- end -}}
+{{- if $t.insecureSkipVerify -}}
+-k
+{{- else if $t.tls.caSecret.name -}}
+--cacert /etc/graylog-api-ca/{{ $t.tls.caSecret.key }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Pod spec fields shared by the API token Job and the renewal CronJob: the
+ServiceAccount token mount, pull secrets, pod security context, scheduling and
+volumes. Render it with nindent at the pod spec's indent. The scripts write
+curl's credential file to /tmp, so the root filesystem can stay read only.
+*/}}
+{{- define "graylog.apiToken.pod" -}}
+{{- $t := .Values.graylog.apiToken -}}
+{{- $pull := ($t.image.imagePullSecrets | default .Values.global.imagePullSecrets) | default list -}}
+automountServiceAccountToken: {{ $t.serviceAccount.automount }}
+{{- with $pull }}
+imagePullSecrets: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $t.podSecurityContext }}
+securityContext: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $t.priorityClassName }}
+priorityClassName: {{ . | quote }}
+{{- end }}
+{{- with $t.nodeSelector }}
+nodeSelector: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $t.tolerations }}
+tolerations: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $t.affinity }}
+affinity: {{ toYaml . | nindent 2 }}
+{{- end }}
+volumes:
+  - name: tmp
+    emptyDir:
+      medium: Memory
+      sizeLimit: 1Mi
+  {{- if $t.tls.caSecret.name }}
+  - name: graylog-ca
+    secret:
+      secretName: {{ $t.tls.caSecret.name | quote }}
+  {{- end }}
+{{- end }}
+
+{{/*
+Container fields shared by the API token Job and the renewal CronJob: image, pull
+policy, container security context and volume mounts. Render it with nindent at
+the container's indent.
+*/}}
+{{- define "graylog.apiToken.container" -}}
+{{- $t := .Values.graylog.apiToken -}}
+image: {{ printf "%s:%s" $t.image.repository $t.image.tag }}
+imagePullPolicy: {{ $t.image.imagePullPolicy }}
+{{- with $t.containerSecurityContext }}
+securityContext: {{ toYaml . | nindent 2 }}
+{{- end }}
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  {{- if $t.tls.caSecret.name }}
+  - name: graylog-ca
+    mountPath: /etc/graylog-api-ca
+    readOnly: true
+  {{- end }}
+{{- end }}
+
+{{/*
+Data Node client certificate Secret name (datanode.clientCert)
+*/}}
+{{- define "graylog.datanode.clientCert.secretName" -}}
+{{- .Values.datanode.clientCert.secretName | default (include "graylog.fullname" . | printf "%s-datanode-client-cert") }}
+{{- end }}
+
+{{/*
+Name of the Data Node client certificate renewal objects: ServiceAccount, Role,
+RoleBinding and CronJob. The fullname is cut to 25 characters because Kubernetes
+caps CronJob names at 52 and "-datanode-client-cert-renew" adds 27.
+*/}}
+{{- define "graylog.datanode.clientCert.renewName" -}}
+{{- include "graylog.fullname" . | trunc 25 | trimSuffix "-" }}-datanode-client-cert-renew
+{{- end }}
+
+{{/*
+Image of the client certificate Job and its renewal CronJob. Defaults to the
+Graylog image, which has the shell, curl and openssl the scripts need.
+*/}}
+{{- define "graylog.datanode.clientCert.image" -}}
+{{- $c := .Values.datanode.clientCert -}}
+{{- if $c.image.repository -}}
+{{- printf "%s:%s" $c.image.repository ($c.image.tag | default (include "graylog.tag" .)) -}}
+{{- else -}}
+{{- include "graylog.image" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Pod spec fields shared by the client certificate Job and its renewal CronJob:
+the ServiceAccount token mount, pull secrets, pod security context, scheduling
+and volumes. Render it with nindent at the pod spec's indent. The scripts write
+their working files to /tmp, so the root filesystem can stay read only.
+*/}}
+{{- define "graylog.datanode.clientCert.pod" -}}
+{{- $c := .Values.datanode.clientCert -}}
+{{- $t := .Values.graylog.apiToken -}}
+{{- $pull := ($c.image.imagePullSecrets | default .Values.global.imagePullSecrets) | default list -}}
+automountServiceAccountToken: {{ $c.serviceAccount.automount }}
+{{- with $pull }}
+imagePullSecrets: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $c.podSecurityContext }}
+securityContext: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $c.priorityClassName }}
+priorityClassName: {{ . | quote }}
+{{- end }}
+{{- with $c.nodeSelector }}
+nodeSelector: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $c.tolerations }}
+tolerations: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $c.affinity }}
+affinity: {{ toYaml . | nindent 2 }}
+{{- end }}
+volumes:
+  - name: tmp
+    emptyDir:
+      medium: Memory
+  {{- if $t.tls.caSecret.name }}
+  - name: graylog-ca
+    secret:
+      secretName: {{ $t.tls.caSecret.name | quote }}
+  {{- end }}
+{{- end }}
+
+{{/*
+Container fields shared by the client certificate Job and its renewal CronJob:
+image, pull policy, container security context and volume mounts. Render it
+with nindent at the container's indent.
+*/}}
+{{- define "graylog.datanode.clientCert.container" -}}
+{{- $c := .Values.datanode.clientCert -}}
+{{- $t := .Values.graylog.apiToken -}}
+image: {{ include "graylog.datanode.clientCert.image" . }}
+imagePullPolicy: {{ $c.image.imagePullPolicy }}
+{{- with $c.containerSecurityContext }}
+securityContext: {{ toYaml . | nindent 2 }}
+{{- end }}
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  {{- if $t.tls.caSecret.name }}
+  - name: graylog-ca
+    mountPath: /etc/graylog-api-ca
+    readOnly: true
+  {{- end }}
+{{- end }}

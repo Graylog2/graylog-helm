@@ -513,6 +513,87 @@
           "minimum": 1,
           "description": "Seconds Kubernetes allows for shutdown before SIGKILL. Covers the preStop hook and the SIGTERM that follows it."
         },
+        "apiToken": {
+          "type": "object",
+          "description": "Create a Graylog service user and API token, stored in a Kubernetes Secret by a post-install/post-upgrade hook Job.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" },
+            "username": { "type": "string" },
+            "roles": { "type": "array", "items": { "type": "string" } },
+            "permissions": { "type": "array", "items": { "type": "string" } },
+            "tokenName": { "type": "string" },
+            "ttl": { "type": "string", "description": "ISO-8601 duration, e.g. P90D or PT36H", "pattern": "^P([0-9]+[YMWD])+(T([0-9]+[HMS])+)?$|^PT([0-9]+[HMS])+$" },
+            "bootstrap": {
+              "type": "object",
+              "properties": {
+                "existingSecret": { "type": "string" },
+                "passwordKey": { "type": "string" }
+              }
+            },
+            "tls": {
+              "type": "object",
+              "description": "Trust settings for the Job's calls to Graylog when graylog.config.tls.enabled.",
+              "properties": {
+                "caSecret": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string", "description": "Secret holding the CA certificate that signed Graylog's certificate. Empty uses the image's CA bundle." },
+                    "key": { "type": "string", "description": "Key in that Secret that holds the CA certificate." }
+                  }
+                }
+              }
+            },
+            "insecureSkipVerify": { "type": "boolean", "description": "Skip certificate verification. Prefer tls.caSecret." },
+            "waitSeconds": { "type": "integer", "minimum": 1 },
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": { "type": "string" },
+                "tag": { "type": "string" },
+                "imagePullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+                "imagePullSecrets": { "type": "array", "items": { "type": "object" } }
+              }
+            },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+            "resources": { "type": "object" },
+            "serviceAccount": {
+              "type": "object",
+              "properties": {
+                "automount": { "type": "boolean", "description": "automountServiceAccountToken for the Job and the renewal CronJob. Both need the token." }
+              }
+            },
+            "podSecurityContext": { "type": "object" },
+            "containerSecurityContext": { "type": "object" },
+            "nodeSelector": { "type": "object" },
+            "tolerations": { "type": "array", "items": { "type": "object" } },
+            "affinity": { "type": "object" },
+            "priorityClassName": { "type": "string" },
+            "extraEnv": { "type": "array", "items": { "type": "object" } },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
+            "secretLabels": { "type": "object" },
+            "secretAnnotations": { "type": "object" },
+            "renew": {
+              "type": "object",
+              "description": "CronJob that replaces the API token before it expires.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "schedule": { "type": "string" },
+                "before": { "type": "string", "description": "ISO-8601 duration of days, hours, minutes and seconds, e.g. P14D", "pattern": "^P([0-9]+D)?(T([0-9]+H)?([0-9]+M)?([0-9]+S)?)?$" },
+                "backoffLimit": { "type": "integer", "minimum": 0 },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+                "startingDeadlineSeconds": { "type": "integer", "minimum": 1 },
+                "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+                "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+                "resources": { "type": "object" },
+                "annotations": { "type": "object" },
+                "labels": { "type": "object" }
+              }
+            }
+          }
+        },
         "lifecycle": {
           "type": "object",
           "description": "Lifecycle hooks for the graylog-app container. postStart/preStop are user-supplied; preStopDrain is the chart-managed journal drain.",
@@ -624,6 +705,67 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "replicas": { "type": "integer" },
+        "clientCert": {
+          "type": "object",
+          "description": "Issue a client certificate for the Data Node's OpenSearch API, stored in a Kubernetes Secret by a post-install/post-upgrade hook Job and renewed by a CronJob.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" },
+            "principal": { "type": "string", "minLength": 1 },
+            "role": { "type": "string", "minLength": 1 },
+            "roleDefinition": { "type": "object" },
+            "lifetime": { "type": "string", "description": "ISO-8601 duration, e.g. P30D" },
+            "renewBeforeDays": { "type": "integer", "minimum": 0 },
+            "waitSeconds": { "type": "integer", "minimum": 1 },
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": { "type": "string" },
+                "tag": { "type": "string" },
+                "imagePullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+                "imagePullSecrets": { "type": "array", "items": { "type": "object" } }
+              }
+            },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+            "resources": { "type": "object" },
+            "serviceAccount": {
+              "type": "object",
+              "properties": {
+                "automount": {
+                  "type": "boolean",
+                  "description": "automountServiceAccountToken for the Job and the renewal CronJob. Both need the token."
+                }
+              }
+            },
+            "podSecurityContext": { "type": "object" },
+            "containerSecurityContext": { "type": "object" },
+            "nodeSelector": { "type": "object" },
+            "tolerations": { "type": "array", "items": { "type": "object" } },
+            "affinity": { "type": "object" },
+            "priorityClassName": { "type": "string" },
+            "extraEnv": { "type": "array", "items": { "type": "object" } },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
+            "secretLabels": { "type": "object" },
+            "renew": {
+              "type": "object",
+              "description": "CronJob that reissues the certificate before it expires.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "schedule": { "type": "string" },
+                "backoffLimit": { "type": "integer", "minimum": 0 },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+                "startingDeadlineSeconds": { "type": "integer", "minimum": 1 },
+                "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+                "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+                "resources": { "type": "object" },
+                "annotations": { "type": "object" },
+                "labels": { "type": "object" }
+              }
+            }
+          }
+        },
         "serviceAccount": {
           "type": "object",
           "description": "ServiceAccount for the Datanode pods. Falls back to the top-level serviceAccount when create is false and nameOverride is unset.",
