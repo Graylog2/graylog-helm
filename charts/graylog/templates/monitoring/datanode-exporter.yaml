@@ -1,0 +1,170 @@
+{{- if and .Values.graylog.enabled .Values.datanode.enabled .Values.datanode.exporter.enabled }}
+{{- $e := .Values.datanode.exporter }}
+{{- if not .Values.datanode.clientCert.enabled }}
+{{- fail "datanode.exporter.enabled=true needs the Data Node client certificate to authenticate.\n  Set datanode.clientCert.enabled=true (it needs graylog.apiToken.enabled=true with the ca_clientcert:create permission)." }}
+{{- end }}
+{{- $name := printf "%s-datanode-exporter" (include "graylog.fullname" .) }}
+{{- $component := dict "app.kubernetes.io/component" "datanode-exporter" }}
+{{- $secretName := include "graylog.datanode.clientCert.secretName" . }}
+{{- $group := index (include "graylog.datanode.groups" . | fromYamlArray) 0 }}
+{{- $uri := printf "https://%s-0.%s.%s.svc.cluster.local:%d" $group.fullname (include "graylog.datanode.service.name" .) .Release.Namespace (.Values.datanode.service.ports.data | default 9200 | int) }}
+{{- $reloaderFixed := dict }}
+{{- if $e.reloader.enabled }}
+{{- $reloaderFixed = dict "secret.reloader.stakater.com/reload" $secretName }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $e.labels "fixed" $component "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $e.annotations "fixed" $reloaderFixed "indent" 2) }}
+spec:
+  replicas: {{ $e.replicas }}
+  selector:
+    matchLabels:
+      {{- include "graylog.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: datanode-exporter
+  template:
+    metadata:
+      {{- include "graylog.pod.labels" (dict "context" $ "labels" $e.podLabels "fixed" $component "indent" 6) }}
+      {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $e.podAnnotations "indent" 6) }}
+    spec:
+      {{- with $e.image.imagePullSecrets | default .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $e.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with $e.podSecurityContext }}
+      securityContext: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $e.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $e.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $e.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $e.topologySpreadConstraints }}
+      topologySpreadConstraints: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: exporter
+          image: {{ printf "%s:%s" $e.image.repository $e.image.tag }}
+          imagePullPolicy: {{ $e.image.pullPolicy }}
+          args:
+            - --es.uri={{ $uri }}
+            - --es.ca=/certs/ca.crt
+            - --es.client-cert=/certs/tls.crt
+            - --es.client-private-key=/certs/tls.key
+            {{- if $e.all }}
+            - --es.all
+            {{- end }}
+            {{- if $e.indices }}
+            - --es.indices
+            {{- end }}
+            {{- if $e.shards }}
+            - --es.shards
+            {{- end }}
+            {{- range $e.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 9114
+              protocol: TCP
+          {{- with $e.extraEnv }}
+          env: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $e.containerSecurityContext }}
+          securityContext: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $e.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          # Both probes only show that the exporter is up. They stay green when
+          # OpenSearch rejects the certificate. Alert on elasticsearch_clusterinfo_up.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+      volumes:
+        - name: certs
+          secret:
+            secretName: {{ $secretName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $e.service.labels "fixed" $component "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $e.service.annotations "indent" 2) }}
+spec:
+  type: {{ $e.service.type }}
+  selector:
+    {{- include "graylog.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: datanode-exporter
+  ports:
+    - name: http
+      port: {{ $e.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- if $e.serviceMonitor.enabled }}
+{{- $sm := $e.serviceMonitor }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $sm.labels "fixed" $component "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $sm.annotations "indent" 2) }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "graylog.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: datanode-exporter
+  namespaceSelector:
+    {{- if $sm.namespaceSelector }}
+    {{- toYaml $sm.namespaceSelector | nindent 4 }}
+    {{- else }}
+    matchNames:
+      - {{ .Release.Namespace }}
+    {{- end }}
+  endpoints:
+    - port: http
+      path: {{ $sm.path | default "/metrics" }}
+      scheme: http
+      {{- with $sm.interval }}
+      interval: {{ . }}
+      {{- end }}
+      {{- with $sm.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+      {{- if $sm.honorLabels }}
+      honorLabels: true
+      {{- end }}
+      relabelings:
+        - targetLabel: instance
+          replacement: {{ printf "%s-datanode" (include "graylog.fullname" .) }}
+        {{- with $sm.relabelings }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $sm.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
