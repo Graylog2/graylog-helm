@@ -1,5 +1,5 @@
 #!/bin/sh
-# Behavioural tests for files/scripts/api-token-renew.sh: when does the script
+# Behavioural tests for files/scripts/api-token.sh: when does the script
 # leave the token alone, when does it replace it, and does it clean up after a
 # failed Secret write.
 #
@@ -18,7 +18,7 @@
 set -u
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SCRIPT="${SCRIPT_DIR}/../../files/scripts/api-token-renew.sh"
+SCRIPT="${SCRIPT_DIR}/../../files/scripts/api-token.sh"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -57,7 +57,7 @@ run() { # name, expected log fragment; the scenario's STUB_* are exported by the
   : > "${WORK}/calls"; : > "${WORK}/args"
   out=$(WORK="$WORK" PATH="${WORK}:${PATH}" NOW_EPOCH=$((20761 * 86400)) GRAYLOG_URL=http://g:9000 \
     SERVICE_USER=helm-automation TOKEN_NAME=helm TOKEN_TTL=P90D SECRET_NAME=s NAMESPACE=n \
-    RENEW_BEFORE_SECONDS=1209600 sh "$SCRIPT" 2>&1)
+    RENEW_BEFORE_SECONDS=1209600 MODE=renew sh "$SCRIPT" 2>&1)
   case "$out" in
     *"$2"*) echo "ok   $1" ;;
     *) echo "FAIL $1: expected \"$2\""; echo "$out" | sed 's/^/     /'; fail=1 ;;

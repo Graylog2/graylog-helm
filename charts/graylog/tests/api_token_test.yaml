@@ -638,3 +638,23 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: reset-then-reuse-values
+
+  - it: runs the shared script in hook mode with the renewal window
+    set:
+      graylog.apiToken.enabled: true
+      graylog.config.rootPassword: placeholder
+    template: templates/config/api-token.yaml
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MODE
+            value: hook
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RENEW_BEFORE_SECONDS
+            value: "1209600"

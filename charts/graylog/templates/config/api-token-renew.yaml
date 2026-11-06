@@ -82,6 +82,8 @@ spec:
               resources: {{ toYaml . | nindent 16 }}
               {{- end }}
               env:
+                - name: MODE
+                  value: renew
                 - name: GRAYLOG_URL
                   value: {{ $url | quote }}
                 - name: SERVICE_USER
@@ -107,5 +109,5 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  {{- .Files.Get "files/scripts/api-token-renew.sh" | nindent 18 }}
+                  {{- .Files.Get "files/scripts/api-token.sh" | nindent 18 }}
 {{- end }}

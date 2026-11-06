@@ -670,7 +670,7 @@ graylog:
   # Graylog picks the token value and shows it once, so the Secret is written by
   # the Job and is not owned by Helm: it survives uninstall, and so does the
   # service user. A token expires after `ttl`; the next `helm upgrade` replaces
-  # one that no longer works. Needs Graylog 6.3.12, 7.0.7, 7.1.2 or newer
+  # one that no longer works or has less than renew.before left. Needs Graylog 6.3.12, 7.0.7, 7.1.2 or newer
   # (CVE-2026-55867 lets any user revoke other users' tokens on older releases).
   apiToken:
     enabled: false

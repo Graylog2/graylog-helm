@@ -35,10 +35,13 @@ message saying so. Use `--reset-then-reuse-values`, or pass your values with `-f
 A post-install and post-upgrade hook Job runs these steps.
 
 1. Waits up to `waitSeconds` for Graylog to answer on its in-cluster Service.
-2. Reads the token Secret. If the token in it still authenticates, the Job exits.
+2. Reads the token Secret. If the token in it still authenticates and has more than `renew.before` left, the Job
+   exits.
 3. Signs in as root and creates the service user if it is missing.
 4. Mints a new token and writes it to the Secret.
 5. Revokes older tokens with the same name, only after the Secret write succeeds.
+
+So a `helm upgrade` inside the renewal window reissues the token too, and one outside it changes nothing.
 
 Graylog shows a token once, so the Job writes the Secret itself. Helm does not own it. The Secret and the
 service user both survive `helm uninstall`.
@@ -49,7 +52,8 @@ private directory in `/tmp`, an in-memory volume, and send request bodies throug
 The Job's ServiceAccount, Role and RoleBinding are hooks too and are deleted when it succeeds. The Role can
 create Secrets and read or patch only the token Secret. A failed run does not delete them, see
 [After a failed run](#after-a-failed-run). The renewal CronJob and its own ServiceAccount and
-Role are not hooks. That Role can only read and patch the token Secret.
+Role are not hooks. That Role can only read and patch the token Secret. It cannot create one, because without
+the root password a renewal cannot create the user or mint a first token.
 
 ## Where the Job gets the root password
 
@@ -79,7 +83,7 @@ curl -u "$TOKEN:token" -H "Accept: application/json" https://graylog.example.com
 Tokens expire after `ttl` (default `P90D`). A CronJob renews the token before that happens, so a cluster that
 nobody upgrades for months keeps a working token. It is on by default and runs daily at 03:17.
 
-Each run does this. During the first minutes of an install the Secret does not exist yet, because the hook Job is
+The CronJob runs the same script as the hook Job, in renew mode. Each run does this. During the first minutes of an install the Secret does not exist yet, because the hook Job is
 still waiting for Graylog. Runs in that window log it and exit without failing.
 
 1. Reads the token from the Secret and signs in with it. There is no root password involved.

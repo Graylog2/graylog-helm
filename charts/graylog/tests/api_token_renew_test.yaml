@@ -123,9 +123,11 @@ tests:
           content:
             name: ROOT_PASSWORD
         documentIndex: 3
-      - notMatchRegex:
-          path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
-          pattern: ROOT_PASSWORD
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: MODE
+            value: renew
         documentIndex: 3
 
   - it: converts the P14D default to seconds

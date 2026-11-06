@@ -1,6 +1,6 @@
 #!/bin/sh
-# Behavioural tests for files/scripts/api-token.sh: when the script keeps the token
-# already stored in the Secret, when it creates the user and mints a new token,
+# Behavioural tests for files/scripts/api-token.sh in hook mode: when the script keeps
+# the token already stored in the Secret, when it reissues one inside the renewal window, when it creates the user and mints a new token,
 # whether it writes the Secret with POST or PATCH, and what it cleans up when
 # something fails.
 #
@@ -22,6 +22,8 @@
 #                   exists after a successful POST /users.
 # STUB_CREATE_USER  status of POST /users
 # STUB_OLD_TOKENS   the token list holds a token named like ours
+# STUB_EXPIRES     expiry of the token in the list. The clock is fixed with NOW_EPOCH at
+#                   2026-11-04T00:00:00Z and the renewal window is 14 days.
 # STUB_MINT         status of the token mint
 # STUB_WRITE        status of the Secret write
 
@@ -72,7 +74,8 @@ case "$method $url" in
   "POST "*/api/users) [ "${STUB_CREATE_USER:-201}" = 201 ] && : > "${WORK}/created"
     reply '{}' "${STUB_CREATE_USER:-201}" ;;
   "GET "*/users/uid1/tokens)
-    if [ -n "${STUB_OLD_TOKENS:-}" ]; then reply '{"tokens":[{"id":"tid-old","name":"helm"}]}' 200
+    if [ -n "${STUB_OLD_TOKENS:-}" ] || [ -n "${STUB_EXPIRES:-}" ]; then
+      reply "{\"tokens\":[{\"id\":\"tid-old\",\"name\":\"helm\",\"expires_at\":\"${STUB_EXPIRES:-2026-12-04T00:00:00.000Z}\"}]}" 200
     else reply '{"tokens":[]}' 200; fi ;;
   "POST "*/users/uid1/tokens/helm)
     reply '{"id":"tid-new","name":"helm","token":"new-token-value"}' "${STUB_MINT:-200}" ;;
@@ -93,7 +96,7 @@ run() { # runs the script in the scenario set by the caller's exported STUB_* va
     ROOT_PASSWORD="$ROOT_PW" SERVICE_USER=helm-automation SERVICE_ROLES='["Reader"]' \
     SERVICE_PERMISSIONS='["a:b"]' TOKEN_NAME=helm TOKEN_TTL=P90D SECRET_NAME=s \
     SECRET_LABELS='{"app":"graylog-app"}' SECRET_ANNOTATIONS='{"note":"kept"}' \
-    NAMESPACE=n WAIT_SECONDS=5 sh "$SCRIPT" 2>&1)
+    NAMESPACE=n WAIT_SECONDS=5 MODE=hook RENEW_BEFORE_SECONDS=1209600 NOW_EPOCH=$((20761 * 86400)) sh "$SCRIPT" 2>&1)
   rc=$?
 }
 ok() { echo "ok   $1"; }
@@ -112,22 +115,32 @@ before() { # first call matching $1 comes before the first matching $2
 }
 body_has() { grep -q -- "$1" "${WORK}/bodies"; }
 args_lack() { ! grep -q -- "$1" "${WORK}/args"; }
-reset() { unset STUB_SECRET STUB_NO_USERID STUB_TOKEN_CODE STUB_USER STUB_CREATE_USER STUB_OLD_TOKENS STUB_MINT STUB_WRITE; }
+reset() { unset STUB_SECRET STUB_NO_USERID STUB_TOKEN_CODE STUB_USER STUB_CREATE_USER STUB_OLD_TOKENS STUB_EXPIRES STUB_MINT STUB_WRITE; }
 
 # Step 2: keep or replace the stored token.
-reset; export STUB_TOKEN_CODE=200; run
+reset; export STUB_TOKEN_CODE=200 STUB_EXPIRES=2026-12-04T00:00:00.000Z; run
 check "keeps a token that reads the user record (200)" logged "nothing to do"
-reset; export STUB_TOKEN_CODE=403; run
+check "  and mints nothing" not_called "POST .*/tokens/helm"
+reset; export STUB_TOKEN_CODE=403 STUB_EXPIRES=2026-12-04T00:00:00.000Z; run
 check "keeps a token whose role cannot read the record (403)" logged "nothing to do"
-check "  and mints nothing" not_called "/tokens/helm"
+check "  and mints nothing" not_called "POST .*/tokens/helm"
 reset; export STUB_TOKEN_CODE=401 STUB_USER=200; run
 check "replaces a token Graylog rejects (401)" logged "no longer authenticates (HTTP 401)"
 
-# Step 2, the user id backfill for a Secret written before the renewal CronJob.
+# Step 3, the renewal window. Inside it a helm upgrade reissues as root.
+reset; export STUB_TOKEN_CODE=200 STUB_EXPIRES=2026-11-07T00:00:00.000Z; run
+check "reissues a working token inside the renewal window" logged "inside the 14d0h renewal window"
+check "  mints as root" called "POST .*/users/uid1/tokens/helm"
+check "  patches the Secret" called "PATCH .*secrets/s"
+check "  and revokes the old token after the write" before "PATCH .*secrets/s" "DELETE .*tokens/tid-old"
+reset; export STUB_TOKEN_CODE=200 STUB_EXPIRES=2026-12-04T00:00:00.000Z; run
+check "keeps a working token outside the window" logged "more than the 14d0h renewal window, nothing to do"
+
+# Step 3, the user id backfill for a Secret written before the renewal CronJob.
 reset; export STUB_NO_USERID=1; run
 check "adds the user id to an older Secret" called "PATCH .*secrets/s"
 check "  with the id from the root lookup" body_has '"userid":"dWlkMQ=="'
-check "  and then exits without minting" not_called "/tokens/helm"
+check "  and then exits without minting" not_called "POST .*/tokens/helm"
 
 # Fresh install: no Secret, no user.
 reset; export STUB_SECRET=404 STUB_USER=404; run

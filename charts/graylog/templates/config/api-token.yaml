@@ -13,6 +13,10 @@
 {{- $secretName := include "graylog.apiToken.secretName" . }}
 {{- $bootstrap := include "graylog.apiToken.bootstrap" . | fromYaml }}
 {{- $curlExtra := include "graylog.apiToken.curlExtra" . }}
+{{- $beforeSeconds := include "graylog.duration.seconds" $t.renew.before }}
+{{- if not $beforeSeconds }}
+{{- fail (printf "graylog.apiToken.renew.before (%q) is not a usable ISO-8601 duration.\n  Use days, hours, minutes or seconds, the way Graylog shows token lifetimes: P14D, PT36H, P1DT12H." $t.renew.before) }}
+{{- end }}
 {{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
 {{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
 {{/* Everything here is a hook, so the Job's ServiceAccount, Role and bootstrap
@@ -96,6 +100,10 @@ spec:
           resources: {{ toYaml . | nindent 12 }}
           {{- end }}
           env:
+            - name: MODE
+              value: hook
+            - name: RENEW_BEFORE_SECONDS
+              value: {{ $beforeSeconds | quote }}
             - name: GRAYLOG_URL
               value: {{ $url | quote }}
             - name: ROOT_USER
