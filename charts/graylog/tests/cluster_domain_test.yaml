@@ -1,0 +1,76 @@
+suite: cluster domain
+templates:
+  - config/init-graylog.yaml
+  - workload/statefulsets/datanode.yaml
+  - workload/statefulsets/graylog.yaml
+  # Checksum dependencies of the two StatefulSets, so their includes resolve.
+  - config/graylog.yaml
+  - config/datanode.yaml
+  - config/secret/secrets.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: defaults to cluster.local in the publish URI
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_HTTP_PUBLISH_URI
+            value: http://$(POD_NAME).graylog-svc.graylog.svc.cluster.local:9000/
+
+  - it: uses global.clusterDomain in the publish URI
+    set:
+      global.clusterDomain: corp.example
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_HTTP_PUBLISH_URI
+            value: http://$(POD_NAME).graylog-svc.graylog.svc.corp.example:9000/
+
+  - it: falls back to cluster.local when global.clusterDomain is empty
+    set:
+      global.clusterDomain: ""
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_HTTP_PUBLISH_URI
+            value: http://$(POD_NAME).graylog-svc.graylog.svc.cluster.local:9000/
+
+  - it: uses global.clusterDomain in the Data Node node name and seed hosts
+    set:
+      global.clusterDomain: corp.example
+    template: workload/statefulsets/datanode.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name == "GRAYLOG_DATANODE_NODE_NAME")].value
+          pattern: 'svc\.corp\.example$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[?(@.name == "GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS")].value
+          pattern: '^graylog-datanode-0\.graylog-datanode-svc\.graylog\.svc\.corp\.example,.*graylog-datanode-2\.graylog-datanode-svc\.graylog\.svc\.corp\.example$'
+
+  - it: checks the TLS SAN against global.clusterDomain
+    set:
+      global.clusterDomain: corp.example
+      graylog.config.tls.enabled: true
+      graylog.config.tls.secretName: my-tls
+    template: config/init-graylog.yaml
+    asserts:
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'test\.graylog-svc\.graylog\.svc\.corp\.example'
+      - matchRegex:
+          path: data["init-script.sh"]
+          pattern: 'DNS:\*\.graylog-svc\.graylog\.svc\.corp\.example'
+
+  - it: rejects an invalid global.clusterDomain
+    set:
+      global.clusterDomain: Not_A_Domain
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - failedTemplate: {}

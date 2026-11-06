@@ -25,6 +25,11 @@ global:
   existingSecretName: ""
   # storageClass is the default StorageClass for all persistent volumes.
   storageClass: ""
+  # clusterDomain is the DNS domain of the cluster. The chart appends it to
+  # in-cluster FQDNs: the Graylog publish URI, the Data Node node names and seed
+  # hosts, and the native TLS SAN check. Set it when the cluster does not use
+  # cluster.local. An empty string falls back to cluster.local.
+  clusterDomain: "cluster.local"
   # s3 holds one S3 credential for the components that need one: the Data Node's
   # snapshot repository, and Graylog's archive backend when
   # graylog.config.archive.useGlobalS3Credentials is on.
