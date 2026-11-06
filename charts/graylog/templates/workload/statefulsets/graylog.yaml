@@ -188,6 +188,18 @@ spec:
                   key: {{ $s3.secretKeyKey }}
             {{- end }}
             {{- end }}
+            {{- with .Values.graylog.config.email.existingSecret }}
+            - name: GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.graylog.config.email.authUsernameKey }}
+            - name: GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.graylog.config.email.authPasswordKey }}
+            {{- end }}
           {{- if or .Values.graylog.env .Values.graylog.extraEnv }}
             {{- include "graylog.env" .Values.graylog | indent 12 }}
           {{- end }}
