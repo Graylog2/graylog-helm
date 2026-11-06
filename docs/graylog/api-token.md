@@ -154,10 +154,13 @@ The bootstrap Secret exists only when you set `graylog.config.rootPassword`.
 
 ## Monitoring example
 
-`examples/values/values-example-monitoring-indexer-health.yaml` runs a json_exporter that reads cluster health
-with this token. It turns on `graylog.apiToken`, with the default `Reader` role, and mounts the `<release fullname>-api-token` Secret, with the
-`token` key as the Basic auth username and the literal password `token`. Nothing needs to exist before the
-install.
+`examples/values/values-example-extra-objects.yaml` runs a json_exporter that reads cluster health with this
+token. It turns on `graylog.apiToken`, with the default `Reader` role, and mounts the `<release fullname>-api-token`
+Secret, with the `token` key as the Basic auth username and the literal password `token`. Nothing needs to exist
+before the install.
+
+For Data Node metrics, use the [Data Node exporter](../datanode/exporter.md) instead. It reports cluster health
+with a client certificate, and the example dashboard reads its series.
 
 ## Values
 
