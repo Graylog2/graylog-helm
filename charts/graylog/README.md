@@ -1046,6 +1046,7 @@ If you prefer the Graylog chart to handle this specific issuer creation, you may
 
 > [!IMPORTANT]
 > Native TLS requires one additional SAN in your certificate: `DNS:*.graylog-svc.graylog.svc.cluster.local`
+> (replace `cluster.local` with `global.clusterDomain` if your cluster uses another DNS domain)
 > Please, make sure your certificate includes this SAN. Otherwise, please reissue the certificate including the additional SAN.
 > If your CA won't (re)issue a certificate with this SAN, please consider TLS termination at the [Ingress Controller](#ingress-controller) as an alternative.
 
@@ -1426,6 +1427,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | Key Path                    | Description                                 | Default |
 |-----------------------------|---------------------------------------------|---------|
 | `global.existingSecretName` | Reference to an existing Kubernetes secret. | `""`    |
+| `global.clusterDomain` | DNS domain of the cluster, used in in-cluster FQDNs (publish URI, Data Node hosts, TLS SAN check). | `"cluster.local"` |
 | `global.imagePullSecrets`   | Image pull secrets for private registries.  | `[]`    |
 | `global.storageClass`       | Storage class to use for PVCs.              | `""`    |
 | `global.commonLabels`       | Labels added to every object deployed by this chart.      | `{}` |

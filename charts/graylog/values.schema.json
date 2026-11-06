@@ -44,6 +44,11 @@
           }
         },
         "storageClass": { "type": "string" },
+        "clusterDomain": {
+          "type": "string",
+          "description": "DNS domain of the cluster, appended to in-cluster FQDNs. An empty string falls back to cluster.local.",
+          "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$"
+        },
         "s3": {
           "type": "object",
           "description": "One S3 credential for the Data Node snapshot repository and, when enabled, Graylog archiving. A component that names a credential of its own ignores this block.",

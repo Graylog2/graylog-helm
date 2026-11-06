@@ -719,15 +719,23 @@ Graylog Datanode service name (shared across all node groups)
 {{- end }}
 
 {{/*
+Cluster DNS domain used to build in-cluster FQDNs. Defaults to cluster.local.
+*/}}
+{{- define "graylog.clusterDomain" -}}
+{{- .Values.global.clusterDomain | default "cluster.local" -}}
+{{- end }}
+
+{{/*
 Graylog Datanode discovery seed hosts, spanning every node group.
 */}}
 {{- define "graylog.datanode.hosts" -}}
 {{- $svc := include "graylog.datanode.service.name" . -}}
 {{- $ns := .Release.Namespace -}}
+{{- $domain := include "graylog.clusterDomain" . -}}
 {{- $builder := list -}}
 {{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
 {{- range $i := until (int $g.replicas) -}}
-{{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" $g.fullname $i $svc $ns | append $builder -}}
+{{- $builder = printf "%s-%d.%s.%s.svc.%s" $g.fullname $i $svc $ns $domain | append $builder -}}
 {{- end -}}
 {{- end -}}
 {{- join "," $builder | quote -}}
@@ -979,7 +987,7 @@ Graylog Publish URI
 {{- define "graylog.publishUri" }}
 {{- $port := .Values.graylog.service.ports.app | default 9000 | int }}
 {{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
-{{- printf "%s://$(POD_NAME).%s.%s.svc.cluster.local:%d/" $scheme (include "graylog.service.name" .) .Release.Namespace $port }}
+{{- printf "%s://$(POD_NAME).%s.%s.svc.%s:%d/" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.clusterDomain" .) $port }}
 {{- end }}
 
 {{/*
