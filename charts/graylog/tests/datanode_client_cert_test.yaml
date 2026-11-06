@@ -232,3 +232,89 @@ tests:
           path: spec.template.metadata.labels.team
           value: obs
         documentIndex: 3
+
+  # The Job and the renewal CronJob share one set of pod values.
+  - it: gives the Job the shared pod settings
+    set:
+      datanode.clientCert.enabled: true
+      datanode.clientCert.podSecurityContext: {runAsNonRoot: true, runAsUser: 1234}
+      datanode.clientCert.image.imagePullSecrets: [{name: reg}]
+      datanode.clientCert.nodeSelector: {disk: ssd}
+      datanode.clientCert.priorityClassName: low
+      datanode.clientCert.extraEnv: [{name: HTTPS_PROXY, value: "http://proxy:3128"}]
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1234
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value: [{name: reg}]
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value: {disk: ssd}
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: low
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HTTPS_PROXY
+            value: "http://proxy:3128"
+        documentIndex: 3
+
+  - it: sets automountServiceAccountToken on the account and the pod, and honours false
+    set:
+      datanode.clientCert.enabled: true
+      datanode.clientCert.serviceAccount.automount: false
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
+        documentIndex: 3
+
+  - it: trusts the CA from graylog.apiToken.tls.caSecret
+    set:
+      datanode.clientCert.enabled: true
+      graylog.apiToken.tls.caSecret.name: graylog-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "--cacert /etc/graylog-api-ca/ca.crt"
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: graylog-ca
+            secret:
+              secretName: graylog-ca
+        documentIndex: 3
+
+  - it: fails when the CA and insecureSkipVerify are both set
+    set:
+      datanode.clientCert.enabled: true
+      graylog.apiToken.tls.caSecret.name: graylog-ca
+      graylog.apiToken.insecureSkipVerify: true
+    asserts:
+      - failedTemplate:
+          errorPattern: insecureSkipVerify
+
+  - it: runs the shared script in hook mode
+    set:
+      datanode.clientCert.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MODE
+            value: hook
+        documentIndex: 3

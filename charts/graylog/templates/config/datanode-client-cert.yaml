@@ -9,10 +9,7 @@
 {{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
 {{- $group := index (include "graylog.datanode.groups" . | fromYamlArray) 0 }}
 {{- $dnUrl := printf "https://%s-0.%s.%s.svc.cluster.local:%d" $group.fullname (include "graylog.datanode.service.name" .) .Release.Namespace (.Values.datanode.service.ports.data | default 9200 | int) }}
-{{- $image := include "graylog.image" . }}
-{{- if $c.image.repository }}
-{{- $image = printf "%s:%s" $c.image.repository ($c.image.tag | default (include "graylog.tag" .)) }}
-{{- end }}
+{{- $curlExtra := include "graylog.apiToken.curlExtra" . }}
 {{/* Hooks run after the API token Job (weight 0), which creates the token Secret
      this Job reads. Succeeded hooks are removed, so the Role that can write
      Secrets does not stay behind. */}}
@@ -22,6 +19,7 @@ metadata:
   name: {{ $name }}
   {{- include "graylog.metadata.labels" (dict "context" $ "labels" $c.labels "indent" 2) }}
   {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $c.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "5") | fromYaml) "indent" 2) }}
+automountServiceAccountToken: {{ $c.serviceAccount.automount }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -70,31 +68,16 @@ spec:
     spec:
       serviceAccountName: {{ $name }}
       restartPolicy: Never
-      {{- with .Values.global.imagePullSecrets }}
-      imagePullSecrets: {{ toYaml . | nindent 8 }}
-      {{- end }}
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1100
-        runAsGroup: 1100
-        seccompProfile:
-          type: RuntimeDefault
+      {{- include "graylog.datanode.clientCert.pod" . | nindent 6 }}
       containers:
         - name: datanode-client-cert
-          image: {{ $image }}
-          imagePullPolicy: {{ $c.image.imagePullPolicy }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
+          {{- include "graylog.datanode.clientCert.container" . | nindent 10 }}
           {{- with $c.resources }}
           resources: {{ toYaml . | nindent 12 }}
           {{- end }}
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
           env:
+            - name: MODE
+              value: hook
             - name: GRAYLOG_URL
               value: {{ $url | quote }}
             - name: DATANODE_URL
@@ -127,17 +110,16 @@ spec:
               value: {{ .Release.Namespace | quote }}
             - name: WAIT_SECONDS
               value: {{ $c.waitSeconds | quote }}
-            {{- if .Values.graylog.apiToken.insecureSkipVerify }}
+            {{- if $curlExtra }}
             - name: CURL_EXTRA
-              value: "-k"
+              value: {{ $curlExtra | quote }}
+            {{- end }}
+            {{- with $c.extraEnv }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           command:
             - /bin/sh
             - -c
             - |
               {{- .Files.Get "files/scripts/datanode-client-cert.sh" | nindent 14 }}
-      volumes:
-        - name: tmp
-          emptyDir:
-            medium: Memory
 {{- end }}

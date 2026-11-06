@@ -1,0 +1,128 @@
+{{- if and .Values.graylog.enabled .Values.datanode.enabled .Values.datanode.clientCert.enabled .Values.datanode.clientCert.renew.enabled }}
+{{- $c := .Values.datanode.clientCert }}
+{{- $r := $c.renew }}
+{{- if not .Values.graylog.apiToken.enabled }}
+{{- fail "datanode.clientCert.enabled=true needs a Graylog API token to ask for the certificate.\n  Set graylog.apiToken.enabled=true, with graylog.apiToken.permissions including ca_clientcert:create." }}
+{{- end }}
+{{- $name := include "graylog.datanode.clientCert.renewName" . }}
+{{- $secretName := include "graylog.datanode.clientCert.secretName" . }}
+{{- $curlExtra := include "graylog.apiToken.curlExtra" . }}
+{{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
+{{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
+{{- $beforeSeconds := mul ($c.renewBeforeDays | int64) 86400 }}
+{{- $lifetimeSeconds := include "graylog.duration.seconds" $c.lifetime }}
+{{- if and $lifetimeSeconds (ge $beforeSeconds ($lifetimeSeconds | int64)) }}
+{{- fail (printf "datanode.clientCert.renewBeforeDays (%d) must be shorter than datanode.clientCert.lifetime (%s).\n  A certificate inside its renewal window from the day it is issued is replaced on every run.\n  Lower renewBeforeDays or raise lifetime." ($c.renewBeforeDays | int) $c.lifetime) }}
+{{- end }}
+{{/* Not hooks: the CronJob has to outlive each release revision to keep
+     renewing. Its Role can read and patch the one certificate Secret, and create
+     a Secret so it can bring back one that was deleted. */}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $c.labels) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $c.annotations) "indent" 2) }}
+automountServiceAccountToken: {{ $c.serviceAccount.automount }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $c.labels) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $c.annotations) "indent" 2) }}
+rules:
+  # create cannot be limited by name; the rest is limited to the one Secret.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $secretName | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $c.labels) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $c.annotations) "indent" 2) }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ $name }}
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $c.labels) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $c.annotations) "indent" 2) }}
+spec:
+  schedule: {{ $r.schedule | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ $r.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ $r.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $r.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $r.backoffLimit }}
+      activeDeadlineSeconds: {{ $r.activeDeadlineSeconds }}
+      template:
+        metadata:
+          {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $c.labels) "indent" 10) }}
+          {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $c.annotations) "indent" 10) }}
+        spec:
+          serviceAccountName: {{ $name }}
+          restartPolicy: Never
+          {{- include "graylog.datanode.clientCert.pod" . | nindent 10 }}
+          containers:
+            - name: datanode-client-cert-renew
+              {{- include "graylog.datanode.clientCert.container" . | nindent 14 }}
+              {{- with $r.resources }}
+              resources: {{ toYaml . | nindent 16 }}
+              {{- end }}
+              env:
+                - name: MODE
+                  value: renew
+                - name: GRAYLOG_URL
+                  value: {{ $url | quote }}
+                # Read when the pod starts, so each run sees the token the API
+                # token CronJob last stored.
+                - name: API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "graylog.apiToken.secretName" . }}
+                      key: token
+                      optional: true
+                - name: ROLE
+                  value: {{ $c.role | quote }}
+                - name: PRINCIPAL
+                  value: {{ $c.principal | quote }}
+                - name: LIFETIME
+                  value: {{ $c.lifetime | quote }}
+                - name: RENEW_BEFORE_SECONDS
+                  value: {{ $beforeSeconds | quote }}
+                - name: SECRET_NAME
+                  value: {{ $secretName | quote }}
+                - name: SECRET_LABELS
+                  value: {{ (include "graylog.metadata.labels" (dict "context" $ "labels" $c.secretLabels "fixed" (dict "app" "graylog-app") "indent" 0) | fromYaml).labels | toJson | quote }}
+                - name: NAMESPACE
+                  value: {{ .Release.Namespace | quote }}
+                {{- if $curlExtra }}
+                - name: CURL_EXTRA
+                  value: {{ $curlExtra | quote }}
+                {{- end }}
+                {{- with $c.extraEnv }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  {{- .Files.Get "files/scripts/datanode-client-cert.sh" | nindent 18 }}
+{{- end }}

@@ -374,6 +374,11 @@ jobs:
         if: always()
         run: sh charts/graylog/tests/scripts/api-token-renew-behavior-test.sh
 
+      - name: datanode client cert script behaviour tests
+        id: datanode-client-cert-script
+        if: always()
+        run: sh charts/graylog/tests/scripts/datanode-client-cert-behavior-test.sh
+
       - name: Summary
         if: always()
         run: |
@@ -396,6 +401,7 @@ jobs:
               echo "| init-script behaviour | $(verdict "${{ steps.init-script.outcome }}") |"
               echo "| api-token script behaviour | $(verdict "${{ steps.api-token-script.outcome }}") |"
               echo "| api-token renew script behaviour | $(verdict "${{ steps.api-token-renew-script.outcome }}") |"
+              echo "| datanode client cert script behaviour | $(verdict "${{ steps.datanode-client-cert-script.outcome }}") |"
             else
               echo "\`helm unittest\` did not run."
             fi
