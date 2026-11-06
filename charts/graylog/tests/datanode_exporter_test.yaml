@@ -1,0 +1,233 @@
+suite: datanode exporter
+templates:
+  - monitoring/datanode-exporter.yaml
+set:
+  datanode.clientCert.enabled: true
+  datanode.exporter.enabled: true
+  graylog.apiToken.enabled: true
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders nothing by default
+    set:
+      datanode.exporter.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when the Data Node is disabled
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.example.com:9200"]
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails without the client certificate
+    set:
+      datanode.clientCert.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "Set datanode.clientCert.enabled=true"
+
+  - it: renders a Deployment and a Service, and no ServiceMonitor by default
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Deployment
+        documentIndex: 0
+      - isKind:
+          of: Service
+        documentIndex: 1
+
+  - it: points at the first Data Node pod and mounts the client cert Secret
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args[0]
+          value: "--es.uri=https://graylog-datanode-0.graylog-datanode-svc.graylog.svc.cluster.local:9200"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --es.all
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --es.indices
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --es.shards
+      - equal:
+          path: spec.template.spec.volumes[0].secret.secretName
+          value: graylog-datanode-client-cert
+
+  - it: follows datanode.clientCert.secretName
+    documentIndex: 0
+    set:
+      datanode.clientCert.secretName: my-cert
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[0].secret.secretName
+          value: my-cert
+      - equal:
+          path: metadata.annotations["secret.reloader.stakater.com/reload"]
+          value: my-cert
+
+  - it: drops the reloader annotation when turned off
+    documentIndex: 0
+    set:
+      datanode.exporter.reloader.enabled: false
+    asserts:
+      - notExists:
+          path: metadata.annotations["secret.reloader.stakater.com/reload"]
+
+  - it: toggles collectors and adds extra args
+    documentIndex: 0
+    set:
+      datanode.exporter.all: false
+      datanode.exporter.indices: false
+      datanode.exporter.shards: true
+      datanode.exporter.extraArgs: ["--es.timeout=10s"]
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --es.all
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --es.indices
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --es.shards
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--es.timeout=10s"
+
+  - it: applies labels and annotations from values and global
+    documentIndex: 0
+    set:
+      global.commonLabels:
+        team: obs
+      datanode.exporter.labels:
+        tier: metrics
+      datanode.exporter.annotations:
+        note: hi
+      datanode.exporter.podLabels:
+        pod: yes
+      datanode.exporter.podAnnotations:
+        scrape: "no"
+    asserts:
+      - equal:
+          path: metadata.labels.team
+          value: obs
+      - equal:
+          path: metadata.labels.tier
+          value: metrics
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: datanode-exporter
+      - equal:
+          path: metadata.annotations.note
+          value: hi
+      - equal:
+          path: spec.template.metadata.labels.pod
+          value: "yes"
+      - equal:
+          path: spec.template.metadata.annotations.scrape
+          value: "no"
+
+  - it: pod labels always match the selector
+    documentIndex: 0
+    set:
+      datanode.exporter.podLabels:
+        app.kubernetes.io/component: other
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: datanode-exporter
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: datanode-exporter
+
+  - it: sets replicas, scheduling and zero values faithfully
+    documentIndex: 0
+    set:
+      datanode.exporter.replicas: 0
+      datanode.exporter.nodeSelector:
+        tier: ops
+      datanode.exporter.priorityClassName: low
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 0
+      - equal:
+          path: spec.template.spec.nodeSelector.tier
+          value: ops
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: low
+
+  - it: uses the exporter image pull secrets over the global ones
+    documentIndex: 0
+    set:
+      global.imagePullSecrets:
+        - name: global
+      datanode.exporter.image.imagePullSecrets:
+        - name: own
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets[0].name
+          value: own
+
+  - it: exposes the Service on the configured port
+    documentIndex: 1
+    set:
+      datanode.exporter.service.port: 9999
+      datanode.exporter.service.annotations:
+        a: b
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 9999
+      - equal:
+          path: metadata.annotations.a
+          value: b
+
+  - it: renders a ServiceMonitor with the instance relabeling first
+    documentIndex: 2
+    set:
+      datanode.exporter.serviceMonitor.enabled: true
+      datanode.exporter.serviceMonitor.labels:
+        release: kube-prometheus-stack
+      datanode.exporter.serviceMonitor.relabelings:
+        - targetLabel: env
+          replacement: dev
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: metadata.labels.release
+          value: kube-prometheus-stack
+      - equal:
+          path: spec.endpoints[0].relabelings[0].replacement
+          value: graylog-datanode
+      - equal:
+          path: spec.endpoints[0].relabelings[1].targetLabel
+          value: env
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: graylog
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: datanode-exporter
+
+  - it: targets the primary group when extra node groups exist
+    documentIndex: 0
+    set:
+      datanode.extraNodeGroups:
+        core:
+          replicas: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args[0]
+          value: "--es.uri=https://graylog-datanode-0.graylog-datanode-svc.graylog.svc.cluster.local:9200"

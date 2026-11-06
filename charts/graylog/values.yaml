@@ -938,6 +938,97 @@ datanode:
       # objects, over the ones above.
       annotations: {}
       labels: {}
+
+  # exporter runs the Prometheus elasticsearch-exporter against the Data Nodes'
+  # OpenSearch API and publishes the metrics on a Service. It authenticates with
+  # the certificate from datanode.clientCert, so that must be enabled too. The
+  # pod waits in ContainerCreating until the client cert Job has written the
+  # Secret.
+  #
+  # One replica talks to the first Data Node of the primary group and sets
+  # --es.all, so it reports every node in the cluster. A node certificate only
+  # names its own pod, so the exporter cannot go through the headless Service.
+  # If that first pod is down the exporter has no metrics until it is back.
+  exporter:
+    enabled: false
+    image:
+      repository: quay.io/prometheuscommunity/elasticsearch-exporter
+      tag: v1.11.0
+      pullPolicy: IfNotPresent
+      # imagePullSecrets overrides global.imagePullSecrets for this image.
+      imagePullSecrets: []
+    # all asks the Data Node for the stats of every node, not only its own.
+    all: true
+    # indices adds per-index series. It is the most expensive collector, so turn
+    # it off on clusters with thousands of indices.
+    indices: true
+    # shards adds per-shard series. Off by default, the series count is large.
+    shards: false
+    # extraArgs adds flags to the exporter, for example --es.timeout=10s.
+    extraArgs: []
+    # reloader restarts the exporter when the client certificate Secret changes.
+    # The exporter reads the certificate once at startup, and a helm upgrade
+    # inside datanode.clientCert.renewBeforeDays reissues it. Needs Stakater
+    # Reloader in the cluster. The annotation does nothing without it.
+    reloader:
+      enabled: true
+    replicas: 1
+    service:
+      type: ClusterIP
+      port: 9114
+      annotations: {}
+      labels: {}
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    topologySpreadConstraints: []
+    priorityClassName: ""
+    # extraEnv adds environment variables in full EnvVar syntax.
+    extraEnv: []
+    # annotations and labels are added to the Deployment and the Service.
+    # podAnnotations and podLabels are added to the pod.
+    annotations: {}
+    labels: {}
+    podAnnotations: {}
+    podLabels: {}
+    # serviceMonitor creates a Prometheus Operator ServiceMonitor for the exporter.
+    # Needs the Prometheus Operator CRDs.
+    serviceMonitor:
+      enabled: false
+      interval: 30s
+      scrapeTimeout: 10s
+      path: /metrics
+      # labels are added to the ServiceMonitor. Most installs select
+      # ServiceMonitors by label, so set what yours requires, for example
+      # release: kube-prometheus-stack.
+      labels: {}
+      annotations: {}
+      honorLabels: false
+      # The chart always sets the instance label to the release's Data Node
+      # name, because the series describe the cluster and not the exporter pod.
+      # relabelings and metricRelabelings come after that and are passed through.
+      relabelings: []
+      metricRelabelings: []
+      # namespaceSelector defaults to the release namespace.
+      namespaceSelector: {}
   service:
     annotations: {}
     labels: {}
