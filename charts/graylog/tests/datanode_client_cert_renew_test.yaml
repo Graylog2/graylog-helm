@@ -1,0 +1,503 @@
+suite: datanode client certificate renewal
+templates:
+  - config/datanode-client-cert-renew.yaml
+set:
+  graylog.apiToken.enabled: true
+  datanode.clientCert.enabled: true
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders nothing by default
+    set:
+      datanode.clientCert.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when renew is off
+    set:
+      datanode.clientCert.renew.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when the Data Node is disabled
+    set:
+      datanode.enabled: false
+      opensearch.enabled: true
+      opensearch.hosts: ["https://os.example.com:9200"]
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when graylog is disabled
+    set:
+      graylog.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails without the API token
+    set:
+      graylog.apiToken.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: ca_clientcert:create
+
+  - it: renders SA, Role, RoleBinding and CronJob
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Role
+        documentIndex: 1
+      - isKind:
+          of: RoleBinding
+        documentIndex: 2
+      - isKind:
+          of: CronJob
+        documentIndex: 3
+      - equal:
+          path: spec.schedule
+          value: "37 3 * * *"
+        documentIndex: 3
+
+  - it: is not a Helm hook, so it survives every release revision
+    asserts:
+      - notExists:
+          path: metadata.annotations["helm.sh/hook"]
+        documentIndex: 3
+      - notExists:
+          path: metadata.annotations["helm.sh/hook"]
+        documentIndex: 1
+
+  # create cannot be limited by name, so it is its own rule. Everything else stays
+  # on the one Secret, and the Role has no list, delete or update.
+  - it: limits the Role to the one certificate Secret, plus create to bring back a deleted one
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: ["secrets"]
+              verbs: ["create"]
+            - apiGroups: [""]
+              resources: ["secrets"]
+              resourceNames: ["graylog-datanode-client-cert"]
+              verbs: ["get", "patch"]
+        documentIndex: 1
+
+  - it: follows datanode.clientCert.secretName in the Role and the CronJob
+    set:
+      datanode.clientCert.secretName: my-cert
+    asserts:
+      - equal:
+          path: rules[1].resourceNames
+          value: ["my-cert"]
+        documentIndex: 1
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: SECRET_NAME
+            value: my-cert
+        documentIndex: 3
+
+  - it: does not overlap with a running Job and keeps a short failure history
+    asserts:
+      - equal:
+          path: spec.concurrencyPolicy
+          value: Forbid
+        documentIndex: 3
+      - equal:
+          path: spec.failedJobsHistoryLimit
+          value: 3
+        documentIndex: 3
+      - equal:
+          path: spec.successfulJobsHistoryLimit
+          value: 1
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.backoffLimit
+          value: 2
+        documentIndex: 3
+
+  - it: honours zero history limits
+    set:
+      datanode.clientCert.renew.successfulJobsHistoryLimit: 0
+      datanode.clientCert.renew.failedJobsHistoryLimit: 0
+    asserts:
+      - equal:
+          path: spec.successfulJobsHistoryLimit
+          value: 0
+        documentIndex: 3
+      - equal:
+          path: spec.failedJobsHistoryLimit
+          value: 0
+        documentIndex: 3
+
+  # The CronJob only needs the token to ask Graylog and the Kubernetes token to
+  # write the Secret. It must not get the password secret or sign in as root.
+  - it: runs the shared script in renew mode
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: MODE
+            value: renew
+        documentIndex: 3
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
+          pattern: ca/clientcert
+        documentIndex: 3
+
+  # Renew mode skips the Data Node setup, so none of its inputs should reach the pod.
+  - it: never receives the password secret, the Data Node address or the role definition
+    asserts:
+      - notContains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_PASSWORD_SECRET
+          any: true
+        documentIndex: 3
+      - notContains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: DATANODE_URL
+          any: true
+        documentIndex: 3
+      - notContains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: ROLE_DEFINITION
+          any: true
+        documentIndex: 3
+
+  - it: reads the API token from its Secret when the pod starts, optional so a first install does not wedge
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: graylog-api-token
+                key: token
+                optional: true
+        documentIndex: 3
+
+  - it: follows graylog.apiToken.secretName
+    set:
+      graylog.apiToken.secretName: custom-token
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: custom-token
+                key: token
+                optional: true
+        documentIndex: 3
+
+  - it: labels a Secret it has to create the way the hook does
+    set:
+      datanode.clientCert.secretLabels:
+        team: obs
+      global.commonLabels:
+        env: dev
+    asserts:
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="SECRET_LABELS")].value
+          pattern: '"app":"graylog-app"'
+        documentIndex: 3
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="SECRET_LABELS")].value
+          pattern: '"team":"obs"'
+        documentIndex: 3
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env[?(@.name=="SECRET_LABELS")].value
+          pattern: '"env":"dev"'
+        documentIndex: 3
+
+  - it: converts renewBeforeDays to seconds and hands over the issuing settings
+    set:
+      datanode.clientCert.renewBeforeDays: 5
+      datanode.clientCert.principal: scraper
+      datanode.clientCert.role: scraper_role
+      datanode.clientCert.lifetime: P60D
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: RENEW_BEFORE_SECONDS
+            value: "432000"
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: PRINCIPAL
+            value: scraper
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: ROLE
+            value: scraper_role
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: LIFETIME
+            value: P60D
+        documentIndex: 3
+
+  - it: calls Graylog through its Service
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_URL
+            value: "http://graylog-svc.graylog.svc.cluster.local:9000"
+        documentIndex: 3
+
+  - it: fails when renewBeforeDays is not shorter than the lifetime
+    set:
+      datanode.clientCert.renewBeforeDays: 30
+      datanode.clientCert.lifetime: P30D
+    asserts:
+      - failedTemplate:
+          errorPattern: Lower renewBeforeDays or raise lifetime
+
+  - it: compares renewBeforeDays to a lifetime given in hours
+    set:
+      datanode.clientCert.renewBeforeDays: 2
+      datanode.clientCert.lifetime: PT24H
+    asserts:
+      - failedTemplate:
+          errorPattern: Lower renewBeforeDays or raise lifetime
+
+  - it: does not compare renewBeforeDays to a lifetime it cannot parse
+    set:
+      datanode.clientCert.renewBeforeDays: 400
+      datanode.clientCert.lifetime: P1Y
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: runs the Graylog image by default and a custom image when set
+    asserts:
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].image
+          pattern: ^graylog/graylog
+        documentIndex: 3
+
+  - it: runs locked down with a writable tmp
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.runAsNonRoot
+          value: true
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser
+          value: 1100
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content:
+            name: tmp
+            emptyDir:
+              medium: Memory
+        documentIndex: 3
+
+  - it: shares the pod settings with the hook Job
+    set:
+      datanode.clientCert.podSecurityContext: {runAsNonRoot: true, runAsUser: 1234}
+      datanode.clientCert.image.imagePullSecrets: [{name: reg}]
+      datanode.clientCert.nodeSelector: {disk: ssd}
+      datanode.clientCert.tolerations: [{key: dedicated, operator: Exists}]
+      datanode.clientCert.affinity: {nodeAffinity: {}}
+      datanode.clientCert.priorityClassName: low
+      datanode.clientCert.extraEnv: [{name: HTTPS_PROXY, value: "http://proxy:3128"}]
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser
+          value: 1234
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets
+          value: [{name: reg}]
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.nodeSelector
+          value: {disk: ssd}
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.tolerations
+          value: [{key: dedicated, operator: Exists}]
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.priorityClassName
+          value: low
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: HTTPS_PROXY
+            value: "http://proxy:3128"
+        documentIndex: 3
+
+  - it: falls back to global.imagePullSecrets
+    set:
+      global.imagePullSecrets: [{name: global-reg}]
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets
+          value: [{name: global-reg}]
+        documentIndex: 3
+
+  - it: sets automountServiceAccountToken on the account and the pod, and honours false
+    set:
+      datanode.clientCert.serviceAccount.automount: false
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+        documentIndex: 0
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.automountServiceAccountToken
+          value: false
+        documentIndex: 3
+
+  - it: gives the CronJob its own resources and schedule
+    set:
+      datanode.clientCert.resources:
+        limits: {memory: 1Gi}
+      datanode.clientCert.renew.resources:
+        limits: {memory: 64Mi}
+      datanode.clientCert.renew.schedule: "0 * * * *"
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources
+          value:
+            limits: {memory: 64Mi}
+        documentIndex: 3
+      - equal:
+          path: spec.schedule
+          value: "0 * * * *"
+        documentIndex: 3
+
+  - it: sets no curl flags by default
+    asserts:
+      - notContains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "-k"
+          any: true
+        documentIndex: 3
+
+  - it: passes -k when graylog.apiToken.insecureSkipVerify is set
+    set:
+      graylog.apiToken.insecureSkipVerify: true
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "-k"
+        documentIndex: 3
+
+  - it: trusts the CA from graylog.apiToken.tls.caSecret
+    set:
+      graylog.apiToken.tls.caSecret.name: graylog-ca
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "--cacert /etc/graylog-api-ca/ca.crt"
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content:
+            name: graylog-ca
+            secret:
+              secretName: graylog-ca
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].volumeMounts
+          content:
+            name: graylog-ca
+            mountPath: /etc/graylog-api-ca
+            readOnly: true
+        documentIndex: 3
+
+  - it: adds renew labels and annotations over the client cert ones on every object
+    set:
+      global.commonLabels:
+        team: obs
+      datanode.clientCert.labels:
+        tier: base
+        shared: client
+      datanode.clientCert.annotations:
+        note: base
+      datanode.clientCert.renew.labels:
+        shared: renew
+      datanode.clientCert.renew.annotations:
+        note: renew
+    asserts:
+      - equal:
+          path: metadata.labels.shared
+          value: renew
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.tier
+          value: base
+        documentIndex: 1
+      - equal:
+          path: metadata.labels.team
+          value: obs
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations.note
+          value: renew
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.labels.shared
+          value: renew
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.annotations.note
+          value: renew
+        documentIndex: 3
+
+  # Kubernetes caps CronJob names at 52 characters.
+  - it: keeps the CronJob name within 52 characters for a long release name
+    release:
+      name: graylog-production-us-east-1-cluster-blue-01
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^.{1,52}$
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: graylog-production-us-eas-datanode-client-cert-renew
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.serviceAccountName
+          value: graylog-production-us-eas-datanode-client-cert-renew
+        documentIndex: 3

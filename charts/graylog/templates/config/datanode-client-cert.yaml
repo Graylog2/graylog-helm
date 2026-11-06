@@ -1,0 +1,125 @@
+{{- if and .Values.graylog.enabled .Values.datanode.enabled .Values.datanode.clientCert.enabled }}
+{{- $c := .Values.datanode.clientCert }}
+{{- if not .Values.graylog.apiToken.enabled }}
+{{- fail "datanode.clientCert.enabled=true needs a Graylog API token to ask for the certificate.\n  Set graylog.apiToken.enabled=true, with graylog.apiToken.permissions including ca_clientcert:create." }}
+{{- end }}
+{{- $name := printf "%s-datanode-client-cert" (include "graylog.fullname" .) }}
+{{- $secretName := include "graylog.datanode.clientCert.secretName" . }}
+{{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
+{{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
+{{- $group := index (include "graylog.datanode.groups" . | fromYamlArray) 0 }}
+{{- $dnUrl := printf "https://%s-0.%s.%s.svc.cluster.local:%d" $group.fullname (include "graylog.datanode.service.name" .) .Release.Namespace (.Values.datanode.service.ports.data | default 9200 | int) }}
+{{- $curlExtra := include "graylog.apiToken.curlExtra" . }}
+{{/* Hooks run after the API token Job (weight 0), which creates the token Secret
+     this Job reads. Succeeded hooks are removed, so the Role that can write
+     Secrets does not stay behind. */}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $c.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $c.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "5") | fromYaml) "indent" 2) }}
+automountServiceAccountToken: {{ $c.serviceAccount.automount }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $c.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $c.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "5") | fromYaml) "indent" 2) }}
+rules:
+  # create cannot be limited by name; the rest is limited to the one Secret.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $secretName | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $c.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $c.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "5") | fromYaml) "indent" 2) }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ $name }}
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" $c.labels "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $c.annotations "fixed" (include "graylog.apiToken.hooks" (dict "weight" "10") | fromYaml) "indent" 2) }}
+spec:
+  backoffLimit: {{ $c.backoffLimit }}
+  activeDeadlineSeconds: {{ $c.activeDeadlineSeconds }}
+  template:
+    metadata:
+      {{- include "graylog.metadata.labels" (dict "context" $ "labels" $c.labels "indent" 6) }}
+      {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" $c.annotations "indent" 6) }}
+    spec:
+      serviceAccountName: {{ $name }}
+      restartPolicy: Never
+      {{- include "graylog.datanode.clientCert.pod" . | nindent 6 }}
+      containers:
+        - name: datanode-client-cert
+          {{- include "graylog.datanode.clientCert.container" . | nindent 10 }}
+          {{- with $c.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: MODE
+              value: hook
+            - name: GRAYLOG_URL
+              value: {{ $url | quote }}
+            - name: DATANODE_URL
+              value: {{ $dnUrl | quote }}
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "graylog.apiToken.secretName" . }}
+                  key: token
+            - name: GRAYLOG_PASSWORD_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "graylog.secretsName" . }}
+                  key: GRAYLOG_PASSWORD_SECRET
+            - name: ROLE
+              value: {{ $c.role | quote }}
+            - name: ROLE_DEFINITION
+              value: {{ $c.roleDefinition | toJson | quote }}
+            - name: PRINCIPAL
+              value: {{ $c.principal | quote }}
+            - name: LIFETIME
+              value: {{ $c.lifetime | quote }}
+            - name: RENEW_BEFORE_SECONDS
+              value: {{ mul ($c.renewBeforeDays | int) 86400 | quote }}
+            - name: SECRET_NAME
+              value: {{ $secretName | quote }}
+            - name: SECRET_LABELS
+              value: {{ (include "graylog.metadata.labels" (dict "context" $ "labels" $c.secretLabels "fixed" (dict "app" "graylog-app") "indent" 0) | fromYaml).labels | toJson | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: WAIT_SECONDS
+              value: {{ $c.waitSeconds | quote }}
+            {{- if $curlExtra }}
+            - name: CURL_EXTRA
+              value: {{ $curlExtra | quote }}
+            {{- end }}
+            {{- with $c.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              {{- .Files.Get "files/scripts/datanode-client-cert.sh" | nindent 14 }}
+{{- end }}

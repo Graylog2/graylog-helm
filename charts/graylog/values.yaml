@@ -828,6 +828,116 @@ datanode:
     # only one group rolls at once. Set to true per-group to opt a group back
     # into Reloader's default behavior.
     autoReload: false
+  # clientCert issues a client certificate for the Data Node's OpenSearch API and
+  # stores it in a Secret (keys ca.crt, tls.crt, tls.key), so tools in the cluster
+  # such as a metrics exporter can authenticate without a password. A post-install
+  # and post-upgrade hook Job creates the OpenSearch role and its mapping, then
+  # asks Graylog for the certificate with the token from graylog.apiToken.
+  # Requires graylog.apiToken.enabled=true, and the API token's user needs the
+  # ca_clientcert:create permission (set graylog.apiToken.permissions).
+  # The key is stored decrypted, so treat the Secret as a credential for the role.
+  clientCert:
+    enabled: false
+    # secretName of the Secret that receives the certificate.
+    secretName: ""
+    # principal is the certificate's CN, the OpenSearch user name.
+    principal: graylog-client
+    # role is the OpenSearch role (and role mapping) the certificate is added to.
+    # The Job creates it from roleDefinition when it does not exist, and never
+    # overwrites an existing one.
+    role: graylog_metrics_reader
+    # roleDefinition is the OpenSearch role the Job creates. The default reads
+    # cluster and index stats and nothing else. indices:admin/aliases/get is
+    # needed by the Prometheus elasticsearch-exporter for its per-index series.
+    roleDefinition:
+      cluster_permissions:
+        - cluster_monitor
+      index_permissions:
+        - index_patterns: ["*"]
+          allowed_actions:
+            - indices_monitor
+            - indices:admin/aliases/get
+    # lifetime is the certificate's ISO-8601 lifetime.
+    lifetime: P30D
+    # renewBeforeDays is how many days before expiry the certificate is reissued,
+    # by a helm upgrade or by the renewal CronJob. Must be shorter than lifetime.
+    renewBeforeDays: 10
+    # waitSeconds is how long the Job waits for Graylog and the Data Node.
+    waitSeconds: 240
+    # image runs the Job and the renewal CronJob. It needs sh, curl, openssl, sed,
+    # grep and base64, so it defaults to the Graylog image. Leave empty for that.
+    image:
+      repository: ""
+      tag: ""
+      imagePullPolicy: IfNotPresent
+      # imagePullSecrets overrides global.imagePullSecrets for this image. It
+      # covers the Job and the renewal CronJob.
+      imagePullSecrets: []
+    backoffLimit: 3
+    activeDeadlineSeconds: 290
+    # resources sets the Job container's requests and limits. The renewal
+    # CronJob has its own under renew.
+    resources: {}
+    # serviceAccount.automount sets automountServiceAccountToken on the Job's and
+    # the CronJob's ServiceAccounts and pods. Both call the Kubernetes API with
+    # that token to write the Secret, so false breaks them unless something else
+    # in your cluster provides the token.
+    serviceAccount:
+      automount: true
+    # podSecurityContext and containerSecurityContext apply to the Job and the
+    # renewal CronJob. The defaults follow the restricted Pod Security Standard.
+    # UID 1100 is the graylog user in the Graylog image. Change it with the image.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1100
+      runAsGroup: 1100
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+    # nodeSelector, tolerations, affinity and priorityClassName schedule the Job
+    # and the renewal CronJob. They take the standard Kubernetes syntax.
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    priorityClassName: ""
+    # extraEnv adds environment variables to the Job and the renewal CronJob, in
+    # full EnvVar syntax, for example a proxy setting. They come after the
+    # chart's own variables, so do not reuse a name the scripts read.
+    extraEnv: []
+    # annotations and labels are added to the Job, its pod and its RBAC objects.
+    # secretLabels are added to the certificate Secret, which the Job creates.
+    annotations: {}
+    labels: {}
+    secretLabels: {}
+    # renew runs a CronJob that reissues the certificate once less than
+    # renewBeforeDays remain, so a cluster that is not upgraded for lifetime
+    # keeps a working certificate. It calls Graylog with the API token and
+    # patches the certificate Secret, or creates it again if it was deleted. Its
+    # Role therefore has create on secrets, which Kubernetes cannot limit to a
+    # name. It never signs in as root and never touches the Data Node. The role
+    # and mapping must already exist, which the install hook Job creates. An
+    # expired API token cannot reissue anything: helm upgrade mints a new one, and
+    # graylog.apiToken.renew keeps it fresh.
+    renew:
+      enabled: true
+      # schedule is a cron expression. It must fire more often than
+      # renewBeforeDays.
+      schedule: "37 3 * * *"
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      # startingDeadlineSeconds is how late a missed run may still start.
+      startingDeadlineSeconds: 3600
+      successfulJobsHistoryLimit: 1
+      failedJobsHistoryLimit: 3
+      resources: {}
+      # annotations and labels are added to the CronJob, its pod and its RBAC
+      # objects, over the ones above.
+      annotations: {}
+      labels: {}
   service:
     annotations: {}
     labels: {}

@@ -705,6 +705,67 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "replicas": { "type": "integer" },
+        "clientCert": {
+          "type": "object",
+          "description": "Issue a client certificate for the Data Node's OpenSearch API, stored in a Kubernetes Secret by a post-install/post-upgrade hook Job and renewed by a CronJob.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "secretName": { "type": "string" },
+            "principal": { "type": "string", "minLength": 1 },
+            "role": { "type": "string", "minLength": 1 },
+            "roleDefinition": { "type": "object" },
+            "lifetime": { "type": "string", "description": "ISO-8601 duration, e.g. P30D" },
+            "renewBeforeDays": { "type": "integer", "minimum": 0 },
+            "waitSeconds": { "type": "integer", "minimum": 1 },
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": { "type": "string" },
+                "tag": { "type": "string" },
+                "imagePullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+                "imagePullSecrets": { "type": "array", "items": { "type": "object" } }
+              }
+            },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+            "resources": { "type": "object" },
+            "serviceAccount": {
+              "type": "object",
+              "properties": {
+                "automount": {
+                  "type": "boolean",
+                  "description": "automountServiceAccountToken for the Job and the renewal CronJob. Both need the token."
+                }
+              }
+            },
+            "podSecurityContext": { "type": "object" },
+            "containerSecurityContext": { "type": "object" },
+            "nodeSelector": { "type": "object" },
+            "tolerations": { "type": "array", "items": { "type": "object" } },
+            "affinity": { "type": "object" },
+            "priorityClassName": { "type": "string" },
+            "extraEnv": { "type": "array", "items": { "type": "object" } },
+            "annotations": { "type": "object" },
+            "labels": { "type": "object" },
+            "secretLabels": { "type": "object" },
+            "renew": {
+              "type": "object",
+              "description": "CronJob that reissues the certificate before it expires.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "schedule": { "type": "string" },
+                "backoffLimit": { "type": "integer", "minimum": 0 },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 1 },
+                "startingDeadlineSeconds": { "type": "integer", "minimum": 1 },
+                "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+                "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+                "resources": { "type": "object" },
+                "annotations": { "type": "object" },
+                "labels": { "type": "object" }
+              }
+            }
+          }
+        },
         "serviceAccount": {
           "type": "object",
           "description": "ServiceAccount for the Datanode pods. Falls back to the top-level serviceAccount when create is false and nameOverride is unset.",

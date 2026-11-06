@@ -1374,3 +1374,95 @@ volumeMounts:
     readOnly: true
   {{- end }}
 {{- end }}
+
+{{/*
+Data Node client certificate Secret name (datanode.clientCert)
+*/}}
+{{- define "graylog.datanode.clientCert.secretName" -}}
+{{- .Values.datanode.clientCert.secretName | default (include "graylog.fullname" . | printf "%s-datanode-client-cert") }}
+{{- end }}
+
+{{/*
+Name of the Data Node client certificate renewal objects: ServiceAccount, Role,
+RoleBinding and CronJob. The fullname is cut to 25 characters because Kubernetes
+caps CronJob names at 52 and "-datanode-client-cert-renew" adds 27.
+*/}}
+{{- define "graylog.datanode.clientCert.renewName" -}}
+{{- include "graylog.fullname" . | trunc 25 | trimSuffix "-" }}-datanode-client-cert-renew
+{{- end }}
+
+{{/*
+Image of the client certificate Job and its renewal CronJob. Defaults to the
+Graylog image, which has the shell, curl and openssl the scripts need.
+*/}}
+{{- define "graylog.datanode.clientCert.image" -}}
+{{- $c := .Values.datanode.clientCert -}}
+{{- if $c.image.repository -}}
+{{- printf "%s:%s" $c.image.repository ($c.image.tag | default (include "graylog.tag" .)) -}}
+{{- else -}}
+{{- include "graylog.image" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Pod spec fields shared by the client certificate Job and its renewal CronJob:
+the ServiceAccount token mount, pull secrets, pod security context, scheduling
+and volumes. Render it with nindent at the pod spec's indent. The scripts write
+their working files to /tmp, so the root filesystem can stay read only.
+*/}}
+{{- define "graylog.datanode.clientCert.pod" -}}
+{{- $c := .Values.datanode.clientCert -}}
+{{- $t := .Values.graylog.apiToken -}}
+{{- $pull := ($c.image.imagePullSecrets | default .Values.global.imagePullSecrets) | default list -}}
+automountServiceAccountToken: {{ $c.serviceAccount.automount }}
+{{- with $pull }}
+imagePullSecrets: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $c.podSecurityContext }}
+securityContext: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $c.priorityClassName }}
+priorityClassName: {{ . | quote }}
+{{- end }}
+{{- with $c.nodeSelector }}
+nodeSelector: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $c.tolerations }}
+tolerations: {{ toYaml . | nindent 2 }}
+{{- end }}
+{{- with $c.affinity }}
+affinity: {{ toYaml . | nindent 2 }}
+{{- end }}
+volumes:
+  - name: tmp
+    emptyDir:
+      medium: Memory
+  {{- if $t.tls.caSecret.name }}
+  - name: graylog-ca
+    secret:
+      secretName: {{ $t.tls.caSecret.name | quote }}
+  {{- end }}
+{{- end }}
+
+{{/*
+Container fields shared by the client certificate Job and its renewal CronJob:
+image, pull policy, container security context and volume mounts. Render it
+with nindent at the container's indent.
+*/}}
+{{- define "graylog.datanode.clientCert.container" -}}
+{{- $c := .Values.datanode.clientCert -}}
+{{- $t := .Values.graylog.apiToken -}}
+image: {{ include "graylog.datanode.clientCert.image" . }}
+imagePullPolicy: {{ $c.image.imagePullPolicy }}
+{{- with $c.containerSecurityContext }}
+securityContext: {{ toYaml . | nindent 2 }}
+{{- end }}
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  {{- if $t.tls.caSecret.name }}
+  - name: graylog-ca
+    mountPath: /etc/graylog-api-ca
+    readOnly: true
+  {{- end }}
+{{- end }}
