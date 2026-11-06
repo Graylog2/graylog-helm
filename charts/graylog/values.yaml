@@ -967,9 +967,10 @@ datanode:
     # extraArgs adds flags to the exporter, for example --es.timeout=10s.
     extraArgs: []
     # reloader restarts the exporter when the client certificate Secret changes.
-    # The exporter reads the certificate once at startup, and a helm upgrade
-    # inside datanode.clientCert.renewBeforeDays reissues it. Needs Stakater
-    # Reloader in the cluster. The annotation does nothing without it.
+    # The exporter reads the certificate once at startup, and the renewal
+    # CronJob or a helm upgrade reissues it inside
+    # datanode.clientCert.renewBeforeDays. Needs Stakater Reloader in the
+    # cluster. The annotation does nothing without it.
     reloader:
       enabled: true
     replicas: 1

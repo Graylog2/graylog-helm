@@ -89,14 +89,14 @@ Series worth graphing:
 
 ## Certificate renewal
 
-The certificate lasts 30 days. The client certificate Job reissues it only during a `helm upgrade` inside the
-last `datanode.clientCert.renewBeforeDays` days. If you do not upgrade for 30 days, the certificate expires
-and `elasticsearch_clusterinfo_up` drops to 0.
+The certificate lasts 30 days. The renewal CronJob (`datanode.clientCert.renew`) reissues it once fewer than
+`datanode.clientCert.renewBeforeDays` days remain, and so does a `helm upgrade`. If you turn the CronJob off and
+do not upgrade, the certificate expires and `elasticsearch_clusterinfo_up` drops to 0.
 
-The exporter reads the certificate once, at startup, so it needs a restart after a reissue. The chart adds
+The exporter reads the certificate once, at startup, so it needs a restart after every reissue. The chart adds
 `secret.reloader.stakater.com/reload` to the Deployment, and [Stakater Reloader](https://github.com/stakater/Reloader)
-restarts the pod when that Secret changes. If your cluster has no Reloader, restart it yourself after an
-upgrade that reissued the certificate.
+restarts the pod when that Secret changes. Without Reloader, restart it yourself after a reissue. The CronJob
+does not do it for you.
 
 ```sh
 kubectl -n <namespace> rollout restart deployment/<release>-datanode-exporter
