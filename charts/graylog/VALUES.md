@@ -226,6 +226,56 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.extraInitContainers`                                         | Additional init containers.                                 | `[]`                            |
 | `graylog.extraContainers`                                             | Additional sidecar containers.                              | `[]`                            |
 
+### Graylog API token
+
+A hook Job creates a service user and an API token and stores the token in a Secret. See the [API token guide](../../docs/graylog/api-token.md).
+
+| Key Path                                  | Description                                                                                   | Default                |
+|-------------------------------------------|-----------------------------------------------------------------------------------------------|------------------------|
+| `graylog.apiToken.enabled`                | Create the service user, token and Secret.                                                    | `false`                |
+| `graylog.apiToken.secretName`             | Secret that receives the token. Keys are `token`, `username` and `userid`. Empty uses `<fullname>-api-token`. | `""`             |
+| `graylog.apiToken.username`               | Service user. Created if missing, reused if present.                                          | `helm-automation`      |
+| `graylog.apiToken.roles`                  | Roles for a user the Job creates. `Admin` fails the render.                                   | `[Reader]`             |
+| `graylog.apiToken.permissions`            | Extra Graylog permissions for a user the Job creates.                                         | `[]`                   |
+| `graylog.apiToken.tokenName`              | Name the token carries in Graylog.                                                            | `helm`                 |
+| `graylog.apiToken.ttl`                    | ISO-8601 token lifetime. The schema rejects anything else.                                                                      | `P90D`                 |
+| `graylog.apiToken.bootstrap.existingSecret` | Secret holding the root password the Job signs in with. Needed with `global.existingSecretName`. | `""`               |
+| `graylog.apiToken.bootstrap.passwordKey`  | Key in that Secret.                                                                           | `GRAYLOG_ROOT_PASSWORD` |
+| `graylog.apiToken.tls.caSecret.name`      | Secret holding the CA that signed Graylog's certificate. The Job and the CronJob verify against it. | `""` |
+| `graylog.apiToken.tls.caSecret.key`       | Key in that Secret that holds the CA certificate.                                             | `ca.crt`               |
+| `graylog.apiToken.insecureSkipVerify`     | Skip certificate checks. Prefer `tls.caSecret`. Setting both fails the render.                | `false`                |
+| `graylog.apiToken.waitSeconds`            | How long the Job waits for Graylog to answer.                                                 | `720`                  |
+| `graylog.apiToken.image.repository`       | Job image. Needs a shell, curl, sed, grep and base64.                                         | `curlimages/curl`      |
+| `graylog.apiToken.image.tag`              | Job image tag.                                                                                | `8.17.0`               |
+| `graylog.apiToken.image.imagePullPolicy`  | Job image pull policy.                                                                        | `IfNotPresent`         |
+| `graylog.apiToken.image.imagePullSecrets` | Overrides `global.imagePullSecrets` for the Job and CronJob image.                            | `[]`                   |
+| `graylog.apiToken.serviceAccount.automount` | `automountServiceAccountToken` for both ServiceAccounts and pods. Both need the token.      | `true`                 |
+| `graylog.apiToken.podSecurityContext`     | Pod security context for the Job and the CronJob. Keys merge over the defaults.               | non-root, UID 100      |
+| `graylog.apiToken.containerSecurityContext` | Container security context for both.                                                        | restricted             |
+| `graylog.apiToken.nodeSelector`           | Node selector for both.                                                                       | `{}`                   |
+| `graylog.apiToken.tolerations`            | Tolerations for both.                                                                         | `[]`                   |
+| `graylog.apiToken.affinity`               | Affinity for both.                                                                            | `{}`                   |
+| `graylog.apiToken.priorityClassName`      | Priority class for both.                                                                      | `""`                   |
+| `graylog.apiToken.extraEnv`               | Extra environment variables for both, in `EnvVar` syntax.                                     | `[]`                   |
+| `graylog.apiToken.backoffLimit`           | Job retries.                                                                                  | `3`                    |
+| `graylog.apiToken.activeDeadlineSeconds`  | Hard time limit for the Job.                                                                  | `780`                  |
+| `graylog.apiToken.resources`              | Job container resources.                                                                      | `{}`                   |
+| `graylog.apiToken.annotations`            | Annotations for the Job, its pod and its RBAC objects.                                        | `{}`                   |
+| `graylog.apiToken.labels`                 | Labels for the Job, its pod and its RBAC objects.                                             | `{}`                   |
+| `graylog.apiToken.secretLabels`           | Labels for the token Secret, applied when the Job creates it.                                 | `{}`                   |
+| `graylog.apiToken.secretAnnotations`      | Annotations for the token Secret, applied when the Job creates it.                            | `{}`                   |
+| `graylog.apiToken.renew.enabled`          | Run a CronJob that replaces the token before it expires. The user renews with its own token. | `true`                 |
+| `graylog.apiToken.renew.schedule`         | Cron expression for the renewal CronJob.                                                      | `"17 3 * * *"`         |
+| `graylog.apiToken.renew.before`           | Renew when this much time or less remains, as an ISO-8601 duration such as `P14D`. Must be shorter than `ttl`. | `P14D`        |
+| `graylog.apiToken.renew.backoffLimit`     | Renewal Job retries.                                                                          | `2`                    |
+| `graylog.apiToken.renew.activeDeadlineSeconds` | Hard time limit for one renewal run.                                                     | `300`                  |
+| `graylog.apiToken.renew.startingDeadlineSeconds` | How late a missed run may still start.                                                 | `3600`                 |
+| `graylog.apiToken.renew.successfulJobsHistoryLimit` | Finished renewal Jobs kept.                                                         | `1`                    |
+| `graylog.apiToken.renew.failedJobsHistoryLimit` | Failed renewal Jobs kept.                                                               | `3`                    |
+| `graylog.apiToken.renew.resources`        | Renewal container resources.                                                                  | `{}`                   |
+| `graylog.apiToken.renew.annotations`      | Annotations for the CronJob, its pod and its RBAC objects.                                    | `{}`                   |
+| `graylog.apiToken.renew.labels`           | Labels for the CronJob, its pod and its RBAC objects.                                         | `{}`                   |
+
 
 ### Graylog inputs
 

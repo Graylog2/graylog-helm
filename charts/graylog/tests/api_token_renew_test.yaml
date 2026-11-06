@@ -1,0 +1,395 @@
+suite: graylog API token renewal
+templates:
+  - config/api-token-renew.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when the API token is off, even with renew on
+    set:
+      graylog.apiToken.renew.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when renew is off
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.renew.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when graylog is disabled
+    set:
+      graylog.enabled: false
+      graylog.apiToken.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders SA, Role, RoleBinding and CronJob when the token is on
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Role
+        documentIndex: 1
+      - isKind:
+          of: RoleBinding
+        documentIndex: 2
+      - isKind:
+          of: CronJob
+        documentIndex: 3
+
+  - it: is not a Helm hook, so it survives every release revision
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - notExists:
+          path: metadata.annotations["helm.sh/hook"]
+        documentIndex: 0
+      - notExists:
+          path: metadata.annotations["helm.sh/hook"]
+        documentIndex: 3
+
+  - it: limits the Role to reading and patching the one token Secret, with no create
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: ["secrets"]
+              resourceNames: ["graylog-api-token"]
+              verbs: ["get", "patch"]
+        documentIndex: 1
+
+  - it: follows secretName in the Role and the CronJob
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.secretName: my-token
+    asserts:
+      - equal:
+          path: rules[0].resourceNames[0]
+          value: my-token
+        documentIndex: 1
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: SECRET_NAME
+            value: my-token
+        documentIndex: 3
+
+  - it: does not overlap with a running Job and keeps a short failure history
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: spec.concurrencyPolicy
+          value: Forbid
+        documentIndex: 3
+      - equal:
+          path: spec.schedule
+          value: "17 3 * * *"
+        documentIndex: 3
+      - equal:
+          path: spec.successfulJobsHistoryLimit
+          value: 1
+        documentIndex: 3
+      - equal:
+          path: spec.failedJobsHistoryLimit
+          value: 3
+        documentIndex: 3
+
+  - it: never receives the root password
+    set:
+      graylog.apiToken.enabled: true
+      graylog.config.rootPassword: placeholder
+    asserts:
+      - notContains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: ROOT_PASSWORD
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: MODE
+            value: renew
+        documentIndex: 3
+
+  - it: converts the P14D default to seconds
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: RENEW_BEFORE_SECONDS
+            value: "1209600"
+        documentIndex: 3
+
+  - it: accepts hours, minutes and seconds in the Graylog duration form
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.ttl: PT2H
+      graylog.apiToken.renew.before: P0DT1H30M15S
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: RENEW_BEFORE_SECONDS
+            value: "5415"
+        documentIndex: 3
+
+  - it: accepts days and hours together
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.renew.before: P1DT12H
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: RENEW_BEFORE_SECONDS
+            value: "129600"
+        documentIndex: 3
+
+  - it: rejects a before that is not a day, hour, minute or second duration
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.renew.before: P2W
+    asserts:
+      - failedTemplate:
+          errorPattern: does not match pattern
+
+  - it: rejects a bare number, the old beforeDays style
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.renew.before: "14"
+    asserts:
+      - failedTemplate:
+          errorPattern: does not match pattern
+
+  - it: rejects an empty duration that the schema pattern lets through
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.renew.before: P
+    asserts:
+      - failedTemplate:
+          errorPattern: the way Graylog shows token lifetimes
+
+  - it: hands the CronJob the token name, ttl and user it renews
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.username: svc
+      graylog.apiToken.tokenName: mytoken
+      graylog.apiToken.ttl: P30D
+      graylog.apiToken.renew.before: P7D
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: SERVICE_USER
+            value: svc
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_NAME
+            value: mytoken
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_TTL
+            value: P30D
+        documentIndex: 3
+
+  - it: skips certificate verification only when asked
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.insecureSkipVerify: true
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "-k"
+        documentIndex: 3
+
+  - it: fails when before is not shorter than the ttl
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.ttl: P10D
+      graylog.apiToken.renew.before: P10D
+    asserts:
+      - failedTemplate:
+          errorPattern: Lower renew.before or raise ttl
+
+  - it: compares before to a ttl given in hours
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.ttl: PT48H
+      graylog.apiToken.renew.before: P2D
+    asserts:
+      - failedTemplate:
+          errorPattern: Lower renew.before or raise ttl
+
+  - it: does not compare before to a ttl in months
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.ttl: P3M
+      graylog.apiToken.renew.before: P14D
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  - it: runs as a locked-down non-root pod
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.runAsNonRoot
+          value: true
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+        documentIndex: 3
+
+  - it: adds renew labels and annotations over the API token ones on every object
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.labels: {team: a}
+      graylog.apiToken.renew.labels: {team: b, extra: x}
+      graylog.apiToken.renew.annotations: {note: hi}
+    asserts:
+      - equal:
+          path: metadata.labels.extra
+          value: x
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations.note
+          value: hi
+        documentIndex: 1
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.labels.extra
+          value: x
+        documentIndex: 3
+
+  - it: sets resources and pull secrets when given
+    set:
+      graylog.apiToken.enabled: true
+      global.imagePullSecrets: [{name: regcred}]
+      graylog.apiToken.renew.resources: {limits: {cpu: 100m}}
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu
+          value: 100m
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets[0].name
+          value: regcred
+        documentIndex: 3
+
+  - it: shares the pod settings with the Job
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.podSecurityContext: {runAsNonRoot: true, runAsUser: 1234}
+      graylog.apiToken.image.imagePullSecrets: [{name: job-reg}]
+      graylog.apiToken.nodeSelector: {disk: ssd}
+      graylog.apiToken.priorityClassName: low
+      graylog.apiToken.extraEnv: [{name: HTTPS_PROXY, value: "http://proxy:3128"}]
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser
+          value: 1234
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets
+          value: [{name: job-reg}]
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.nodeSelector
+          value: {disk: ssd}
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.priorityClassName
+          value: low
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: HTTPS_PROXY
+            value: "http://proxy:3128"
+        documentIndex: 3
+
+  - it: sets automountServiceAccountToken on the account and the pod, and honours false
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.serviceAccount.automount: false
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+        documentIndex: 0
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.automountServiceAccountToken
+          value: false
+        documentIndex: 3
+
+  - it: trusts the CA from tls.caSecret
+    set:
+      graylog.apiToken.enabled: true
+      graylog.apiToken.tls.caSecret.name: graylog-ca
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: CURL_EXTRA
+            value: "--cacert /etc/graylog-api-ca/ca.crt"
+        documentIndex: 3
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.volumes
+          content:
+            name: graylog-ca
+            secret:
+              secretName: graylog-ca
+        documentIndex: 3
+
+  # Kubernetes caps CronJob names at 52 characters. Round 2 review, live: a 44
+  # character release name was rejected by the API server.
+  - it: keeps the CronJob name within 52 characters for a long release name
+    release:
+      name: graylog-production-us-east-1-cluster-blue-01
+    set:
+      graylog.apiToken.enabled: true
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^.{1,52}$
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: graylog-production-us-east-1-cluster-api-token-renew
+        documentIndex: 3
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.serviceAccountName
+          value: graylog-production-us-east-1-cluster-api-token-renew
+        documentIndex: 3

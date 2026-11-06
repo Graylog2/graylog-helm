@@ -364,6 +364,16 @@ jobs:
         if: always()
         run: sh charts/graylog/tests/scripts/init-graylog-behavior-test.sh
 
+      - name: api-token script behaviour tests
+        id: api-token-script
+        if: always()
+        run: sh charts/graylog/tests/scripts/api-token-behavior-test.sh
+
+      - name: api-token renew script behaviour tests
+        id: api-token-renew-script
+        if: always()
+        run: sh charts/graylog/tests/scripts/api-token-renew-behavior-test.sh
+
       - name: Summary
         if: always()
         run: |
@@ -384,6 +394,8 @@ jobs:
               echo "| \`helm unittest\` tests | ${tests:-unknown} |"
               echo "| preStop drain behaviour | $(verdict "${{ steps.drain.outcome }}") |"
               echo "| init-script behaviour | $(verdict "${{ steps.init-script.outcome }}") |"
+              echo "| api-token script behaviour | $(verdict "${{ steps.api-token-script.outcome }}") |"
+              echo "| api-token renew script behaviour | $(verdict "${{ steps.api-token-renew-script.outcome }}") |"
             else
               echo "\`helm unittest\` did not run."
             fi
