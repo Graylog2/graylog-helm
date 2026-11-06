@@ -44,6 +44,11 @@
           }
         },
         "storageClass": { "type": "string" },
+        "clusterDomain": {
+          "type": "string",
+          "description": "DNS domain of the cluster, appended to in-cluster FQDNs. An empty string falls back to cluster.local.",
+          "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$"
+        },
         "s3": {
           "type": "object",
           "description": "One S3 credential for the Data Node snapshot repository and, when enabled, Graylog archiving. A component that names a credential of its own ignores this block.",
@@ -255,7 +260,13 @@
                 "useAuth": { "type": "string" },
                 "useSsl": { "type": "string" },
                 "useTls": { "type": "string" },
-                "webInterfaceUrl": { "type": "string" }
+                "webInterfaceUrl": { "type": "string" },
+                "subjectPrefix": { "type": "string", "description": "Prefix added to the subject of every email Graylog sends. Empty leaves it unset" },
+                "existingSecret": { "type": ["string", "null"], "description": "Secret holding the SMTP credentials, read directly by the Graylog container" },
+                "authUsernameKey": { "type": "string", "description": "Key in existingSecret holding the SMTP username" },
+                "authPasswordKey": { "type": "string", "description": "Key in existingSecret holding the SMTP password" },
+                "authUsername": { "type": ["string", "null"], "description": "Inline SMTP username, stored in the chart-managed Secret" },
+                "authPassword": { "type": ["string", "null"], "description": "Inline SMTP password, stored in the chart-managed Secret" }
               }
             },
             "plugins": {

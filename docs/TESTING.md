@@ -392,6 +392,7 @@ Open `https://$CUSTOM_HOSTNAME/` in your browser.
 export CUSTOM_HOSTNAME=<your-custom-hostname>
 
 # Generate self-signed certificate with additional SAN
+# (use your global.clusterDomain instead of cluster.local if you changed it)
 openssl req -newkey rsa:2048 -nodes -keyout private.key -x509 -days 7 -out public.pem \
   -subj "/CN=${CUSTOM_HOSTNAME}" \
   -addext "subjectAltName = DNS:*.graylog-svc.graylog.svc.cluster.local"

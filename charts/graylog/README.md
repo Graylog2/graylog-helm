@@ -702,6 +702,31 @@ helm upgrade graylog graylog/graylog -n graylog --set-string graylog.config.netw
 helm upgrade graylog graylog/graylog -n graylog --set-string graylog.config.email.enabled=true --set graylog.config.email.senderAddress="will@example.com" --reuse-values
 ```
 
+### SMTP authentication
+
+`graylog.config.email.useAuth` defaults to `"true"`, so Graylog needs an SMTP username and password. Keep them
+in a Secret you manage and point the chart at it. The Graylog pod reads the Secret directly, so the credentials
+never pass through the chart-managed Secret:
+
+```sh
+kubectl create secret generic graylog-email -n graylog \
+  --from-literal=GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME='<smtp-username>' \
+  --from-literal=GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD='<smtp-password>'
+
+helm upgrade graylog graylog/graylog -n graylog --reuse-values \
+  --set-string graylog.config.email.enabled=true \
+  --set graylog.config.email.hostname=smtp.example.com \
+  --set graylog.config.email.existingSecret=graylog-email
+```
+
+Use `graylog.config.email.authUsernameKey` and `authPasswordKey` when your Secret uses other key names. See
+[examples/graylog/secrets/graylog-email-secret.yaml](../../examples/graylog/secrets/graylog-email-secret.yaml). Pods do not restart when that Secret
+changes, so restart them to pick up a new password.
+
+To keep the credentials in values instead, set `graylog.config.email.authUsername` and `authPassword`. That stores
+them in the chart-managed Secret, so it cannot be combined with `existingSecret` or `global.existingSecretName`.
+Set `graylog.config.email.subjectPrefix` to prefix every email subject.
+
 ## Customize deployed Kubernetes resources
 ```sh
 # A few examples: 
@@ -1021,6 +1046,7 @@ If you prefer the Graylog chart to handle this specific issuer creation, you may
 
 > [!IMPORTANT]
 > Native TLS requires one additional SAN in your certificate: `DNS:*.graylog-svc.graylog.svc.cluster.local`
+> (replace `cluster.local` with `global.clusterDomain` if your cluster uses another DNS domain)
 > Please, make sure your certificate includes this SAN. Otherwise, please reissue the certificate including the additional SAN.
 > If your CA won't (re)issue a certificate with this SAN, please consider TLS termination at the [Ingress Controller](#ingress-controller) as an alternative.
 
@@ -1401,6 +1427,7 @@ These values affect Graylog, DataNode, and MongoDB.
 | Key Path                    | Description                                 | Default |
 |-----------------------------|---------------------------------------------|---------|
 | `global.existingSecretName` | Reference to an existing Kubernetes secret. | `""`    |
+| `global.clusterDomain` | DNS domain of the cluster, used in in-cluster FQDNs (publish URI, Data Node hosts, TLS SAN check). | `"cluster.local"` |
 | `global.imagePullSecrets`   | Image pull secrets for private registries.  | `[]`    |
 | `global.storageClass`       | Storage class to use for PVCs.              | `""`    |
 | `global.commonLabels`       | Labels added to every object deployed by this chart.      | `{}` |
@@ -1493,16 +1520,22 @@ These values affect Graylog, DataNode, and MongoDB.
 | `graylog.config.performance.outputBufferProcessorThreadsCorePoolSize` | Output processor thread pool size.                          | `"3"`                           |
 | `graylog.config.performance.outputBufferProcessors`                   | Output buffer processors.                                   | `""`                            |
 | `graylog.config.performance.processBufferProcessors`                  | Process buffer processors.                                  | `""`                            |
-| `graylog.config.email.enabled`                                        | Enable email notifications.                                 | `"false"`                       |
-| `graylog.config.email.senderAddress`                                  | Email sender address.                                       | `"graylog@example.com"`         |
-| `graylog.config.email.hostname`                                       | SMTP hostname.                                              | `"mail.example.com"`            |
-| `graylog.config.email.port`                                           | SMTP port.                                                  | `"587"`                         |
-| `graylog.config.email.socketConnectionTimeout`                        | SMTP socket connect timeout.                                | `"10s"`                         |
-| `graylog.config.email.socketTimeout`                                  | SMTP socket timeout.                                        | `"10s"`                         |
-| `graylog.config.email.useAuth`                                        | Use SMTP authentication.                                    | `"true"`                        |
-| `graylog.config.email.useSsl`                                         | Use SSL for SMTP.                                           | `"false"`                       |
-| `graylog.config.email.useTls`                                         | Use TLS for SMTP.                                           | `"true"`                        |
-| `graylog.config.email.webInterfaceUrl`                                | Web interface URL for email links.                          | `"https://graylog.example.com"` |
+| `graylog.config.email.enabled`                                        | Enable email notifications.                                 | `"false"`                                 |
+| `graylog.config.email.senderAddress`                                  | Email sender address.                                       | `"graylog@example.com"`                   |
+| `graylog.config.email.hostname`                                       | SMTP hostname.                                              | `"mail.example.com"`                      |
+| `graylog.config.email.port`                                           | SMTP port.                                                  | `"587"`                                   |
+| `graylog.config.email.socketConnectionTimeout`                        | SMTP socket connect timeout.                                | `"10s"`                                   |
+| `graylog.config.email.socketTimeout`                                  | SMTP socket timeout.                                        | `"10s"`                                   |
+| `graylog.config.email.useAuth`                                        | Use SMTP authentication.                                    | `"true"`                                  |
+| `graylog.config.email.useSsl`                                         | Use SSL for SMTP.                                           | `"false"`                                 |
+| `graylog.config.email.useTls`                                         | Use TLS for SMTP.                                           | `"true"`                                  |
+| `graylog.config.email.webInterfaceUrl`                                | Web interface URL for email links.                          | `"https://graylog.example.com"`           |
+| `graylog.config.email.subjectPrefix`                                  | Prefix for every email subject. Empty leaves it unset.      | `""`                                      |
+| `graylog.config.email.existingSecret`                                 | Secret with the SMTP credentials, read by the Graylog pod.  | `""`                                      |
+| `graylog.config.email.authUsernameKey`                                | Key in `existingSecret` holding the SMTP username.          | `"GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME"` |
+| `graylog.config.email.authPasswordKey`                                | Key in `existingSecret` holding the SMTP password.          | `"GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD"` |
+| `graylog.config.email.authUsername`                                   | Inline SMTP username. Stored in the chart-managed Secret.   | `""`                                      |
+| `graylog.config.email.authPassword`                                   | Inline SMTP password. Stored in the chart-managed Secret.   | `""`                                      |
 | `graylog.config.plugins.enabled`                                      | Enable Graylog plugin system.                               | `false`                         |
 | `graylog.config.archive.useGlobalS3Credentials`                       | Put `global.s3` on the Graylog container as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` for archiving. Leave off when using IRSA: the AWS SDK reads environment variables before the web identity token, so this overrides the role. | `false` |
 | `graylog.config.geolocation.enabled`                                  | Enable the Geolocation Processor.                           | `false`                         |

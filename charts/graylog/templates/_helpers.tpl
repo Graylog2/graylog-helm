@@ -431,6 +431,26 @@ auth failure against the bucket, a long way from the cause.
 {{- end -}}
 {{- end }}
 
+{{- /*
+Validates the SMTP credential source.
+Input: the root context.
+Returns nothing, or fails when email.existingSecret is combined with inline credentials,
+when inline credentials are combined with global.existingSecretName, or when email
+is enabled with useAuth on and no credential source.
+*/ -}}
+{{- define "graylog.email.validate" -}}
+{{- $e := .Values.graylog.config.email -}}
+{{- if and $e.existingSecret (or $e.authUsername $e.authPassword) -}}
+{{- fail "graylog.config.email: existingSecret cannot be combined with the inline authUsername/authPassword. Drop the inline values to read the credentials from the Secret, or clear existingSecret to keep them in values." -}}
+{{- end -}}
+{{- if and (eq (toString $e.enabled) "true") (eq (toString $e.useAuth) "true") (not $e.existingSecret) (not $e.authUsername) (not $e.authPassword) -}}
+{{- fail "graylog.config.email: enabled and useAuth are both \"true\", but no SMTP credentials are set. Set graylog.config.email.existingSecret to a Secret holding them, set authUsername and authPassword, or set useAuth to \"false\"." -}}
+{{- end -}}
+{{- if and .Values.global.existingSecretName (or $e.authUsername $e.authPassword) -}}
+{{- fail "graylog.config.email: inline authUsername/authPassword need the chart-managed Secret, which global.existingSecretName turns off. Put the SMTP credentials in a Secret and set graylog.config.email.existingSecret to its name." -}}
+{{- end -}}
+{{- end }}
+
 {{/*
 Graylog backup-secret name
 */}}
@@ -699,15 +719,23 @@ Graylog Datanode service name (shared across all node groups)
 {{- end }}
 
 {{/*
+Cluster DNS domain used to build in-cluster FQDNs. Defaults to cluster.local.
+*/}}
+{{- define "graylog.clusterDomain" -}}
+{{- .Values.global.clusterDomain | default "cluster.local" -}}
+{{- end }}
+
+{{/*
 Graylog Datanode discovery seed hosts, spanning every node group.
 */}}
 {{- define "graylog.datanode.hosts" -}}
 {{- $svc := include "graylog.datanode.service.name" . -}}
 {{- $ns := .Release.Namespace -}}
+{{- $domain := include "graylog.clusterDomain" . -}}
 {{- $builder := list -}}
 {{- range $g := include "graylog.datanode.groups" . | fromYamlArray -}}
 {{- range $i := until (int $g.replicas) -}}
-{{- $builder = printf "%s-%d.%s.%s.svc.cluster.local" $g.fullname $i $svc $ns | append $builder -}}
+{{- $builder = printf "%s-%d.%s.%s.svc.%s" $g.fullname $i $svc $ns $domain | append $builder -}}
 {{- end -}}
 {{- end -}}
 {{- join "," $builder | quote -}}
@@ -959,7 +987,7 @@ Graylog Publish URI
 {{- define "graylog.publishUri" }}
 {{- $port := .Values.graylog.service.ports.app | default 9000 | int }}
 {{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
-{{- printf "%s://$(POD_NAME).%s.%s.svc.cluster.local:%d/" $scheme (include "graylog.service.name" .) .Release.Namespace $port }}
+{{- printf "%s://$(POD_NAME).%s.%s.svc.%s:%d/" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.clusterDomain" .) $port }}
 {{- end }}
 
 {{/*

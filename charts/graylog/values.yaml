@@ -25,6 +25,11 @@ global:
   existingSecretName: ""
   # storageClass is the default StorageClass for all persistent volumes.
   storageClass: ""
+  # clusterDomain is the DNS domain of the cluster. The chart appends it to
+  # in-cluster FQDNs: the Graylog publish URI, the Data Node node names and seed
+  # hosts, and the native TLS SAN check. Set it when the cluster does not use
+  # cluster.local. An empty string falls back to cluster.local.
+  clusterDomain: "cluster.local"
   # s3 holds one S3 credential for the components that need one: the Data Node's
   # snapshot repository, and Graylog's archive backend when
   # graylog.config.archive.useGlobalS3Credentials is on.
@@ -270,6 +275,26 @@ graylog:
       # webInterfaceUrl is the base URL used to build links in notification
       # emails.
       webInterfaceUrl: "https://graylog.example.com"
+      # subjectPrefix is prepended to the subject of every email Graylog sends.
+      # Empty leaves it unset, so Graylog uses its own default.
+      subjectPrefix: ""
+      # existingSecret names an externally managed Secret holding the SMTP
+      # credentials used when useAuth is "true". With enabled and useAuth both
+      # "true", the render fails unless this or the inline values below are set.
+      # The Graylog container reads the two keys below straight from it, so the
+      # credentials never pass through the chart-managed Secret. This is
+      # independent of global.existingSecretName -- that Secret is not expected
+      # to carry them. A change to the Secret needs a pod restart to take effect.
+      # See examples/graylog/secrets/graylog-email-secret.yaml.
+      existingSecret: ""
+      # authUsernameKey and authPasswordKey are the key names inside existingSecret.
+      authUsernameKey: "GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME"
+      authPasswordKey: "GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD"
+      # OR set the credentials inline, which stores them in the chart-managed
+      # Secret. Cannot be combined with existingSecret, and needs chart-managed
+      # secrets (no global.existingSecretName).
+      authUsername: ""
+      authPassword: ""
     plugins:
       # enabled turns on plugin installation via init containers.
       enabled: false

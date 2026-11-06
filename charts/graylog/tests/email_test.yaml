@@ -1,0 +1,165 @@
+suite: Email transport
+templates:
+  - workload/statefulsets/graylog.yaml
+  - config/graylog.yaml # checksum/config dependency
+  - config/secret/secrets.yaml
+release:
+  name: graylog
+  namespace: graylog
+tests:
+  - it: leaves the subject prefix unset by default
+    template: config/graylog.yaml
+    asserts:
+      - notExists:
+          path: data.GRAYLOG_TRANSPORT_EMAIL_SUBJECT_PREFIX
+
+  - it: sets the subject prefix
+    template: config/graylog.yaml
+    set:
+      graylog.config.email.subjectPrefix: "[Prod]"
+    asserts:
+      - equal:
+          path: data.GRAYLOG_TRANSPORT_EMAIL_SUBJECT_PREFIX
+          value: "[Prod]"
+
+  - it: renders no SMTP credentials by default
+    asserts:
+      - notExists:
+          path: data.GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+        template: config/secret/secrets.yaml
+        documentIndex: 1
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+          any: true
+        template: workload/statefulsets/graylog.yaml
+
+  - it: stores inline credentials in the chart-managed Secret
+    template: config/secret/secrets.yaml
+    documentIndex: 1
+    set:
+      graylog.config.email.authUsername: smtp-user
+      graylog.config.email.authPassword: smtp-pass
+    asserts:
+      - equal:
+          path: data.GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+          value: c210cC11c2Vy
+      - equal:
+          path: data.GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD
+          value: c210cC1wYXNz
+
+  - it: reads credentials from an existing Secret and stores nothing inline
+    set:
+      graylog.config.email.existingSecret: my-smtp
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: my-smtp
+                key: GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+        template: workload/statefulsets/graylog.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-smtp
+                key: GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD
+        template: workload/statefulsets/graylog.yaml
+      - notExists:
+          path: data.GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD
+        template: config/secret/secrets.yaml
+        documentIndex: 1
+
+  - it: honors custom key names in the existing Secret
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.email.existingSecret: my-smtp
+      graylog.config.email.authUsernameKey: user
+      graylog.config.email.authPasswordKey: pass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: my-smtp
+                key: user
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-smtp
+                key: pass
+
+  - it: works with global.existingSecretName when credentials come from email.existingSecret
+    template: workload/statefulsets/graylog.yaml
+    set:
+      global.existingSecretName: primary
+      mongodb.communityResource.enabled: false
+      graylog.config.email.existingSecret: my-smtp
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: my-smtp
+                key: GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+
+  - it: fails when existingSecret is combined with inline credentials
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.email.existingSecret: my-smtp
+      graylog.config.email.authPassword: smtp-pass
+    asserts:
+      - failedTemplate:
+          errorPattern: "clear existingSecret to keep them in values"
+
+  - it: fails when inline credentials are combined with global.existingSecretName
+    template: workload/statefulsets/graylog.yaml
+    set:
+      global.existingSecretName: primary
+      mongodb.communityResource.enabled: false
+      graylog.config.email.authUsername: smtp-user
+    asserts:
+      - failedTemplate:
+          errorPattern: "set graylog.config.email.existingSecret to its name"
+
+  - it: fails when email and useAuth are on with no credentials
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.email.enabled: "true"
+    asserts:
+      - failedTemplate:
+          errorPattern: "or set useAuth to"
+
+  - it: renders with email on and useAuth off, no credentials
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.email.enabled: "true"
+      graylog.config.email.useAuth: "false"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: renders with useAuth on while email is disabled
+    template: workload/statefulsets/graylog.yaml
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: renders with email and useAuth on when an existing Secret is set
+    template: workload/statefulsets/graylog.yaml
+    set:
+      graylog.config.email.enabled: "true"
+      graylog.config.email.existingSecret: my-smtp
+    asserts:
+      - notFailedTemplate: {}
