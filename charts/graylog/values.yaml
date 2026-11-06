@@ -270,6 +270,26 @@ graylog:
       # webInterfaceUrl is the base URL used to build links in notification
       # emails.
       webInterfaceUrl: "https://graylog.example.com"
+      # subjectPrefix is prepended to the subject of every email Graylog sends.
+      # Empty leaves it unset, so Graylog uses its own default.
+      subjectPrefix: ""
+      # existingSecret names an externally managed Secret holding the SMTP
+      # credentials used when useAuth is "true". With enabled and useAuth both
+      # "true", the render fails unless this or the inline values below are set.
+      # The Graylog container reads the two keys below straight from it, so the
+      # credentials never pass through the chart-managed Secret. This is
+      # independent of global.existingSecretName -- that Secret is not expected
+      # to carry them. A change to the Secret needs a pod restart to take effect.
+      # See examples/graylog/secrets/graylog-email-secret.yaml.
+      existingSecret: ""
+      # authUsernameKey and authPasswordKey are the key names inside existingSecret.
+      authUsernameKey: "GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME"
+      authPasswordKey: "GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD"
+      # OR set the credentials inline, which stores them in the chart-managed
+      # Secret. Cannot be combined with existingSecret, and needs chart-managed
+      # secrets (no global.existingSecretName).
+      authUsername: ""
+      authPassword: ""
     plugins:
       # enabled turns on plugin installation via init containers.
       enabled: false

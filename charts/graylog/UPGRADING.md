@@ -1,5 +1,50 @@
 # Upgrading the Graylog Helm chart
 
+## 2.1.0 to the next release
+
+### SMTP credentials are now required when email authentication is on
+
+The chart now has values for the SMTP username and password. To go with them, the
+render fails when `graylog.config.email.enabled` and `graylog.config.email.useAuth`
+are both `"true"` and no credential source is set. `useAuth` defaults to `"true"`,
+so any release that turned email on without setting `useAuth` fails on upgrade.
+
+This affects you if you enabled email and supplied the credentials some other way,
+for example through `graylog.extraEnv`. Pick one:
+
+```yaml
+# Credentials in a Secret you manage. The Graylog pod reads it directly.
+graylog:
+  config:
+    email:
+      existingSecret: graylog-email
+      # Only if your Secret uses other key names.
+      authUsernameKey: GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME
+      authPasswordKey: GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD
+```
+
+```yaml
+# Credentials in values, stored in the chart-managed Secret.
+graylog:
+  config:
+    email:
+      authUsername: "<smtp-username>"
+      authPassword: "<smtp-password>"
+```
+
+```yaml
+# Your SMTP server takes no authentication.
+graylog:
+  config:
+    email:
+      useAuth: "false"
+```
+
+Inline credentials cannot be combined with `existingSecret` or with
+`global.existingSecretName`. The render fails if you try. Pods do not restart when
+an external Secret changes, so restart them after you rotate the password. See
+[examples/graylog/secrets/graylog-email-secret.yaml](../../examples/graylog/secrets/graylog-email-secret.yaml).
+
 ## 1.0.0 to 2.0.0
 
 2.0.0 changes defaults, removes values and tightens pod security. Read this
