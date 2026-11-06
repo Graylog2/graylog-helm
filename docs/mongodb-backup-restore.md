@@ -1,4 +1,4 @@
-# Back Up and Restore MongoDB
+# Back up and restore MongoDB
 
 This guide walks through taking a manual logical backup of Graylog's MongoDB
 database with [`mongodump`](https://www.mongodb.com/docs/database-tools/mongodump/)
@@ -6,17 +6,16 @@ and restoring it with [`mongorestore`](https://www.mongodb.com/docs/database-too
 It applies to the MongoDB replica set deployed by this chart (the default
 [MongoDB Community](https://www.mongodb.com/docs/kubernetes/current/) resource).
 
-> **Note:** These commands assume a release named `graylog` in the `graylog`
-> namespace. Adjust the release name, namespace, and secret name to match your
-> deployment. The connection-string secret is named
-> `<release>-mongo-rs-admin-admin`.
+> [!NOTE]
+> These commands assume a release named `graylog` in the `graylog` namespace.
+> Change the release, namespace and Secret name to match your deployment. The
+> connection-string Secret is named `<release>-mongo-rs-admin-admin`.
 
 ## Prerequisites
 
 - `kubectl` access to the cluster and namespace where Graylog is installed.
 - `jq` installed locally (used to decode the connection secret).
-- Enough disk space for the dump, both inside the temporary pod and optionally
-  on your local machine (only if you need to copy it out).
+- Disk space for the dump in the temporary pod, and on your machine if you copy it out.
 
 ## Back up
 
@@ -54,7 +53,7 @@ kubectl exec mongosh -n graylog -- tar cf - /mongo-backup | tar xf - -C .
 
 ## Restore
 
-Restoring requires an admin connection URI for the **target** deployment
+Restoring requires an admin connection URI for the target deployment
 (`$NEW_MONGO_ADMIN_URI`). Build it the same way as the backup URI in step 1,
 using the target cluster's secret.
 

@@ -1,0 +1,113 @@
+{{- $t := .Values.graylog.apiToken | default dict }}
+{{- if and .Values.graylog.enabled $t.enabled (kindIs "map" $t.renew) $t.renew.enabled }}
+{{- $r := $t.renew }}
+{{- $name := printf "%s-renew" (include "graylog.apiToken.name" .) }}
+{{- $curlExtra := include "graylog.apiToken.curlExtra" . }}
+{{- $secretName := include "graylog.apiToken.secretName" . }}
+{{- $scheme := .Values.graylog.config.tls.enabled | ternary "https" "http" }}
+{{- $url := printf "%s://%s.%s.svc.cluster.local:%s" $scheme (include "graylog.service.name" .) .Release.Namespace (include "graylog.service.port.app" .) }}
+{{- $beforeSeconds := include "graylog.duration.seconds" $r.before }}
+{{- if not $beforeSeconds }}
+{{- fail (printf "graylog.apiToken.renew.before (%q) is not a usable ISO-8601 duration.\n  Use days, hours, minutes or seconds, the way Graylog shows token lifetimes: P14D, PT36H, P1DT12H." $r.before) }}
+{{- end }}
+{{- $ttlSeconds := include "graylog.duration.seconds" $t.ttl }}
+{{- if and $ttlSeconds (ge ($beforeSeconds | int64) ($ttlSeconds | int64)) }}
+{{- fail (printf "graylog.apiToken.renew.before (%s) must be shorter than graylog.apiToken.ttl (%s).\n  A token inside its renewal window from the day it is minted is replaced on every run.\n  Lower renew.before or raise ttl." $r.before $t.ttl) }}
+{{- end }}
+{{/* Not hooks: the CronJob has to outlive each release revision to keep
+     renewing, and its Role can only read and patch the one token Secret. */}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $t.labels) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $t.annotations) "indent" 2) }}
+automountServiceAccountToken: {{ $t.serviceAccount.automount }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $t.labels) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $t.annotations) "indent" 2) }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $secretName | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $t.labels) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $t.annotations) "indent" 2) }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ $name }}
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}
+  {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $t.labels) "indent" 2) }}
+  {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $t.annotations) "indent" 2) }}
+spec:
+  schedule: {{ $r.schedule | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ $r.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ $r.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $r.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $r.backoffLimit }}
+      activeDeadlineSeconds: {{ $r.activeDeadlineSeconds }}
+      template:
+        metadata:
+          {{- include "graylog.metadata.labels" (dict "context" $ "labels" (merge (dict) $r.labels $t.labels) "indent" 10) }}
+          {{- include "graylog.metadata.annotations" (dict "context" $ "annotations" (merge (dict) $r.annotations $t.annotations) "indent" 10) }}
+        spec:
+          serviceAccountName: {{ $name }}
+          restartPolicy: Never
+          {{- include "graylog.apiToken.pod" . | nindent 10 }}
+          containers:
+            - name: api-token-renew
+              {{- include "graylog.apiToken.container" . | nindent 14 }}
+              {{- with $r.resources }}
+              resources: {{ toYaml . | nindent 16 }}
+              {{- end }}
+              env:
+                - name: MODE
+                  value: renew
+                - name: GRAYLOG_URL
+                  value: {{ $url | quote }}
+                - name: SERVICE_USER
+                  value: {{ $t.username | quote }}
+                - name: TOKEN_NAME
+                  value: {{ $t.tokenName | quote }}
+                - name: TOKEN_TTL
+                  value: {{ $t.ttl | quote }}
+                - name: SECRET_NAME
+                  value: {{ $secretName | quote }}
+                - name: NAMESPACE
+                  value: {{ .Release.Namespace | quote }}
+                - name: RENEW_BEFORE_SECONDS
+                  value: {{ $beforeSeconds | quote }}
+                {{- if $curlExtra }}
+                - name: CURL_EXTRA
+                  value: {{ $curlExtra | quote }}
+                {{- end }}
+                {{- with $t.extraEnv }}
+                {{- toYaml . | nindent 16 }}
+                {{- end }}
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  {{- .Files.Get "files/scripts/api-token.sh" | nindent 18 }}
+{{- end }}

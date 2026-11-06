@@ -3,8 +3,7 @@
 How messages are buffered on disk, what happens to them when pods go away, and how
 to scale in without losing any.
 
-For the values that configure this, see
-[Message Journal Lifecycle](../charts/graylog/README.md#message-journal-lifecycle).
+The drain values are under [Enabling the drain](#enabling-the-drain).
 
 ## Contents
 
@@ -243,6 +242,58 @@ IP mode deregister slower than kube-proxy.
 | Cannot stop inputs | That needs authenticated API calls. Only the runbook above guarantees an empty journal. |
 | Useless on rolling upgrades | The replacement pod replays the journal itself. The hook cannot tell an upgrade from a scale-in, so it pays the cost on both. |
 | Cannot drain a blocked indexer | Nothing can be worked off and the journal only grows. The feasibility check aborts in seconds instead of stalling the rollout. |
+
+### Enabling the drain
+
+Off by default. Holds pod termination while the journal is worked off, so a
+scale-in has a chance to finish processing:
+
+```sh
+helm upgrade graylog graylog/graylog -n graylog \
+  --set graylog.lifecycle.preStopDrain.enabled=true --reuse-values
+```
+
+It reads journal depth from the Prometheus exporter on localhost, so it needs no
+credentials, but it does require `graylog.service.metrics.enabled` (the default).
+
+It is best-effort. It cannot stop inputs, so on a node still receiving traffic the
+journal never reaches zero and the hook gives up. It also cannot tell an upgrade
+from a scale-in, so it slows both. Enable it if you routinely scale in.
+
+> [!CAUTION]
+> Do not enable the drain and reduce the replica count in one change. The preStop hook is
+> part of the pod spec, so an existing pod does not get the hook until Kubernetes replaces
+> it. Kubernetes deletes the highest-ordinal pod with its old spec, and that pod drains
+> nothing.
+
+Enable the drain before you scale in:
+
+1. Set `graylog.lifecycle.preStopDrain.enabled=true` and keep the replica count unchanged.
+2. Wait for every pod to carry the new spec. With the default
+   `graylog.updateStrategy.type: RollingUpdate`, run
+   `kubectl rollout status sts/graylog -n graylog`. With `OnDelete`, Kubernetes does not replace
+   the pods for you: delete each one, highest ordinal first, and wait for its replacement to
+   become ready before you delete the next.
+3. Make sure that the highest-ordinal pod carries the hook. Run
+   `kubectl get pod graylog-<n> -n graylog -o jsonpath='{.spec.containers[0].lifecycle.preStop}'`.
+   An empty result means that the pod still runs the old spec. Do not scale in yet.
+4. Reduce the replica count by one.
+
+| Key | Description | Default |
+|---|---|---|
+| `enabled` | Hold termination while the journal drains. | `false` |
+| `endpointPropagationDelaySeconds` | Sleep before the first sample, waiting for endpoint removal to propagate. If a load balancer targets pod IPs directly, increase this value and `graylog.terminationGracePeriodSeconds` by the same number of seconds. | `15` |
+| `shutdownReserveSeconds` | Held back out of the grace period for Graylog's own shutdown. | `45` |
+| `pollIntervalSeconds` | Seconds between journal-depth samples. | `2` |
+| `stallPolls` | Give up after this many polls with no new low. | `10` |
+| `confirmPolls` | Consecutive zero readings required before declaring success. | `3` |
+| `metricsRetries` | Metrics probe retries before giving up. | `5` |
+| `statusIntervalSeconds` | How often to log a progress line. | `10` |
+| `feasibilityWarmupPolls` | Polls to observe before projecting whether the drain can finish at all; aborts early if it cannot. `0` disables. | `5` |
+
+All under `graylog.lifecycle.preStopDrain`. The drain budget is
+`terminationGracePeriodSeconds - endpointPropagationDelaySeconds - shutdownReserveSeconds`
+(240s at defaults); the chart refuses to render if that is not positive.
 
 ## Reading the drain logs
 

@@ -8,7 +8,7 @@ Short description of the change.
 This fixes #??
 
 ## PR Checklist
-Please check the items that apply to your change.
+Check the items that apply to your change.
 
 - [ ] Tests added/updated
 - [ ] Documentation updated
@@ -20,12 +20,12 @@ Please check the items that apply to your change.
 
 ### Static Validation
 - [ ] Linter check passes: `helm lint ./charts/graylog`
-- [ ] Helm renders local template sucessfully: `helm template graylog ./charts/graylog --validate`
+- [ ] Helm renders local template successfully: `helm template graylog ./charts/graylog --validate`
 
 ### Installation
 - [ ] Fresh installation completes successfully: `helm install graylog ./charts/graylog`
-- [ ] All pods reach Running state: `kubectl rollout status statefulset/graylog `
-- [ ] Helm tests pass: `helm test graylog `
+- [ ] All pods reach Running state: `kubectl rollout status statefulset/graylog`
+- [ ] Helm tests pass: `helm test graylog`
 
 ### Functional (if applicable)
 - [ ] Web UI accessible and login works
@@ -44,4 +44,4 @@ Please check the items that apply to your change.
 - [ ] Verify all applicable tests above pass
 - [ ] Validate that the linked issues are no longer reproducible, if applicable
 - [ ] Sync up with the author before merging
-- [ ] The commit history should be preserved - use rebase-merge or standard merge options when applicable
+- [ ] Squash merge, and check the PR title is a valid Conventional Commit, because release-please builds the changelog from it

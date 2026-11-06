@@ -121,6 +121,13 @@ graylog:
             memory: 256Mi
 ```
 
+## Enable the processor in the web interface
+
+After the databases download, enable the Geolocation processor in the Graylog web interface and use these paths:
+
+- City database: `/usr/share/graylog/data/geolocation/GeoLite2-City.mmdb`
+- ASN database: `/usr/share/graylog/data/geolocation/GeoLite2-ASN.mmdb`
+
 ## Monitoring
 
 ### Check Sidecar Status

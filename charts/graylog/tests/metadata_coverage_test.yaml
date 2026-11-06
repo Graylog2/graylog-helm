@@ -21,6 +21,8 @@ templates:
   - tests/test-graylog-cluster-status.yaml
   - tests/test-mongodb-connectivity.yaml
   - tests/test-datanode-registration.yaml
+  - config/api-token.yaml
+  - config/api-token-renew.yaml
   - config/fallback.yaml
   - service/fallback.yaml
   - workload/fallback.yaml
@@ -631,3 +633,111 @@ tests:
           path: metadata.annotations.note
           value: least-privilege
         documentIndex: 2
+
+  - it: labels and annotates every API token object, the bootstrap Secret and the renewal CronJob
+    set:
+      graylog.apiToken.enabled: true
+      graylog.config.rootPassword: placeholder
+      global.commonLabels: {env: dev}
+      global.commonAnnotations: {owner: platform-team}
+    asserts:
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token.yaml
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token.yaml
+        documentIndex: 2
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token.yaml
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token.yaml
+        documentIndex: 3
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token.yaml
+        documentIndex: 4
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token.yaml
+        documentIndex: 4
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token-renew.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token-renew.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token-renew.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token-renew.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token-renew.yaml
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token-renew.yaml
+        documentIndex: 2
+      - equal:
+          path: metadata.labels.env
+          value: dev
+        template: config/api-token-renew.yaml
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations.owner
+          value: platform-team
+        template: config/api-token-renew.yaml
+        documentIndex: 3
+      - equal:
+          path: spec.template.metadata.labels.env
+          value: dev
+        template: config/api-token.yaml
+        documentIndex: 4
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.labels.env
+          value: dev
+        template: config/api-token-renew.yaml
+        documentIndex: 3

@@ -1,42 +1,36 @@
-## Git Workflow Guidelines
+# Contributing
 
-- Do **not** commit directly to `main`. Always use a feature branch:
+## Git workflow
+
+- Do not commit to `main`. Use a feature branch:
 ```sh
 git checkout -b feat/my-feature
 ```
-- Before opening a PR, **rebase or squash** your commits to keep history clean:
-```sh
-git rebase origin/main
-```
-- [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) are **required**, not a suggestion. release-please reads these subjects to compute the next chart version and to write the changelog.
-```sh
-git commit -m "fix(datanode): correct the volume claim selector"
-```
-- **The PR title is what counts.** Squash merging is the only merge method enabled, and the squash subject comes from the PR title whenever a branch has more than one commit. Title the PR the way you want the changelog to read.
-- **Repository tooling uses `ci:` or `chore:`**, never `fix:` or `feat:`. Workflow, script and CI changes must not release the chart.
-- **Mark breaking changes** with `!` after the type, or a `BREAKING CHANGE:` footer, and document them in [charts/graylog/UPGRADING.md](charts/graylog/UPGRADING.md) in the same PR.
-- **Never begin a commit body line with `word(`.** release-please's parser reads such a line as a `type(scope` header and silently discards the whole commit, changelog entry included. Reflow the line so the call is not first. See [docs/RELEASING.md](docs/RELEASING.md) for why.
-- **Do not hand-edit** `version:` in `charts/graylog/Chart.yaml`, `charts/graylog/CHANGELOG.md`, or `.release-please-manifest.json`. release-please owns all three.
-- Ensure your branch is up to date with `main` before creating a PR:
+- Keep your branch up to date with `main`, and rebase or squash before you open a PR:
 ```sh
 git fetch origin
 git rebase origin/main
 ```
+- [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) are required. release-please reads the commit subjects to pick the next chart version and write the changelog.
+```sh
+git commit -m "fix(datanode): correct the volume claim selector"
+```
+- The PR title is what counts. Squash merge is the only merge method, and the squash subject comes from the PR title when a branch has more than one commit. Write the title the way you want the changelog to read.
+- Repository tooling changes (workflows, scripts, CI) use `ci:` or `chore:`, never `fix:` or `feat:`, so they do not release the chart.
+- Mark breaking changes with `!` after the type or a `BREAKING CHANGE:` footer, and document them in [charts/graylog/UPGRADING.md](charts/graylog/UPGRADING.md) in the same PR.
+- Never start a commit body line with `word(`. release-please reads it as a `type(scope` header and silently drops the whole commit, changelog entry included. Reflow the line. [docs/development/RELEASING.md](docs/development/RELEASING.md) explains why.
+- Do not hand-edit `version:` in `charts/graylog/Chart.yaml`, `charts/graylog/CHANGELOG.md` or `.release-please-manifest.json`. release-please owns all three.
+- Follow the [chart development guide](docs/DEVELOPMENT.md) when you change templates or values.
+- Complete the steps in [docs/development/TESTING.md](docs/development/TESTING.md) before you submit a PR.
+- At least one maintainer must review every PR before it merges.
 
-- Review and complete the steps in [docs/TESTING.md](docs/TESTING.md) before submitting a PR
+## Local development
 
-- All PRs must be reviewed by at least one maintainer before merging.
+### Set up a dev cluster
 
-## Local Development
+The chart should work on any Kubernetes cluster. We use MicroK8s for local development. See [Setting up a MicroK8s cluster](docs/microk8s-setup-guide.md).
 
-### Setting up a dev Kubernetes cluster
-
-This Helm chart should ideally work on any Kubernetes cluster.
-For local development and iterative testing, we recommend using MicroK8s.
-
-For more info on how to set up a local MicroK8s environment, see: [Setting up a MicroK8s cluster](docs/microk8s-setup-guide.md)
-
-### Upgrading chart
+### Upgrading the chart
 
 > [!NOTE]
 > Values can be passed into the chart from multiple sources, including
@@ -70,8 +64,6 @@ follows automatically.
 A commit contributes to a release only when its subject is a releasable type,
 `feat:`, `fix:` or `perf:`, and it touches a file under `charts/graylog/`.
 
-Contributors do not bump the chart version. An ordinary chart PR deliberately
-leaves `version:` at the last release.
+Contributors do not bump the chart version. A chart PR leaves `version:` at the last release.
 
-For the full process, including how to verify a publication and what to do when it
-goes wrong, see [docs/RELEASING.md](docs/RELEASING.md).
+For how to verify a publication and what to do when one fails, see [docs/development/RELEASING.md](docs/development/RELEASING.md).

@@ -653,6 +653,156 @@ graylog:
   extraInitContainers: []
   # extraContainers adds sidecar containers to the Graylog pods.
   extraContainers: []
+  # apiToken has the chart create a Graylog service user and an API token for it,
+  # and store the token in a Kubernetes Secret, so jobs, runbooks and external
+  # tools can call the API without anyone copying a token out of the UI. Off by
+  # default: nothing here is created on an install that did not ask for it.
+  #
+  # A post-install/post-upgrade hook Job signs in as the root user once, creates
+  # the service user, mints the token and writes the Secret. Root stays a
+  # bootstrap credential and the token keeps working if the root password later
+  # changes. The Job's ServiceAccount, Role and RoleBinding are hooks too and are
+  # removed once it succeeds. A failed run removes only the Job, with its logs, so
+  # read them while it runs: kubectl logs -f job/<release>-api-token. The other
+  # objects, and the bootstrap Secret when there is one, stay until the next
+  # successful run replaces them. See docs/graylog/api-token.md to delete them.
+  #
+  # Graylog picks the token value and shows it once, so the Secret is written by
+  # the Job and is not owned by Helm: it survives uninstall, and so does the
+  # service user. A token expires after `ttl`; the next `helm upgrade` replaces
+  # one that no longer works or has less than renew.before left. Needs Graylog 6.3.12, 7.0.7, 7.1.2 or newer
+  # (CVE-2026-55867 lets any user revoke other users' tokens on older releases).
+  apiToken:
+    enabled: false
+    # secretName of the Secret that receives the token. Keys: token, username,
+    # userid (the renewal CronJob reads it).
+    # Use it as Basic auth with the token as the username and "token" as the
+    # password.
+    secretName: ""
+    # username of the service user. Created if missing, reused if present.
+    username: helm-automation
+    # roles assigned to a user the Job creates. Graylog refuses the Admin role
+    # for service accounts and the render fails if it is listed. Reader is
+    # read-only. Pick a role that allows every endpoint your consumers call.
+    roles:
+      - Reader
+    # permissions are extra Graylog permissions granted to a user the Job
+    # creates, for example "ca_clientcert:create" for datanode.clientCert.
+    # An existing user is left as it is, so grant it yourself in that case.
+    permissions: []
+    # tokenName is the name the token carries in Graylog.
+    tokenName: helm
+    # ttl is an ISO-8601 duration such as P90D or PT36H. Graylog's own default is
+    # P30D. The schema rejects anything that is not one.
+    ttl: P90D
+    # bootstrap is where the Job gets the root password to sign in with. The
+    # chart only stores a hash of it, so it needs the plaintext from somewhere.
+    # Left empty, the Job uses graylog.config.rootPassword when set, or else the
+    # plaintext the chart kept in its backup Secret for a generated password.
+    # With global.existingSecretName the chart cannot know it: set existingSecret.
+    bootstrap:
+      # existingSecret names a Secret that holds the root password.
+      existingSecret: ""
+      passwordKey: GRAYLOG_ROOT_PASSWORD
+    # tls holds the trust settings for the Job's and the renewal CronJob's calls to
+    # Graylog. Only relevant with graylog.config.tls.enabled: they reach Graylog
+    # through its in-cluster Service name, which a certificate issued for your
+    # public hostname usually does not cover.
+    tls:
+      # caSecret names a Secret with the CA that signed Graylog's certificate.
+      # The pods mount it and verify against it. The certificate must cover the
+      # Service name <service>.<namespace>.svc.cluster.local. Empty verifies with
+      # the image's own CA bundle. Setting it with insecureSkipVerify fails the
+      # render.
+      caSecret:
+        name: ""
+        # key is the key in that Secret that holds the CA certificate.
+        key: ca.crt
+    # insecureSkipVerify turns off certificate verification for those calls, and
+    # sends the root password to a server the Job has not authenticated. Prefer
+    # tls.caSecret.
+    insecureSkipVerify: false
+    # waitSeconds is how long the Job waits for Graylog to answer before failing.
+    # A cold install can take 5 to 10 minutes to reach Graylog: the Data Nodes
+    # start first and Graylog waits on them. Helm blocks on this Job and times
+    # out after 5m unless you pass --timeout, so install with --timeout 15m and
+    # keep waitSeconds and activeDeadlineSeconds under it.
+    waitSeconds: 720
+    # image runs the Job. It needs a shell, curl, sed, grep and base64.
+    image:
+      repository: curlimages/curl
+      tag: 8.17.0
+      imagePullPolicy: IfNotPresent
+      # imagePullSecrets overrides global.imagePullSecrets for this image. It
+      # covers the Job and the renewal CronJob.
+      imagePullSecrets: []
+    backoffLimit: 3
+    activeDeadlineSeconds: 780
+    # resources sets the Job container's requests and limits.
+    resources: {}
+    # serviceAccount.automount sets automountServiceAccountToken on the Job's and
+    # the CronJob's ServiceAccounts and pods. Both call the Kubernetes API with
+    # that token to write the Secret, so false breaks them unless something else
+    # in your cluster provides the token.
+    serviceAccount:
+      automount: true
+    # podSecurityContext and containerSecurityContext apply to the Job and the
+    # renewal CronJob. The defaults follow the restricted Pod Security Standard.
+    # UID 100 is the curl user in curlimages/curl. Change it with the image.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 100
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+    # nodeSelector, tolerations, affinity and priorityClassName schedule the Job
+    # and the renewal CronJob. They take the standard Kubernetes syntax.
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    priorityClassName: ""
+    # extraEnv adds environment variables to the Job and the renewal CronJob, in
+    # full EnvVar syntax, for example a proxy setting. They come after the
+    # chart's own variables, so do not reuse a name the scripts read.
+    extraEnv: []
+    # annotations and labels are added to the Job, its pod and its RBAC objects.
+    # secretLabels and secretAnnotations are added to the token Secret when the
+    # Job creates it. An existing Secret keeps what it has.
+    annotations: {}
+    labels: {}
+    secretLabels: {}
+    secretAnnotations: {}
+    # renew runs a CronJob that replaces the token before it expires, so a
+    # cluster that is not upgraded for ttl days keeps a working token. The user
+    # mints the replacement with the token it already holds, so no root password
+    # is stored. The chart grants the user the permission to do that when it
+    # creates it. An existing user needs
+    # "users:tokencreate,tokenlist,tokenremove:<username>" added by hand.
+    # A token that has already expired cannot renew itself: helm upgrade mints a
+    # new one.
+    renew:
+      enabled: true
+      # schedule is a cron expression. It must fire more often than before.
+      schedule: "17 3 * * *"
+      # before is how long before expiry the token is replaced, as an ISO-8601
+      # duration like ttl. Days, hours, minutes and seconds work (P14D, PT36H).
+      # Must be shorter than ttl.
+      before: P14D
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      # startingDeadlineSeconds is how late a missed run may still start.
+      startingDeadlineSeconds: 3600
+      successfulJobsHistoryLimit: 1
+      failedJobsHistoryLimit: 3
+      resources: {}
+      # annotations and labels are added to the CronJob, its pod and its RBAC
+      # objects.
+      annotations: {}
+      labels: {}
 
 
 # datanode configures the Graylog Data Node (managed OpenSearch).
@@ -980,7 +1130,7 @@ datanode:
   # extraNodeGroups declares additional Datanode node groups, keyed by name. Each
   # entry renders its own StatefulSet, ConfigMap and PDB, inherits every datanode.*
   # value above and overrides only what it declares. See
-  # docs/datanode-node-roles.md.
+  # docs/datanode/datanode-node-roles.md.
   extraNodeGroups: {}
   #  search:
   #    roles: [search]
