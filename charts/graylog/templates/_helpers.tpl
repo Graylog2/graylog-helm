@@ -431,6 +431,26 @@ auth failure against the bucket, a long way from the cause.
 {{- end -}}
 {{- end }}
 
+{{- /*
+Validates the SMTP credential source.
+Input: the root context.
+Returns nothing, or fails when email.existingSecret is combined with inline credentials,
+when inline credentials are combined with global.existingSecretName, or when email
+is enabled with useAuth on and no credential source.
+*/ -}}
+{{- define "graylog.email.validate" -}}
+{{- $e := .Values.graylog.config.email -}}
+{{- if and $e.existingSecret (or $e.authUsername $e.authPassword) -}}
+{{- fail "graylog.config.email: existingSecret cannot be combined with the inline authUsername/authPassword. Drop the inline values to read the credentials from the Secret, or clear existingSecret to keep them in values." -}}
+{{- end -}}
+{{- if and (eq (toString $e.enabled) "true") (eq (toString $e.useAuth) "true") (not $e.existingSecret) (not $e.authUsername) (not $e.authPassword) -}}
+{{- fail "graylog.config.email: enabled and useAuth are both \"true\", but no SMTP credentials are set. Set graylog.config.email.existingSecret to a Secret holding them, set authUsername and authPassword, or set useAuth to \"false\"." -}}
+{{- end -}}
+{{- if and .Values.global.existingSecretName (or $e.authUsername $e.authPassword) -}}
+{{- fail "graylog.config.email: inline authUsername/authPassword need the chart-managed Secret, which global.existingSecretName turns off. Put the SMTP credentials in a Secret and set graylog.config.email.existingSecret to its name." -}}
+{{- end -}}
+{{- end }}
+
 {{/*
 Graylog backup-secret name
 */}}

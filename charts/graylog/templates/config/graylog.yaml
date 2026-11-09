@@ -42,7 +42,9 @@ data:
   GRAYLOG_TRANSPORT_EMAIL_USE_SSL: {{ .Values.graylog.config.email.useSsl | quote }}
   GRAYLOG_TRANSPORT_EMAIL_USE_TLS: {{ .Values.graylog.config.email.useTls | quote }}
   GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL: {{ .Values.graylog.config.email.webInterfaceUrl | quote }}
-  # GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD: ""
+  {{- with .Values.graylog.config.email.subjectPrefix }}
+  GRAYLOG_TRANSPORT_EMAIL_SUBJECT_PREFIX: {{ . | quote }}
+  {{- end }}
 
   # Journal 
   GRAYLOG_CONTENT_PACKS_AUTO_INSTALL: {{ .Values.graylog.config.contentPacksAutoInstall | default true | quote }}
