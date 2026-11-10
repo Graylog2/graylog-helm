@@ -132,7 +132,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             - name: GRAYLOG_DATANODE_NODE_NAME
-              value: $(POD_NAME).{{ include "graylog.datanode.service.name" $ }}.{{ $.Release.Namespace }}.svc.cluster.local
+              value: $(POD_NAME).{{ include "graylog.datanode.service.name" $ }}.{{ $.Release.Namespace }}.svc.{{ include "graylog.clusterDomain" $ }}
             - name: GRAYLOG_DATANODE_OPENSEARCH_DISCOVERY_SEED_HOSTS
               value: {{ include "graylog.datanode.hosts" $ }}
             - name: GRAYLOG_DATANODE_PASSWORD_SECRET
