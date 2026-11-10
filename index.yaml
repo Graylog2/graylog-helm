@@ -4,6 +4,56 @@ entries:
   - annotations:
       artifacthub.io/category: security
       artifacthub.io/changes: |
+        - kind: fixed
+          description: "graylog: Adding missing email configuration and ability to cite creds from  user managed secret"
+          links:
+            - name: "PR #217"
+              url: "https://github.com/Graylog2/graylog-helm/pull/217"
+      artifacthub.io/containsSecurityUpdates: "true"
+      artifacthub.io/images: |
+        - name: "graylog"
+          image: "graylog/graylog:7.1.8"
+          whitelisted: true
+          platforms:
+            - linux/amd64
+            - linux/arm64
+        - name: "graylog-datanode"
+          image: "graylog/graylog-datanode:7.1.8"
+          whitelisted: true
+          platforms:
+            - linux/amd64
+            - linux/arm64
+      artifacthub.io/operator: "false"
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: 7.1.8
+    created: "2026-11-10T17:09:57.295286651Z"
+    description: Official Graylog Helm chart for Kubernetes
+    digest: 8619e2b6ae491cbd97151325c5a4056e0afdc6f3ad12aa81dbf3d6e290798c4a
+    home: https://graylog.org
+    icon: https://raw.githubusercontent.com/Graylog2/graylog2-server/refs/tags/7.1.8/graylog2-web-interface/public/images/favicon.png
+    keywords:
+    - SIEM
+    - API
+    - Triage
+    - Security
+    - Observability
+    - Search
+    - Logs
+    - Monitoring
+    - Troubleshooting
+    - Events
+    - Alerts
+    name: graylog
+    sources:
+    - https://github.com/graylog2
+    type: application
+    urls:
+    - https://github.com/Graylog2/graylog-helm/releases/download/graylog-2.1.1/graylog-2.1.1.tgz
+    version: 2.1.1
+  - annotations:
+      artifacthub.io/category: security
+      artifacthub.io/changes: |
         - kind: added
           description: "aws-secrets: Reworking how source secrets for AWS buckets for graylog and datanode"
           links:
@@ -405,4 +455,4 @@ entries:
     urls:
     - https://github.com/Graylog2/graylog-helm/releases/download/graylog-0.1.0/graylog-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-01T23:34:00.507203215Z"
+generated: "2026-11-10T17:09:57.290582975Z"
