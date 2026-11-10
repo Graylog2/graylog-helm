@@ -23,9 +23,16 @@ existing Secret still needs it set here.
 */ -}}
 {{- $credsSet := or $existing (and $ak $sk) }}
 {{- $anySet := or $ak $sk $endpoint $existing }}
-{{- $allSet := and $credsSet $endpoint }}
+{{- /*
+The endpoint stands alone when the Data Node ServiceAccount carries an
+eks.amazonaws.com/role-arn annotation, or s3ClientDefaultCredentialsExternal is
+set for an IRSA account the chart cannot see. Static keys, if any are set, must still
+come as a pair.
+*/ -}}
+{{- $external := or (eq ($c.s3ClientDefaultCredentialsExternal | toString) "true") (include "graylog.datanode.irsa" $ | trim | eq "true") }}
+{{- $allSet := or (and $credsSet $endpoint) (and $external $endpoint (not $ak) (not $sk) (not $existing)) }}
 {{- if and $anySet (not $allSet) }}
-  {{ fail "datanode: the S3 client needs an endpoint and both credentials. Set s3ClientDefaultEndpoint together with either s3ClientDefaultAccessKey and s3ClientDefaultSecretKey, or s3ClientDefaultExistingSecret naming a Secret that holds them. The Data Node rejects a partial S3 client configuration at startup. For AWS S3 the endpoint is https://s3.<region>.amazonaws.com." }}
+  {{ fail "datanode: the S3 client needs an endpoint and both credentials. Set s3ClientDefaultEndpoint together with either s3ClientDefaultAccessKey and s3ClientDefaultSecretKey, or s3ClientDefaultExistingSecret naming a Secret that holds them. The Data Node rejects a partial S3 client configuration at startup. For AWS S3 the endpoint is https://s3.<region>.amazonaws.com. When the credentials come from the environment, for example IRSA, annotate the Data Node ServiceAccount with eks.amazonaws.com/role-arn, or set s3ClientDefaultCredentialsExternal=true, to require the endpoint alone." }}
 {{- end }}
 {{- range include "graylog.datanode.groups" $ | fromYamlArray }}
 {{- $fixed := dict "app.kubernetes.io/component" "datanode" "app" "graylog-datanode" }}
