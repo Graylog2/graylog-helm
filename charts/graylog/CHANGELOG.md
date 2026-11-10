@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/Graylog2/graylog-helm/compare/graylog-2.1.0...graylog-2.1.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **graylog:** Adding missing email configuration and ability to cite creds from  user managed secret ([#217](https://github.com/Graylog2/graylog-helm/issues/217)) ([69ef8d6](https://github.com/Graylog2/graylog-helm/commit/69ef8d659f742e79c69541f133ac17f59d59b786))
+
 ## [2.1.0](https://github.com/Graylog2/graylog-helm/compare/graylog-2.0.0...graylog-2.1.0) (2026-10-01)
 
 
